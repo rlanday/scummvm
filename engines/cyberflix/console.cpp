@@ -24,11 +24,13 @@
 #include "cyberflix/console.h"
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/archive.h"
+#include "cyberflix/script.h"
 
 namespace Cyberflix {
 
 Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
 	registerCmd("dumpArchive", WRAP_METHOD(Console, cmdDumpArchive));
+	registerCmd("disasm", WRAP_METHOD(Console, cmdDisasm));
 }
 
 bool Console::cmdDumpArchive(int argc, const char **argv) {
@@ -67,6 +69,64 @@ bool Console::cmdDumpArchive(int argc, const char **argv) {
 	}
 	if (count > limit)
 		debugPrintf("  ... %u more (pass a count to show more)\n", count - limit);
+	return true;
+}
+
+bool Console::cmdDisasm(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Disassembles a script resource (info tag 0x0FA1).\n");
+		debugPrintf("Usage: %s <filename> <resIndex> [count]\n", argv[0]);
+		return true;
+	}
+
+	Common::File file;
+	if (!file.open(argv[1])) {
+		debugPrintf("Could not open '%s'\n", argv[1]);
+		return true;
+	}
+
+	Archive archive;
+	if (!archive.open(file.readStream(file.size()), argv[1])) {
+		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
+		return true;
+	}
+
+	uint32 idx = (uint32)atoi(argv[2]);
+	if (idx >= archive.getResourceCount()) {
+		debugPrintf("Resource index %u out of range (%u resources)\n",
+				idx, archive.getResourceCount());
+		return true;
+	}
+
+	const Archive::Resource &res = archive.getResource(idx);
+	if (res.info != 0x0FA1)
+		debugPrintf("Note: resource %u has info %#x, not a script (0x0FA1)\n", idx, res.info);
+
+	Common::SeekableReadStream *stream = archive.createReadStreamForResource(idx);
+	if (!stream) {
+		debugPrintf("Resource %u is empty\n", idx);
+		return true;
+	}
+
+	Script script;
+	bool ok = script.parse(stream);
+	delete stream;
+	if (!ok) {
+		debugPrintf("Failed to parse resource %u as a script\n", idx);
+		return true;
+	}
+
+	debugPrintf("%u instructions, pool@%#x, %s\n", script.getInstructionCount(),
+			script.getPoolOffset(), script.isTerminated() ? "terminated" : "UNTERMINATED");
+
+	uint32 limit = (argc >= 4) ? (uint32)atoi(argv[3]) : 40;
+	for (uint32 i = 0; i < script.getInstructionCount() && i < limit; ++i) {
+		const Script::Instruction &inst = script.getInstruction(i);
+		Common::String str = script.getPoolString(inst.operandA);
+		debugPrintf("  %4u: %-8s op=%#06x a=%#06x b=%#010x%s%s\n", i,
+				Script::opcodeName(inst.opcode), inst.opcode, inst.operandA, inst.operandB,
+				str.empty() ? "" : "  ; ", str.c_str());
+	}
 	return true;
 }
 

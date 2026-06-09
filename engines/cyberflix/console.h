@@ -38,6 +38,9 @@ private:
 
 	// Dumps the LPPALPPA container header of a given asset file.
 	bool cmdDumpArchive(int argc, const char **argv);
+
+	// Disassembles a script resource (info tag 0x0FA1).
+	bool cmdDisasm(int argc, const char **argv);
 };
 
 } // End of namespace Cyberflix
