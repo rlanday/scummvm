@@ -1,0 +1,260 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{enumitem}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+
+\titleformat{\section}{\large\bfseries}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.6em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\small Titanic / CyberFlix engine roadmap}
+\lhead{\small ScummVM}
+\cfoot{\thepage}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[#1]}}}
+
+\title{\textbf{Adding \emph{Titanic: Adventure Out of Time} to ScummVM}\\[2pt]
+\large A roadmap and scope assessment for the CyberFlix runtime}
+\author{Reverse-engineering notes and implementation plan}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent This document scopes the work required to run \emph{Titanic: Adventure
+Out of Time} (CyberFlix, 1996/1997) under ScummVM. The findings below are based
+on direct inspection of the two retail Windows CD images. The title is built on
+CyberFlix's proprietary, Mac-authored \emph{``Bicycle''}-class runtime (internal
+signature \code{LPPALPPA}), the same engine family that powers \emph{Dust: A
+Tale of the Wired West} and \emph{RedJack: Revenge of the Brethren}. This is a
+\textbf{from-scratch engine}, not a variant of an existing ScummVM engine. It is
+unrelated to the existing \code{engines/titanic} (\emph{Starship Titanic}), so a
+new engine plugin is required---the proposed name is \code{cyberflix}.\end{abstract}
+
+\section{Summary and recommendation}
+
+Implementing this title is a large, multi-month reverse-engineering effort
+comparable in size to other ``new proprietary engine'' additions to ScummVM
+(e.g.\ Buried, Nancy, Hypno). It decomposes into seven substantial subsystems
+(archive container, bytecode VM, palettised graphics, sprite/shape codec,
+node-based room navigation, a custom movie codec, and audio), plus the standard
+ScummVM plumbing. None of these can be borrowed wholesale from existing engines.
+
+\textbf{Recommended sequencing:} build bottom-up and keep something runnable at
+every step. Land the archive loader and a standalone asset dumper first (this
+de-risks every later phase), then the script VM, then graphics, then movies and
+audio, then glue it into a playable navigation loop. A vertical slice (boot
+$\rightarrow$ first room $\rightarrow$ navigate $\rightarrow$ play one movie)
+should be the first milestone that proves the architecture end-to-end.
+
+\section{What the game data looks like}
+
+\subsection{Distribution and footprint}
+\begin{itemize}[nosep]
+  \item Two CDs (\code{TITANIC1.iso} $\approx$635\,MiB, \code{TITANIC2.iso}
+        $\approx$620\,MiB), ISO-9660, mastered on Mac (Toast).
+  \item Both discs carry \code{TITANIC.EXE} (WinG-based, 32-bit, ``(C)
+        Copyright 1995 Cyberflix''), an \code{INSTALL} folder, and a \code{DATA}
+        directory. The game refuses to run directly off CD; the user copies an
+        \code{Install} folder to disk and streams the rest from whichever CD is
+        inserted. ScummVM must therefore support \textbf{multi-disc/CD-swap}
+        asset location.
+  \item Per-disc asset inventory (disc~1): 112 \code{.MOV}, 30 \code{.TRK},
+        23 \code{.SET}, 15 \code{.STG}, 13 \code{.SFX}, 11 \code{.SHP},
+        2 \code{.CST}; disc~2 is dominated by \code{.SET} rooms and per-puzzle
+        subfolders (BOIL, BRIDGE, FUSE, TURBINE, \dots).
+\end{itemize}
+
+\subsection{The \code{LPPALPPA} container format (verified)}
+Every asset file (and \code{BOOTFILE}) shares one container:
+\begin{longtable}{@{}lll@{}}
+\toprule
+Offset & Field & Notes \\
+\midrule
+\code{0x00} & \code{u32} \code{0x00010000} & format/version magic \\
+\code{0x04} & \code{u32} file length & matches on-disk size exactly (LE) \\
+\code{0x10} & \code{u32} first-section size & e.g.\ \code{0x80}/\code{0x180} \\
+\code{0x14} & \code{u32} resource count & e.g.\ \code{0xF7}=247 for a \code{.SET} \\
+\code{0x20} & \code{"LPPALPPA"} & signature (\code{"APPL"} word-reversed, twice) \\
+\code{0x200+} & resource offset table & array of \code{u32} chunk offsets \\
+\code{0x440+} & header path + offset table & Mac HFS authoring path embedded \\
+\bottomrule
+\end{longtable}
+
+\noindent\textbf{Critical finding---endianness.} The payload is \textbf{big-endian},
+authored on Mac. Decoding any header by reversing each 4-byte word yields a clean
+HFS path, e.g.\ \code{BOOTFILE} contains
+\code{"Internal:new converts for Ian:bootfile.Temp"} and \code{CTL.STG} contains
+\code{"...:ctl.stg.Temp"}. The loader must byte-swap (or read big-endian)
+throughout. Embedded text strings are likewise stored in 4-byte-reversed groups.
+
+\noindent\textbf{Resource directory (verified on \code{BEDSIT1.SET}, 247 chunks).}
+The offset table yields chunks each prefixed by a small record
+\code{[u32 id][u32 length][u32 flags/count]}. IDs run sequentially
+(\code{0x10, 0x11, \dots}); early chunks are tiny metadata (8--0x74 bytes:
+palette, navigation, headers), then fixed \code{0x444}-byte chunks (palette
+tables), then large variable chunks (21\,KiB+) holding the compressed
+panorama/graphic tiles.
+
+\subsection{Asset type taxonomy (observed)}
+\begin{longtable}{@{}lp{11.5cm}@{}}
+\toprule
+Ext & Role \\
+\midrule
+\code{BOOTFILE} & Boot script + global variable symbol table (\code{clock},
+  \code{phase}, \code{mission}, \code{playerdeath}, \code{savestage1..3},
+  \code{themevolume}, navigation keys \code{north/east/west}, \dots). \\
+\code{.STG} & ``Stage'': a UI/screen state with an attached script (symbol table
+  + compiled bytecode). \code{CTL.STG} = the control/HUD stage
+  (\code{open/save/quit/help/credits}, \code{subtoggle}, \code{navtoggle}). \\
+\code{.SET} & A location/room: node-based 360\textdegree{} navigation data,
+  palettes, and many compressed image tiles (the largest assets, up to 33\,MiB
+  e.g.\ \code{DECKBD2.SET}). \\
+\code{.CST} & ``Cast'': actor sprite collections (\code{GANG.CST} $\approx$20\,MiB,
+  characters/animation). \\
+\code{.SHP} & ``Shape'': sprite/bitmap sets (inventory \code{INVEN.SHP}, UI
+  \code{HOUSE.SHP}, minigame art). \\
+\code{.TRK} & ``Track'': audio and/or animation timelines (music themes, room
+  ambience, radio). \\
+\code{.MOV} & Movies: named cels/frames (\code{"BOMB 1 B"}, \code{"FUZO"},
+  \code{"briefcase"}) + a \textbf{custom CyberFlix video codec} (\emph{not}
+  QuickTime/Smacker/Cinepak despite the \code{.MOV} extension). \\
+\code{.SFX} & Sound effects. \\
+\bottomrule
+\end{longtable}
+
+\subsection{The scripting VM (observed)}
+\code{BOOTFILE} and every \code{.STG}/\code{.SET} embed two cooperating sections:
+a \textbf{symbol table} (human-readable identifiers: state variables and event
+names such as \code{mousedown}, \code{keydown}, \code{knock}, \code{uparrow},
+\code{seldir}, \code{advanceday}) followed by \textbf{compiled bytecode} in a
+narrow printable byte range (operators like \code{< \% \& [ \^{} ) =}). This is a
+stack-based, event-driven interpreter: navigation, inventory, puzzle logic, and
+the global game state machine are all script-driven. Re-implementing this VM
+faithfully is the single highest-risk item in the project, because almost all
+game behaviour lives in data, not in native code.
+
+\section{Required ScummVM subsystems}
+
+\begin{enumerate}[label=\textbf{S\arabic*.},leftmargin=*]
+  \item \textbf{Archive / resource layer.} Parse \code{LPPALPPA}, big-endian
+        chunk directory, typed-chunk readers; a virtual file system over the
+        installed folder + the two CDs with disc-swap handling.
+  \item \textbf{Script VM.} Symbol-table loader, bytecode disassembler, and a
+        stack interpreter with the full opcode set; the global state machine,
+        event dispatch, and the engine's built-in command vocabulary.
+  \item \textbf{Graphics core.} 8-bit palettised surface, palette management
+        (per-room \code{0x444} palette chunks), software blitter, dirty-rect
+        compositor on ScummVM's \code{OSystem} backend. Confirm native
+        resolution (WinG; likely 640$\times$480).
+  \item \textbf{Shape/sprite codec.} Decode \code{.SHP}/\code{.CST} compressed
+        cels (RLE-class scheme \todo{exact compression TBD}) into surfaces with
+        transparency and hotspots.
+  \item \textbf{Room / node navigation.} Decode \code{.SET} panorama tiles and
+        the node graph; implement directional movement (compass), hotspot
+        hit-testing, and view rendering.
+  \item \textbf{Movie player.} Reverse the custom \code{.MOV} codec
+        (named-cel + interframe deltas), wire frame timing and audio sync.
+        \todo{codec is fully bespoke---largest single unknown}.
+  \item \textbf{Audio.} Decode \code{.TRK}/\code{.SFX} streams
+        \todo{PCM/ADPCM TBD}, mix via ScummVM's \code{Audio::Mixer}, music
+        themes with volume control (\code{themevolume}).
+  \item \textbf{Engine glue \& UX.} \code{MetaEngine} + AdvancedDetector tables
+        (MD5s for both discs, language variants), save/load mapped onto the
+        game's \code{savestage} variables, the main loop, debugger console,
+        \code{detection\_tables.h}, \code{module.mk}, \code{configure.engine},
+        registration in \code{engines/engines.mk}, and POTFILES.
+\end{enumerate}
+
+\section{Phased plan}
+
+\begin{longtable}{@{}p{0.7cm}p{5.3cm}p{8.2cm}@{}}
+\toprule
+Ph. & Goal / exit criterion & Work \\
+\midrule
+0 & \textbf{Scaffold builds.} Empty \code{cyberflix} engine compiles, detects
+    the game, opens a black window. & MetaEngine, detection table from real
+    MD5s, \code{module.mk}, \code{configure.engine}, \code{engines.mk}, POTFILES,
+    boilerplate \code{Engine} subclass + console. \\
+1 & \textbf{Asset transparency.} Standalone dumper lists every chunk in any
+    container; round-trips \code{BOOTFILE}. & \code{LPPALPPA} parser,
+    big-endian readers, chunk directory, symbol-table extractor; a
+    \code{devtools/} dumper. Document the chunk-ID map per asset type. \\
+2 & \textbf{Script VM.} Boot script runs; global state machine ticks; events
+    dispatch. & Bytecode disassembler $\rightarrow$ interpreter; opcode set;
+    variable store; built-in commands; \code{BOOTFILE} + \code{CTL.STG}
+    execute. \\
+3 & \textbf{Graphics + one static room.} First \code{.SET} renders with correct
+    palette. & Palettised surface, palette chunks, \code{.SHP} decoder, SET tile
+    decode, compositor. \\
+4 & \textbf{Navigation slice.} Boot $\rightarrow$ first room $\rightarrow$ turn
+    N/E/S/W $\rightarrow$ enter adjacent room. \emph{(Milestone: vertical
+    slice.)} & Node graph, hotspots, cursor, compass UI driven by the VM. \\
+5 & \textbf{Movies.} One \code{.MOV} plays in-engine with audio. & Reverse the
+    custom codec; frame pipeline; A/V sync. \\
+6 & \textbf{Audio + inventory + HUD.} Music themes, SFX, inventory
+    (\code{INVEN.SHP}), control bar. & \code{.TRK}/\code{.SFX} decode + mixer;
+    inventory model; \code{CTL.STG} HUD interactions. \\
+7 & \textbf{Save/load + completion.} Save anywhere; full game traversable;
+    minigames (BOMB, BLKJACK, ENIGMA, PUNCHBAG\dots). & Map saves onto
+    \code{savestage} vars; per-minigame scripts/assets; polish. \\
+8 & \textbf{Compatibility \& submission.} GMM, keymaps, achievements/ports
+    quirks, detection for other releases/languages, code review against ScummVM
+    standards. & Testing matrix, translations, upstream PR. \\
+\bottomrule
+\end{longtable}
+
+\section{Open questions / unknowns (to retire early)}
+\begin{itemize}[nosep]
+  \item Native resolution and color depth (WinG implies 8-bit; confirm
+        640$\times$480 vs 320$\times$240).
+  \item Exact \code{.SHP}/\code{.CST} and \code{.SET}-tile compression scheme.
+  \item The \code{.MOV} codec (interframe model, key/delta frames, audio
+        interleave). \emph{Highest risk.}
+  \item \code{.TRK}/\code{.SFX} audio encoding (raw PCM vs ADPCM, sample rate).
+  \item Complete VM opcode set and built-in command semantics.
+  \item Save-game schema (the \code{savestage1..3} variables and what they
+        capture).
+  \item Release variants for detection: Windows vs Mac, localized editions,
+        later re-releases.
+\end{itemize}
+
+\section{ScummVM integration checklist}
+\begin{itemize}[nosep]
+  \item New plugin \code{engines/cyberflix/} (name TBD; avoids clash with
+        \code{engines/titanic} = Starship Titanic).
+  \item \code{detection\_tables.h} with MD5/size/language entries for both discs.
+  \item \code{configure.engine}, \code{engines.mk} (\code{ENABLE\_CYBERFLIX}),
+        \code{POTFILES}, \code{credits.pl}.
+  \item \code{MetaEngine}: detection, save metadata, supported features, keymaps.
+  \item Multi-disc handling consistent with ScummVM conventions (CD-swap
+        prompts).
+  \item Coding standards, \code{Common::Stream} usage, \code{debug()}/console,
+        no external deps.
+\end{itemize}
+
+\section{Risks}
+\begin{itemize}[nosep]
+  \item \textbf{Bespoke movie codec} (S6): no reference; pure reverse
+        engineering. Mitigation: tackle a tiny \code{.MOV} (e.g.\ \code{BOMB})
+        first; fall back to an external decode tool for validation.
+  \item \textbf{VM completeness} (S2): missing opcodes silently break far-off
+        puzzles. Mitigation: corpus-disassemble \emph{all} scripts up front to
+        enumerate the opcode/command set before interpreting.
+  \item \textbf{Asset volume / CD-swap} (S1): $\sim$1.3\,GB across two discs;
+        correctness of the virtual FS gates everything.
+  \item \textbf{Scope}: full completion is multi-month. The phase~4 vertical
+        slice is the realistic first deliverable and should be the gate for
+        committing to the rest.
+\end{itemize}
+
+\end{document}
