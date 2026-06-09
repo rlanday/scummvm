@@ -1,0 +1,3 @@
+# This file is included from the main "configure" script
+# add_engine [name] [desc] [build-by-default] [subengines] [base games] [deps] [components]
+add_engine cyberflix "CyberFlix Bicycle engine (Titanic: Adventure Out of Time)" no "" "" "highres"
