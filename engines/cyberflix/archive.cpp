@@ -21,6 +21,7 @@
 
 #include "common/debug.h"
 #include "common/stream.h"
+#include "common/substream.h"
 #include "common/textconsole.h"
 
 #include "cyberflix/archive.h"
@@ -77,16 +78,84 @@ bool Archive::open(Common::SeekableReadStream *stream, const Common::String &nam
 
 	_stream = stream;
 
+	if (!readDirectory()) {
+		warning("Cyberflix::Archive: '%s' has an invalid resource directory", name.c_str());
+		close();
+		return false;
+	}
+
 	debug(1, "Cyberflix::Archive: opened '%s' (%u resources, %u bytes)",
-			name.c_str(), _resourceCount, _declaredSize);
+			name.c_str(), getResourceCount(), _declaredSize);
 
 	return true;
+}
+
+bool Archive::readDirectory() {
+	const uint32 fileSize = (uint32)_stream->size();
+
+	if (kDirectoryOffset + (uint64)_resourceCount * 4 > fileSize)
+		return false;
+
+	_resources.clear();
+	_resources.reserve(_resourceCount);
+
+	for (uint32 i = 0; i < _resourceCount; ++i) {
+		_stream->seek(kDirectoryOffset + i * 4);
+		uint32 recOffset = _stream->readUint32LE();
+
+		Resource res;
+		res.id = i;
+		res.length = 0;
+		res.info = 0;
+		res.dataOffset = 0;
+		res.empty = true;
+
+		// Offsets of 0 (or any value pointing inside the header/directory) are
+		// empty placeholder slots: keep the index but mark it as having no data.
+		if (recOffset != 0 && recOffset >= kDirectoryOffset && recOffset + 12 <= fileSize) {
+			_stream->seek(recOffset);
+			res.id = _stream->readUint32LE();
+			res.length = _stream->readUint32LE();
+			res.info = _stream->readUint32LE();
+			res.dataOffset = recOffset + 12;
+			res.empty = false;
+
+			// The final record is sometimes a few bytes short of its declared
+			// length (unpadded tail); clamp to the available bytes rather than
+			// rejecting the container.
+			if ((uint64)res.dataOffset + res.length > fileSize) {
+				uint32 avail = fileSize - res.dataOffset;
+				debug(2, "Cyberflix::Archive: resource %u length %u clamped to %u",
+						i, res.length, avail);
+				res.length = avail;
+			}
+		} else if (recOffset != 0) {
+			debug(2, "Cyberflix::Archive: resource %u has out-of-range offset %#x, treating as empty",
+					i, recOffset);
+		}
+
+		_resources.push_back(res);
+	}
+
+	return true;
+}
+
+Common::SeekableReadStream *Archive::createReadStreamForResource(uint32 index) const {
+	if (!_stream || index >= _resources.size())
+		return nullptr;
+
+	const Resource &res = _resources[index];
+	if (res.empty || res.length == 0)
+		return nullptr;
+	return new Common::SeekableSubReadStream(_stream, res.dataOffset,
+			res.dataOffset + res.length);
 }
 
 void Archive::close() {
 	delete _stream;
 	_stream = nullptr;
 	_magic = _declaredSize = _firstSectionSize = _resourceCount = 0;
+	_resources.clear();
 	_name.clear();
 }
 

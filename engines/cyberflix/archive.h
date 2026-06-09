@@ -23,6 +23,7 @@
 #define CYBERFLIX_ARCHIVE_H
 
 #include "common/scummsys.h"
+#include "common/array.h"
 #include "common/str.h"
 #include "common/stream.h"
 
@@ -51,18 +52,34 @@ namespace Cyberflix {
  * payload are therefore big-endian, and embedded text is stored in
  * 4-byte-reversed groups.
  *
- * NOTE: the internal resource directory is a serialized Macintosh handle heap
- * with absolute pointer fix-ups (0xCCCCCCCC fill marks free cells), not a
- * simple offset table. Decoding it is ongoing reverse engineering; this class
- * currently parses and validates the outer container and exposes the raw bytes
- * plus the word-swap helpers the rest of the engine will build on.
+ * After a fixed 0x200-byte handle-heap preamble at offset 0x200, the resource
+ * directory is a flat offset table at a fixed offset (0x400): an array of
+ * @c count little-endian uint32 file offsets. Each entry points to a record:
+ *
+ *   +0x00  uint32 LE  id      (sequential 0, 1, 2, ...)
+ *   +0x04  uint32 LE  length  (payload size in bytes)
+ *   +0x08  uint32 LE  info    (type/flags; e.g. 0x0FA1 = script/blob, and for
+ *                              shapes the low 32 bits pack 16-bit width/height)
+ *   +0x0C  payload (length bytes; records are padded to a 0x40 boundary)
+ *
+ * The container framing (header + directory) is little-endian; resource payload
+ * data is big-endian (Mac-authored) and text is stored in 4-byte-reversed
+ * groups, hence swapLongs().
  */
 class Archive {
 public:
+	struct Resource {
+		uint32 id;          ///< Sequential resource id.
+		uint32 length;      ///< Payload size in bytes.
+		uint32 info;        ///< Type/flags (semantics still being mapped).
+		uint32 dataOffset;  ///< Absolute file offset of the payload.
+		bool empty;         ///< True for placeholder slots with no data.
+	};
+
 	Archive();
 	~Archive();
 
-	/** Parse and validate the container header. Takes ownership of @p stream. */
+	/** Parse and validate the container. Takes ownership of @p stream. */
 	bool open(Common::SeekableReadStream *stream, const Common::String &name);
 
 	void close();
@@ -70,20 +87,35 @@ public:
 	bool isOpen() const { return _stream != nullptr; }
 
 	/** Number of resources declared in the container header (+0x14). */
-	uint32 getResourceCount() const { return _resourceCount; }
+	uint32 getResourceCount() const { return _resources.size(); }
 
 	/** File length declared in the container header (+0x04). */
 	uint32 getDeclaredSize() const { return _declaredSize; }
 
 	const Common::String &getName() const { return _name; }
 
+	/** Directory entry for resource @p index (< getResourceCount()). */
+	const Resource &getResource(uint32 index) const { return _resources[index]; }
+
+	/**
+	 * Returns a newly allocated stream over the payload of resource @p index,
+	 * or nullptr on a bad index. Caller owns the returned stream; it stays
+	 * valid only while this Archive (and its backing stream) is open.
+	 */
+	Common::SeekableReadStream *createReadStreamForResource(uint32 index) const;
+
 	/** The "LPPALPPA" container signature, big-endian. */
 	static const uint32 kSignature1 = MKTAG('L', 'P', 'P', 'A');
+
+	/** Fixed file offset of the resource offset table. */
+	static const uint32 kDirectoryOffset = 0x400;
 
 	/** Reverse each 4-byte group of @p data in place (Mac long byte-swap). */
 	static void swapLongs(byte *data, uint32 size);
 
 private:
+	bool readDirectory();
+
 	Common::SeekableReadStream *_stream;
 	Common::String _name;
 
@@ -91,6 +123,8 @@ private:
 	uint32 _declaredSize;
 	uint32 _firstSectionSize;
 	uint32 _resourceCount;
+
+	Common::Array<Resource> _resources;
 };
 
 } // End of namespace Cyberflix

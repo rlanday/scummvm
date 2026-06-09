@@ -32,9 +32,9 @@ Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
 }
 
 bool Console::cmdDumpArchive(int argc, const char **argv) {
-	if (argc != 2) {
-		debugPrintf("Parses and prints the LPPALPPA header of a container file.\n");
-		debugPrintf("Usage: %s <filename>   (e.g. BOOTFILE, CTL.STG, BEDSIT1.SET)\n", argv[0]);
+	if (argc < 2) {
+		debugPrintf("Parses and lists the resources of an LPPALPPA container file.\n");
+		debugPrintf("Usage: %s <filename> [count]   (e.g. BOOTFILE, CTL.STG, BEDSIT1.SET)\n", argv[0]);
 		return true;
 	}
 
@@ -53,6 +53,20 @@ bool Console::cmdDumpArchive(int argc, const char **argv) {
 	debugPrintf("%s: %u resources, declared size %u bytes\n",
 			archive.getName().c_str(), archive.getResourceCount(),
 			archive.getDeclaredSize());
+
+	uint32 count = archive.getResourceCount();
+	uint32 limit = (argc >= 3) ? (uint32)atoi(argv[2]) : 16;
+	debugPrintf("  idx        id      length     info       data@\n");
+	for (uint32 i = 0; i < count && i < limit; ++i) {
+		const Archive::Resource &res = archive.getResource(i);
+		if (res.empty)
+			debugPrintf("  [%4u]   <empty>\n", i);
+		else
+			debugPrintf("  [%4u] %6u  %#10x  %#010x  %#08x\n",
+					i, res.id, res.length, res.info, res.dataOffset);
+	}
+	if (count > limit)
+		debugPrintf("  ... %u more (pass a count to show more)\n", count - limit);
 	return true;
 }
 
