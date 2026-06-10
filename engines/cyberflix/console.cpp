@@ -21,9 +21,17 @@
 
 #include "common/file.h"
 
+#include "graphics/palette.h"
+#include "graphics/paletteman.h"
+#include "graphics/surface.h"
+
+#include "common/system.h"
+#include "common/memstream.h"
+
 #include "cyberflix/console.h"
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/archive.h"
+#include "cyberflix/image.h"
 #include "cyberflix/script.h"
 #include "cyberflix/vm.h"
 
@@ -34,6 +42,7 @@ Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
 	registerCmd("disasm", WRAP_METHOD(Console, cmdDisasm));
 	registerCmd("vmtrace", WRAP_METHOD(Console, cmdVmTrace));
 	registerCmd("vmrun", WRAP_METHOD(Console, cmdVmRun));
+	registerCmd("showshape", WRAP_METHOD(Console, cmdShowShape));
 }
 
 bool Console::cmdDumpArchive(int argc, const char **argv) {
@@ -233,6 +242,116 @@ bool Console::cmdVmRun(int argc, const char **argv) {
 	uint32 executed = vm.runProgram(script, maxSteps);
 	debugPrintf("Executed %u statements over %u instructions.\n",
 			executed, script.getInstructionCount());
+	return true;
+}
+
+bool Console::cmdShowShape(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Decodes a cel resource and blits it to the screen.\n");
+		debugPrintf("Usage: %s <filename> <resIndex> [paletteFile]\n", argv[0]);
+		debugPrintf("  e.g. %s INVEN.SHP 7   or   %s INVEN.SHP 7 BRIDGE.SET\n", argv[0], argv[0]);
+		return true;
+	}
+
+	Common::File file;
+	if (!file.open(argv[1])) {
+		debugPrintf("Could not open '%s'\n", argv[1]);
+		return true;
+	}
+
+	// Read the whole container so it can both back the archive and be scanned
+	// for the embedded palette.
+	uint32 size = (uint32)file.size();
+	byte *fileData = (byte *)malloc(size);
+	if (!fileData || file.read(fileData, size) != size) {
+		debugPrintf("Could not read '%s'\n", argv[1]);
+		free(fileData);
+		return true;
+	}
+
+	Archive archive;
+	if (!archive.open(new Common::MemoryReadStream(fileData, size, DisposeAfterUse::NO), argv[1])) {
+		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
+		free(fileData);
+		return true;
+	}
+
+	uint32 idx = (uint32)atoi(argv[2]);
+	if (idx >= archive.getResourceCount()) {
+		debugPrintf("Resource index %u out of range (%u resources)\n",
+				idx, archive.getResourceCount());
+		free(fileData);
+		return true;
+	}
+
+	// For shapes the dimensions are packed into the resource info field.
+	const Archive::Resource &res = archive.getResource(idx);
+	uint16 width = (uint16)(res.info >> 16);
+	uint16 height = (uint16)(res.info & 0xffff);
+
+	Common::SeekableReadStream *stream = archive.createReadStreamForResource(idx);
+	if (!stream) {
+		debugPrintf("Resource %u is empty\n", idx);
+		free(fileData);
+		return true;
+	}
+
+	CelImage cel;
+	bool ok = decodeCel(*stream, width, height, cel);
+	delete stream;
+	if (!ok) {
+		debugPrintf("Resource %u (%ux%u) did not decode as a cel\n", idx, width, height);
+		free(fileData);
+		return true;
+	}
+
+	// Resolve a palette: from a separate container if supplied (inventory cels
+	// are drawn against the active room palette), otherwise from this file.
+	byte rgb[256 * 3];
+	memset(rgb, 0, sizeof(rgb));
+	bool havePalette = false;
+	if (argc >= 4) {
+		Common::File palFile;
+		if (palFile.open(argv[3])) {
+			uint32 palSize = (uint32)palFile.size();
+			byte *palData = (byte *)malloc(palSize);
+			if (palData && palFile.read(palData, palSize) == palSize)
+				havePalette = loadPalette(palData, palSize, rgb);
+			free(palData);
+		}
+		if (!havePalette)
+			debugPrintf("No palette found in '%s'; falling back to '%s'\n", argv[3], argv[1]);
+	}
+	if (!havePalette)
+		havePalette = loadPalette(fileData, size, rgb);
+
+	debugPrintf("Resource %u: %ux%u, origin (%d,%d), palette %s\n", idx,
+			cel.width, cel.height, cel.originX, cel.originY,
+			havePalette ? "loaded" : "MISSING (grayscale)");
+	if (!havePalette)
+		for (int i = 0; i < 256; ++i)
+			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = (byte)i;
+
+	// Blit centred on a black screen; transparent pixels show through as black.
+	Graphics::Surface *screen = g_system->lockScreen();
+	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	int x0 = (kScreenWidth - cel.width) / 2;
+	int y0 = (kScreenHeight - cel.height) / 2;
+	for (int y = 0; y < cel.height; ++y) {
+		for (int x = 0; x < cel.width; ++x) {
+			if (!cel.isOpaque(x, y))
+				continue;
+			int sx = x0 + x, sy = y0 + y;
+			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
+				*((byte *)screen->getBasePtr(sx, sy)) = cel.pixels[(uint)y * cel.width + x];
+		}
+	}
+	g_system->unlockScreen();
+	g_system->getPaletteManager()->setPalette(rgb, 0, 256);
+	g_system->updateScreen();
+
+	free(fileData);
+	debugPrintf("Blitted. Close the console to view.\n");
 	return true;
 }
 

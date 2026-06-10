@@ -4,6 +4,7 @@ MODULE_OBJS = \
 	archive.o \
 	console.o \
 	cyberflix.o \
+	image.o \
 	metaengine.o \
 	script.o \
 	vm.o

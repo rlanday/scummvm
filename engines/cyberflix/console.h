@@ -45,6 +45,9 @@ private:
 	// Executes a script resource on the VM harness with tracing.
 	bool cmdVmTrace(int argc, const char **argv);
 	bool cmdVmRun(int argc, const char **argv);
+
+	// Decodes a SHP/SET cel resource and blits it to the screen for inspection.
+	bool cmdShowShape(int argc, const char **argv);
 };
 
 } // End of namespace Cyberflix
