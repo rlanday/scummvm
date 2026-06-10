@@ -182,33 +182,85 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 	case Script::kOpPush3:
 	case Script::kOpPush4: {
 		Common::String sym = script.getSelfRelString(pc);
+		uint16 headOp = inst.opcode;
 		pc++;
-		// A name immediately followed by '(' is a call atom: consume the whole
-		// balanced argument list (TI.EXE 0x0041a609 checks the next opcode for
-		// kOpOpenParen and sizes the span via 0x0040b690). Method handlers are
-		// not wired yet, so the call yields a placeholder while the span is
-		// consumed correctly so the evaluator stays in sync.
+		// A name immediately followed by '(' is a call atom: parse and evaluate
+		// the balanced argument list, then dispatch (TI.EXE 0x0041a609 checks
+		// the next opcode for kOpOpenParen and sizes the span via 0x0040b690).
 		if (pc < count && script.getInstruction(pc).opcode == Script::kOpOpenParen) {
-			int close = script.findCloseParen(pc);
-			pc = (close >= 0) ? (uint32)close + 1 : count;
-			return Value();
+			Common::Array<Value> args;
+			parseCallArgs(script, pc, args);
+			return callMethod(headOp, sym, args);
 		}
 		// Otherwise a symbol reference evaluates to its bound value.
 		return getVar(sym);
 	}
 
-	default:
+	default: {
 		// Method-call atoms (0x3E80-0x4E9A) and other name-bearing atoms also
 		// take an optional '(' argument list (same 0x0041a580 path as symbols).
-		// Consume the head plus any balanced call span; yield a placeholder
-		// result until the method dispatch tables are implemented.
+		uint16 headOp = inst.opcode;
 		pc++;
 		if (pc < count && script.getInstruction(pc).opcode == Script::kOpOpenParen) {
-			int close = script.findCloseParen(pc);
-			pc = (close >= 0) ? (uint32)close + 1 : count;
+			Common::Array<Value> args;
+			parseCallArgs(script, pc, args);
+			return callMethod(headOp, Common::String(), args);
 		}
 		return Value();
 	}
+	}
+}
+
+void ScriptVM::parseCallArgs(const Script &script, uint32 &pc, Common::Array<Value> &outArgs) {
+	// pc references a kOpOpenParen. Walk the argument list, evaluating each
+	// comma-separated sub-expression with the precedence evaluator. The evaluator
+	// stops at kOpArgSep and kOpCloseParen since neither is an operator, so the
+	// arguments fall out naturally (TI.EXE argument scan 0x0040b690).
+	const uint32 count = script.getInstructionCount();
+	pc++; // consume '('
+	if (pc < count && script.getInstruction(pc).opcode == Script::kOpCloseParen) {
+		pc++; // empty argument list
+		return;
+	}
+	while (pc < count) {
+		outArgs.push_back(evaluateExpression(script, pc));
+		if (pc >= count)
+			break;
+		uint16 op = script.getInstruction(pc).opcode;
+		if (op == Script::kOpArgSep) {
+			pc++; // next argument
+			continue;
+		}
+		if (op == Script::kOpCloseParen) {
+			pc++; // end of list
+			break;
+		}
+		// Defensive: an unexpected token means the evaluator did not consume the
+		// whole argument (e.g. an unimplemented atom span). Resynchronise on the
+		// matching close paren so the outer statement loop stays aligned.
+		int close = script.findCloseParen(pc);
+		pc = (close >= 0) ? (uint32)close + 1 : count;
+		break;
+	}
+}
+
+Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args) {
+	// Dispatch a builtin method by opcode. The interpreter routes 0x2Exx/0x2Fxx
+	// through dispatch B and 0x3Exx/0x4Exx through dispatch A (files/opcode-map.md
+	// section 6); ~340 handlers are stubbed as logged no-ops until their
+	// subsystems (renderer/video/audio/navigation) are implemented. Arguments are
+	// fully evaluated so trace output reflects real call sites.
+	if (_trace) {
+		Common::String a;
+		for (uint32 i = 0; i < args.size(); ++i) {
+			if (i)
+				a += ", ";
+			a += args[i].toString();
+		}
+		debug(0, "    call %s#%#06x(%s)", name.empty() ? "method" : name.c_str(),
+				opcode, a.c_str());
+	}
+	return Value();
 }
 
 Value ScriptVM::evaluateExpression(const Script &script, uint32 &pc) {

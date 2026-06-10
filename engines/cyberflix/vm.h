@@ -117,8 +117,23 @@ private:
 	 */
 	Value evaluateExpression(const Script &script, uint32 &pc);
 
-	/** Decode a single atom (literal/symbol) at @p pc, advancing @p pc. */
+	/** Decode a single atom (literal/symbol/call) at @p pc, advancing @p pc. */
 	Value decodeAtom(const Script &script, uint32 &pc);
+
+	/**
+	 * Parse a call argument list whose opening kOpOpenParen is at @p pc,
+	 * evaluating each comma-separated argument and advancing @p pc past the
+	 * closing kOpCloseParen. Mirrors the argument scan at TI.EXE 0x0040b690.
+	 */
+	void parseCallArgs(const Script &script, uint32 &pc, Common::Array<Value> &outArgs);
+
+	/**
+	 * Dispatch a builtin method @p opcode with already-evaluated @p args. The
+	 * named handlers are filled in per subsystem; unimplemented opcodes are
+	 * logged (in trace mode) and return a placeholder. @p name is the source
+	 * symbol when the call head was a symbol atom, else empty.
+	 */
+	Value callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args);
 
 	/** Apply @p opcode to two operand values (no stack involved). */
 	Value applyBinary(uint16 opcode, const Value &lhs, const Value &rhs);
