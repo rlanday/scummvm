@@ -42,7 +42,8 @@ struct Value {
 	enum Type {
 		kInt = 0,    ///< Integer constant (pushInt / arithmetic result).
 		kSymbol,     ///< Reference to a symbol in the script string pool.
-		kString      ///< String constant from the pool.
+		kString,     ///< String constant from the pool.
+		kBool        ///< Boolean (result of comparison/logical operators).
 	};
 
 	Type type;
@@ -51,6 +52,7 @@ struct Value {
 
 	Value() : type(kInt), intValue(0) {}
 	static Value makeInt(int32 v) { Value r; r.type = kInt; r.intValue = v; return r; }
+	static Value makeBool(bool v) { Value r; r.type = kBool; r.intValue = v ? 1 : 0; return r; }
 	static Value makeSymbol(const Common::String &s) { Value r; r.type = kSymbol; r.strValue = s; return r; }
 	static Value makeString(const Common::String &s) { Value r; r.type = kString; r.strValue = s; return r; }
 
@@ -75,6 +77,7 @@ public:
 
 private:
 	void execute(const Script &script, uint32 index);
+	void applyOperator(uint16 opcode);
 	void push(const Value &v) { _stack.push_back(v); }
 	Value pop();
 

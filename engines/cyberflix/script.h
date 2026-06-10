@@ -64,8 +64,32 @@ public:
 		kOpPush4   = 0x0004,
 		kOpPushSym = 0x0005, ///< Push symbol/variable reference.
 		kOpPushInt = 0x0006, ///< Push integer constant (operandA).
-		kOpCmdBase = 0x0FA0  ///< Start of the built-in command range.
+		kOpCmdBase = 0x0FA0, ///< Start of the built-in command range.
+
+		// Infix operator opcodes, applied by the TI.EXE evaluator
+		// (applier 0x00419f30, jump table 0x41a484). See files/opcode-map.md.
+		kOpAdd     = 0x1F41, ///< int: lhs + rhs.
+		kOpSub     = 0x1F42, ///< int: lhs - rhs.
+		kOpMul     = 0x1F43, ///< int: lhs * rhs.
+		kOpDiv     = 0x1F44, ///< int: lhs / rhs (error on divide by zero).
+		kOpAnd     = 0x1F45, ///< bool: lhs & rhs.
+		kOpOr      = 0x1F46, ///< bool: lhs | rhs.
+		kOpConcat  = 0x1F47, ///< string: concat(lhs, rhs).
+		kOpEq      = 0x1F48, ///< any: lhs == rhs -> bool.
+		kOpNe      = 0x1F49, ///< any: lhs != rhs -> bool.
+		kOpGt      = 0x1F4A, ///< int: lhs > rhs -> bool.
+		kOpLt      = 0x1F4B, ///< int: lhs < rhs -> bool.
+		kOpGe      = 0x1F4C, ///< int: lhs >= rhs -> bool.
+		kOpLe      = 0x1F4D, ///< int: lhs <= rhs -> bool.
+
+		kOpOperatorFirst = 0x1F41,
+		kOpOperatorLast  = 0x1F4D
 	};
+
+	/** True if @p opcode is an infix binary operator (0x1F41..0x1F4D). */
+	static bool isOperator(uint16 opcode) {
+		return opcode >= kOpOperatorFirst && opcode <= kOpOperatorLast;
+	}
 
 	struct Instruction {
 		uint32 operandB;

@@ -29,6 +29,7 @@ namespace Cyberflix {
 Common::String Value::toString() const {
 	switch (type) {
 	case kInt:    return Common::String::format("%d", intValue);
+	case kBool:   return Common::String(intValue ? "true" : "false");
 	case kSymbol: return Common::String::format("sym:%s", strValue.c_str());
 	case kString: return Common::String::format("\"%s\"", strValue.c_str());
 	default:      return Common::String("?");
@@ -96,10 +97,56 @@ void ScriptVM::execute(const Script &script, uint32 index) {
 		break;
 
 	default:
-		// Builtin (0x0Fxx), operator (0x1F4x) and method (0x2E/0x3E/0x4Exx)
-		// opcodes are mapped in files/opcode-map.md and wired in incrementally.
-		// Skip so the VM can still be stepped over real scripts.
+		if (Script::isOperator(inst.opcode)) {
+			applyOperator(inst.opcode);
+			break;
+		}
+		// Builtin (0x0Fxx) and method (0x2E/0x3E/0x4Exx) opcodes are mapped in
+		// files/opcode-map.md and wired in incrementally. Skip so the VM can
+		// still be stepped over real scripts.
 		break;
+	}
+}
+
+void ScriptVM::applyOperator(uint16 opcode) {
+	// Binary infix operators. The TI.EXE evaluator (applier 0x00419f30) pops two
+	// operands; lhs is the first-pushed value, rhs the second. See section 7 of
+	// files/opcode-map.md for the verified opcode->operation mapping.
+	Value rhs = pop();
+	Value lhs = pop();
+	int32 a = lhs.intValue;
+	int32 b = rhs.intValue;
+
+	switch (opcode) {
+	case Script::kOpAdd: push(Value::makeInt(a + b)); break;
+	case Script::kOpSub: push(Value::makeInt(a - b)); break;
+	case Script::kOpMul: push(Value::makeInt(a * b)); break;
+	case Script::kOpDiv:
+		// Matches idiv at 0x41a048; guard the divide-by-zero the VM rejects.
+		push(Value::makeInt(b != 0 ? a / b : 0));
+		break;
+	case Script::kOpAnd: push(Value::makeBool(a && b)); break;
+	case Script::kOpOr:  push(Value::makeBool(a || b)); break;
+	case Script::kOpConcat:
+		push(Value::makeString(lhs.strValue + rhs.strValue));
+		break;
+	case Script::kOpEq:
+		if (lhs.type == Value::kString || lhs.type == Value::kSymbol)
+			push(Value::makeBool(lhs.strValue == rhs.strValue));
+		else
+			push(Value::makeBool(a == b));
+		break;
+	case Script::kOpNe:
+		if (lhs.type == Value::kString || lhs.type == Value::kSymbol)
+			push(Value::makeBool(lhs.strValue != rhs.strValue));
+		else
+			push(Value::makeBool(a != b));
+		break;
+	case Script::kOpGt: push(Value::makeBool(a > b)); break;
+	case Script::kOpLt: push(Value::makeBool(a < b)); break;
+	case Script::kOpGe: push(Value::makeBool(a >= b)); break;
+	case Script::kOpLe: push(Value::makeBool(a <= b)); break;
+	default: break;
 	}
 }
 

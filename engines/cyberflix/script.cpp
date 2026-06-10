@@ -105,6 +105,19 @@ const char *Script::opcodeName(uint16 opcode) {
 	case kOpPush4:   return "push4";
 	case kOpPushSym: return "pushSym";
 	case kOpPushInt: return "pushInt";
+	case kOpAdd:     return "add";
+	case kOpSub:     return "sub";
+	case kOpMul:     return "mul";
+	case kOpDiv:     return "div";
+	case kOpAnd:     return "and";
+	case kOpOr:      return "or";
+	case kOpConcat:  return "concat";
+	case kOpEq:      return "eq";
+	case kOpNe:      return "ne";
+	case kOpGt:      return "gt";
+	case kOpLt:      return "lt";
+	case kOpGe:      return "ge";
+	case kOpLe:      return "le";
 	default:
 		if (opcode >= kOpCmdBase && opcode < 0x1000)
 			return "cmd";
