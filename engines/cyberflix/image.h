@@ -64,6 +64,44 @@ struct CelImage {
 };
 
 /**
+ * A decoded full-screen frame: an 8-bit palettised image, @c width * @c height
+ * pixels packed at a stride equal to @c width.
+ *
+ * These are produced by the CyberFlix full-screen intra-frame decompressor
+ * (TI.EXE FUN_00423600), a hand-written assembly routine shared by MOV video
+ * keyframes and SET room backgrounds. Unlike a cel it is always fully opaque
+ * (every pixel is written), so there is no transparency mask.
+ */
+struct FrameImage {
+	uint16 width = 0;   ///< P: image bytes per row.
+	uint16 height = 0;  ///< H: number of rows.
+	Common::Array<byte> pixels; ///< width*height palette indices.
+};
+
+/**
+ * Decode a full-screen frame produced by TI.EXE FUN_00423600.
+ *
+ * The source is @c {uint16 H; uint16 P; controlStream}. Each of the @c H rows
+ * is introduced by a control byte @c C0 whose row opcode is @c K = C0 >> 2:
+ *   - K == 1            a literal (uncompressed) row of @c P bytes;
+ *   - K in  2..9        a row delta-coded against a reference row @c (di + dW),
+ *                       d in {-4,-3,-2,-1,+1,+2,+3,+4}, via the per-row LZ;
+ *   - K == 10           a skipped row (left unchanged);
+ *   - K in 11..18       a verbatim copy of a neighbouring row @c (di + dW).
+ * The per-row LZ selects one of eight inner modes from the low three bits of
+ * each command byte (run length @c n = byte >> 3, or @c next + 0x20 when zero):
+ * literal+DPCM, repeat-previous-byte, skip, RLE fill, pure DPCM, literal copy,
+ * reference-row copy and an LZ back-reference. The DPCM mode applies signed
+ * residuals from a big-endian bit stream, with magnitudes from a fixed table.
+ *
+ * @param src      Frame data; must begin at the @c H header word.
+ * @param srcSize  Bytes available at @p src.
+ * @param out      Receives the decoded @c H * @c P image.
+ * @return bytes consumed from @p src, or 0 on malformed input.
+ */
+uint32 decodeFrame(const byte *src, uint32 srcSize, FrameImage &out);
+
+/**
  * Decode a shape/cel resource stream into @p out.
  *
  * @param stream  Resource payload (positioned at originX). Fully consumed.

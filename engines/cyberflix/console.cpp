@@ -43,6 +43,7 @@ Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
 	registerCmd("vmtrace", WRAP_METHOD(Console, cmdVmTrace));
 	registerCmd("vmrun", WRAP_METHOD(Console, cmdVmRun));
 	registerCmd("showshape", WRAP_METHOD(Console, cmdShowShape));
+	registerCmd("showframe", WRAP_METHOD(Console, cmdShowFrame));
 }
 
 bool Console::cmdDumpArchive(int argc, const char **argv) {
@@ -344,6 +345,95 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 			int sx = x0 + x, sy = y0 + y;
 			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
 				*((byte *)screen->getBasePtr(sx, sy)) = cel.pixels[(uint)y * cel.width + x];
+		}
+	}
+	g_system->unlockScreen();
+	g_system->getPaletteManager()->setPalette(rgb, 0, 256);
+	g_system->updateScreen();
+
+	free(fileData);
+	debugPrintf("Blitted. Close the console to view.\n");
+	return true;
+}
+
+bool Console::cmdShowFrame(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Decodes a full-screen frame at a byte offset and blits it.\n");
+		debugPrintf("Usage: %s <filename> <offset> [paletteFile]\n", argv[0]);
+		debugPrintf("  offset accepts decimal or 0x-hex, and points at the frame's\n");
+		debugPrintf("  16-bit height word (e.g. %s MOVIES/LOGO.MOV 0x42408)\n", argv[0]);
+		return true;
+	}
+
+	Common::File file;
+	if (!file.open(argv[1])) {
+		debugPrintf("Could not open '%s'\n", argv[1]);
+		return true;
+	}
+
+	// Read the whole file so it can both feed the decoder and be scanned for an
+	// embedded palette.
+	uint32 size = (uint32)file.size();
+	byte *fileData = (byte *)malloc(size);
+	if (!fileData || file.read(fileData, size) != size) {
+		debugPrintf("Could not read '%s'\n", argv[1]);
+		free(fileData);
+		return true;
+	}
+
+	// Parse the offset as base-0 so both decimal and 0x-hex forms work.
+	uint32 offset = (uint32)strtol(argv[2], nullptr, 0);
+	if (offset >= size) {
+		debugPrintf("Offset %u is past end of file (%u bytes)\n", offset, size);
+		free(fileData);
+		return true;
+	}
+
+	FrameImage frame;
+	uint32 consumed = decodeFrame(fileData + offset, size - offset, frame);
+	if (consumed == 0) {
+		debugPrintf("No valid frame at offset 0x%x\n", offset);
+		free(fileData);
+		return true;
+	}
+
+	// Resolve a palette: from a separate container if supplied, otherwise scan
+	// the frame's own file for an embedded CLUT.
+	byte rgb[256 * 3];
+	memset(rgb, 0, sizeof(rgb));
+	bool havePalette = false;
+	if (argc >= 4) {
+		Common::File palFile;
+		if (palFile.open(argv[3])) {
+			uint32 palSize = (uint32)palFile.size();
+			byte *palData = (byte *)malloc(palSize);
+			if (palData && palFile.read(palData, palSize) == palSize)
+				havePalette = loadPalette(palData, palSize, rgb);
+			free(palData);
+		}
+		if (!havePalette)
+			debugPrintf("No palette found in '%s'; falling back to '%s'\n", argv[3], argv[1]);
+	}
+	if (!havePalette)
+		havePalette = loadPalette(fileData, size, rgb);
+
+	debugPrintf("Frame at 0x%x: %ux%u, consumed %u bytes, palette %s\n", offset,
+			frame.width, frame.height, consumed,
+			havePalette ? "loaded" : "MISSING (grayscale)");
+	if (!havePalette)
+		for (int i = 0; i < 256; ++i)
+			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = (byte)i;
+
+	// Blit centred on a black screen.
+	Graphics::Surface *screen = g_system->lockScreen();
+	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	int x0 = (kScreenWidth - frame.width) / 2;
+	int y0 = (kScreenHeight - frame.height) / 2;
+	for (int y = 0; y < frame.height; ++y) {
+		for (int x = 0; x < frame.width; ++x) {
+			int sx = x0 + x, sy = y0 + y;
+			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
+				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
 		}
 	}
 	g_system->unlockScreen();

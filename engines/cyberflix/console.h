@@ -48,6 +48,10 @@ private:
 
 	// Decodes a SHP/SET cel resource and blits it to the screen for inspection.
 	bool cmdShowShape(int argc, const char **argv);
+
+	// Decodes a full-screen frame (MOV keyframe / SET background) at a byte
+	// offset within a file and blits it to the screen for inspection.
+	bool cmdShowFrame(int argc, const char **argv);
 };
 
 } // End of namespace Cyberflix
