@@ -77,7 +77,9 @@ public:
 		kOpForNext = 0x0FAF, ///< For-loop iterate/close.
 		kOpWhile   = 0x0FB0, ///< While: test condition, enter or skip body.
 		kOpEndWhile = 0x0FB1, ///< While close: re-test and loop or exit.
-		kOpAssign  = 0x0FB2, ///< Assignment marker (symbol kOpAssign expr).
+		kOpOpenParen  = 0x0FB2, ///< Open a call argument list: name '(' args ')'.
+		kOpCloseParen = 0x0FB3, ///< Close a call argument list.
+		kOpArgSep     = 0x0FB4, ///< Argument separator (',') inside a call.
 
 		// Infix operator opcodes, applied by the TI.EXE evaluator
 		// (applier 0x00419f30, jump table 0x41a484). See files/opcode-map.md.
@@ -144,6 +146,15 @@ public:
 	 * @p index inside a for body (counting nested kOpFor), or -1.
 	 */
 	int findForNextFrom(uint32 index) const;
+
+	/**
+	 * Given @p openIndex pointing at a kOpOpenParen, return the index of the
+	 * matching kOpCloseParen, counting nested parentheses. Mirrors the balanced
+	 * argument-list span scanner at TI.EXE 0x0040b690 (called from the atom
+	 * decoder 0x0041a626 to size a call). Returns -1 if unbalanced.
+	 */
+	int findCloseParen(uint32 openIndex) const;
+
 
 	struct Instruction {
 		uint32 operandB;

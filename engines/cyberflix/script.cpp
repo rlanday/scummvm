@@ -208,4 +208,23 @@ int Script::findForNextFrom(uint32 index) const {
 	return -1;
 }
 
+int Script::findCloseParen(uint32 openIndex) const {
+	// openIndex must reference a kOpOpenParen; walk forward matching nested
+	// parens. Unlike the block scanners this does not stop on kOpEnd/kOpReturn
+	// because an argument list never spans a statement boundary (TI.EXE
+	// 0x0040b690 simply balances kOpOpenParen/kOpCloseParen).
+	int depth = 0;
+	for (uint32 i = openIndex; i < _code.size(); ++i) {
+		uint16 op = _code[i].opcode;
+		if (op == kOpOpenParen) {
+			++depth;
+		} else if (op == kOpCloseParen) {
+			--depth;
+			if (depth == 0)
+				return (int)i;
+		}
+	}
+	return -1;
+}
+
 } // End of namespace Cyberflix

@@ -23,6 +23,8 @@
 #define CYBERFLIX_VM_H
 
 #include "common/array.h"
+#include "common/hashmap.h"
+#include "common/hash-str.h"
 #include "common/str.h"
 
 #include "cyberflix/script.h"
@@ -95,6 +97,19 @@ private:
 	}
 
 	/**
+	 * Read a variable by name from the current scope. Unbound names yield a
+	 * symbol Value (harmless when used as data); bound names yield their stored
+	 * value. Mirrors the TI.EXE scope lookup at 0x004138f0 (object entries of
+	 * 0x20 bytes, name at +0x10), reduced to a flat name->value map until the
+	 * object scope chain is modelled.
+	 */
+	Value getVar(const Common::String &name) const;
+
+	/** Store @p v under @p name in the current scope (TI.EXE store 0x00413610). */
+	void setVar(const Common::String &name, const Value &v);
+
+
+	/**
 	 * Evaluate the expression starting at instruction @p pc, advancing @p pc
 	 * past every instruction consumed. Mirrors the TI.EXE evaluator 0x00419cf0:
 	 * an atom followed by zero or more (operator, atom) pairs, reduced by the
@@ -113,6 +128,24 @@ private:
 
 	Common::Array<Value> _stack;
 	Common::Array<uint32> _whileStack; ///< Saved condition-start PCs for active whiles.
+
+	/**
+	 * Active for-loop frames. Each binds a loop variable that is incremented
+	 * and compared against an inclusive upper bound at kOpForNext, looping back
+	 * to the body start or falling through (TI.EXE for-setup 0x0040bda9,
+	 * frame stack 0x45ed48). See files/opcode-map.md section 9.
+	 */
+	struct ForFrame {
+		Common::String var; ///< Loop-variable name.
+		int32 end;          ///< Inclusive upper bound.
+		uint32 bodyStart;   ///< Instruction index of the body's first statement.
+	};
+	Common::Array<ForFrame> _forStack;
+
+	/// Variable scope. A flat name->value map standing in for the TI.EXE object
+	/// scope chain (global object at [0x45f010]) until objects are modelled.
+	Common::HashMap<Common::String, Value> _vars;
+
 	uint32 _pc;
 	bool _trace;
 };

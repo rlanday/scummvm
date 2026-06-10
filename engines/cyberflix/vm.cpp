@@ -39,6 +39,19 @@ Common::String Value::toString() const {
 ScriptVM::ScriptVM() : _pc(0), _trace(false) {
 }
 
+Value ScriptVM::getVar(const Common::String &name) const {
+	// Resolve against the flat variable scope. Unbound names are returned as
+	// symbol values so they can still flow through expressions harmlessly
+	// (mirrors the lookup miss at TI.EXE 0x0041395b returning the name).
+	if (_vars.contains(name))
+		return _vars[name];
+	return Value::makeSymbol(name);
+}
+
+void ScriptVM::setVar(const Common::String &name, const Value &v) {
+	_vars[name] = v;
+}
+
 Value ScriptVM::pop() {
 	if (_stack.empty())
 		return Value();
@@ -150,25 +163,50 @@ Value ScriptVM::applyBinary(uint16 opcode, const Value &lhs, const Value &rhs) {
 
 Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 	const Script::Instruction &inst = script.getInstruction(pc);
+	const uint32 count = script.getInstructionCount();
+
 	switch (inst.opcode) {
 	case Script::kOpPushInt:
 		pc++;
 		return Value::makeInt((int16)inst.operandA);
+
+	case Script::kOpSub: {
+		// Leading kOpSub is unary minus: decode the following atom and negate
+		// it (TI.EXE atom decoder 0x0041a8e5).
+		pc++;
+		Value v = decodeAtom(script, pc);
+		return Value::makeInt(-v.intValue);
+	}
 
 	case Script::kOpPushSym:
 	case Script::kOpPush3:
 	case Script::kOpPush4: {
 		Common::String sym = script.getSelfRelString(pc);
 		pc++;
-		return Value::makeSymbol(sym);
+		// A name immediately followed by '(' is a call atom: consume the whole
+		// balanced argument list (TI.EXE 0x0041a609 checks the next opcode for
+		// kOpOpenParen and sizes the span via 0x0040b690). Method handlers are
+		// not wired yet, so the call yields a placeholder while the span is
+		// consumed correctly so the evaluator stays in sync.
+		if (pc < count && script.getInstruction(pc).opcode == Script::kOpOpenParen) {
+			int close = script.findCloseParen(pc);
+			pc = (close >= 0) ? (uint32)close + 1 : count;
+			return Value();
+		}
+		// Otherwise a symbol reference evaluates to its bound value.
+		return getVar(sym);
 	}
 
 	default:
-		// Method-call atoms (0x3E80-0x4E9A) and atom-builtins (0x0FB5-0x0FBB)
-		// consume a variable number of instructions and depend on subsystems
-		// not yet wired (files/opcode-map.md section 8). Consume one instruction
-		// and yield a placeholder so the evaluator stays well-formed.
+		// Method-call atoms (0x3E80-0x4E9A) and other name-bearing atoms also
+		// take an optional '(' argument list (same 0x0041a580 path as symbols).
+		// Consume the head plus any balanced call span; yield a placeholder
+		// result until the method dispatch tables are implemented.
 		pc++;
+		if (pc < count && script.getInstruction(pc).opcode == Script::kOpOpenParen) {
+			int close = script.findCloseParen(pc);
+			pc = (close >= 0) ? (uint32)close + 1 : count;
+		}
 		return Value();
 	}
 }
@@ -206,6 +244,7 @@ Value ScriptVM::evaluateExpression(const Script &script, uint32 &pc) {
 uint32 ScriptVM::runProgram(const Script &script, uint32 maxSteps) {
 	_stack.clear();
 	_whileStack.clear();
+	_forStack.clear();
 	uint32 pc = 0;
 	uint32 executed = 0;
 	const uint32 count = script.getInstructionCount();
@@ -289,13 +328,55 @@ uint32 ScriptVM::runProgram(const Script &script, uint32 maxSteps) {
 		}
 
 		case Script::kOpFor: {
-			// For-loops bind a loop variable and iterate over a numeric range
-			// (TI.EXE 0x0040bda9, frame stack 0x45ed48, with a kOpForTo bound
-			// separator and kOpForNext terminator). Iteration needs the variable
-			// scope model, which is not implemented yet, so skip the whole
-			// construct for now rather than execute it incorrectly.
-			int forNext = script.findForNextFrom(pc + 1);
-			pc = (forNext >= 0) ? (uint32)forNext + 1 : count;
+			// for <var> = <start> to <end> ... next
+			// Parse the header (TI.EXE 0x0040bda9): a loop-variable symbol, the
+			// kOpEq '=' separator, the start expression, the kOpForTo 'to'
+			// separator and the end expression; the body follows up to the
+			// matching kOpForNext. Bind the variable and either enter the body
+			// or skip the whole construct when the range is empty.
+			uint32 p = pc + 1;
+			Common::String loopVar = script.getSelfRelString(p);
+			p++;
+			if (p < count && script.getInstruction(p).opcode == Script::kOpEq)
+				p++; // '=' separator
+			Value start = evaluateExpression(script, p);
+			if (p < count && script.getInstruction(p).opcode == Script::kOpForTo)
+				p++; // 'to' separator
+			Value end = evaluateExpression(script, p);
+			uint32 bodyStart = p;
+
+			setVar(loopVar, Value::makeInt(start.intValue));
+			if (start.intValue <= end.intValue) {
+				ForFrame frame;
+				frame.var = loopVar;
+				frame.end = end.intValue;
+				frame.bodyStart = bodyStart;
+				_forStack.push_back(frame);
+				pc = bodyStart; // enter body
+			} else {
+				int forNext = script.findForNextFrom(bodyStart);
+				pc = (forNext >= 0) ? (uint32)forNext + 1 : count;
+			}
+			break;
+		}
+
+		case Script::kOpForNext: {
+			// Increment the loop variable and compare against the inclusive
+			// bound; loop back to the body or pop the frame (TI.EXE 0x0040bda9
+			// continuation via the kOpForNext branch).
+			if (_forStack.empty()) {
+				pc++;
+				break;
+			}
+			ForFrame &frame = _forStack.back();
+			int32 next = getVar(frame.var).intValue + 1;
+			setVar(frame.var, Value::makeInt(next));
+			if (next <= frame.end) {
+				pc = frame.bodyStart;
+			} else {
+				_forStack.pop_back();
+				pc++;
+			}
 			break;
 		}
 
