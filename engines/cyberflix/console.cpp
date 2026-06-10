@@ -33,6 +33,7 @@ Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
 	registerCmd("dumpArchive", WRAP_METHOD(Console, cmdDumpArchive));
 	registerCmd("disasm", WRAP_METHOD(Console, cmdDisasm));
 	registerCmd("vmtrace", WRAP_METHOD(Console, cmdVmTrace));
+	registerCmd("vmrun", WRAP_METHOD(Console, cmdVmRun));
 }
 
 bool Console::cmdDumpArchive(int argc, const char **argv) {
@@ -184,6 +185,54 @@ bool Console::cmdVmTrace(int argc, const char **argv) {
 	vm.setTrace(true);
 	vm.run(script, maxSteps);
 	debugPrintf("VM trace complete.\n");
+	return true;
+}
+
+bool Console::cmdVmRun(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Runs a script resource through the statement interpreter.\n");
+		debugPrintf("Usage: %s <filename> <resIndex> [maxSteps]\n", argv[0]);
+		return true;
+	}
+
+	Common::File file;
+	if (!file.open(argv[1])) {
+		debugPrintf("Could not open '%s'\n", argv[1]);
+		return true;
+	}
+
+	Archive archive;
+	if (!archive.open(file.readStream(file.size()), argv[1])) {
+		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
+		return true;
+	}
+
+	uint32 idx = (uint32)atoi(argv[2]);
+	if (idx >= archive.getResourceCount()) {
+		debugPrintf("Resource index %u out of range (%u resources)\n",
+				idx, archive.getResourceCount());
+		return true;
+	}
+
+	Common::SeekableReadStream *stream = archive.createReadStreamForResource(idx);
+	if (!stream) {
+		debugPrintf("Resource %u is empty\n", idx);
+		return true;
+	}
+
+	Script script;
+	bool ok = script.parse(stream);
+	delete stream;
+	if (!ok) {
+		debugPrintf("Failed to parse resource %u as a script\n", idx);
+		return true;
+	}
+
+	uint32 maxSteps = (argc >= 4) ? (uint32)atoi(argv[3]) : 100000;
+	ScriptVM vm;
+	uint32 executed = vm.runProgram(script, maxSteps);
+	debugPrintf("Executed %u statements over %u instructions.\n",
+			executed, script.getInstructionCount());
 	return true;
 }
 

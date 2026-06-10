@@ -138,4 +138,40 @@ uint8 Script::operatorPrecedence(uint16 opcode) {
 	}
 }
 
+int Script::findEndIfFrom(uint32 index) const {
+	int depth = 0;
+	for (uint32 i = index; i < _code.size(); ++i) {
+		uint16 op = _code[i].opcode;
+		if (op == kOpEnd || op == kOpReturn)
+			return -1;
+		if (op == kOpIf) {
+			++depth;
+		} else if (op == kOpEndIf) {
+			if (depth == 0)
+				return (int)i;
+			--depth;
+		}
+	}
+	return -1;
+}
+
+int Script::findMatchingElse(uint32 index) const {
+	int depth = 0;
+	for (uint32 i = index + 1; i < _code.size(); ++i) {
+		uint16 op = _code[i].opcode;
+		if (op == kOpEnd || op == kOpReturn)
+			return -1;
+		if (op == kOpIf) {
+			++depth;
+		} else if (op == kOpEndIf) {
+			if (depth == 0)
+				return -1;
+			--depth;
+		} else if (op == kOpElse && depth == 0) {
+			return (int)(i + 1);
+		}
+	}
+	return -1;
+}
+
 } // End of namespace Cyberflix

@@ -66,6 +66,14 @@ public:
 		kOpPushInt = 0x0006, ///< Push integer constant (operandA).
 		kOpCmdBase = 0x0FA0, ///< Start of the built-in command range.
 
+		// Control-flow builtins dispatched by the main loop's small switch
+		// (TI.EXE 0x0040ba4f, map 0x40c458). See files/opcode-map.md section 3.
+		kOpReturn  = 0x0FA4, ///< End of script body; requires balanced blocks.
+		kOpIf      = 0x0FA6, ///< Evaluate condition; enter or skip THEN block.
+		kOpEndIf   = 0x0FA7, ///< Close an if/then(/else) block.
+		kOpElse    = 0x0FA8, ///< Else marker; skipped after the THEN ran.
+		kOpAssign  = 0x0FB2, ///< Assignment marker (symbol kOpAssign expr).
+
 		// Infix operator opcodes, applied by the TI.EXE evaluator
 		// (applier 0x00419f30, jump table 0x41a484). See files/opcode-map.md.
 		kOpAdd     = 0x1F41, ///< int: lhs + rhs.
@@ -98,6 +106,26 @@ public:
 	 * 0x41a534, value table 0x41a514). Returns 0xFF for non-operators.
 	 */
 	static uint8 operatorPrecedence(uint16 opcode);
+
+	/**
+	 * Index of the kOpEndIf that closes the if-block opened at @p index (which
+	 * must be a kOpIf), accounting for nested ifs, or -1 if not found.
+	 */
+	int findMatchingEndIf(uint32 index) const { return findEndIfFrom(index + 1); }
+
+	/**
+	 * Index of the next kOpEndIf at the current nesting level, scanning forward
+	 * from @p index which is already inside an if/then or else body. Mirrors the
+	 * scanner at TI.EXE 0x0040c550; aborts (-1) on end/return.
+	 */
+	int findEndIfFrom(uint32 index) const;
+
+	/**
+	 * If the if-block opened at @p index (a kOpIf) has an else clause, return the
+	 * index of the first instruction after its kOpElse; if the matching kOpEndIf
+	 * is reached first (no else), return -1. Mirrors TI.EXE 0x0040c6d0.
+	 */
+	int findMatchingElse(uint32 index) const;
 
 	struct Instruction {
 		uint32 operandB;

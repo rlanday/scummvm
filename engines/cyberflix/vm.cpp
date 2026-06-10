@@ -203,4 +203,74 @@ Value ScriptVM::evaluateExpression(const Script &script, uint32 &pc) {
 	return operands[0];
 }
 
+uint32 ScriptVM::runProgram(const Script &script, uint32 maxSteps) {
+	_stack.clear();
+	uint32 pc = 0;
+	uint32 executed = 0;
+	const uint32 count = script.getInstructionCount();
+
+	while (pc < count && executed < maxSteps) {
+		uint32 here = pc;
+		uint16 op = script.getInstruction(pc).opcode;
+
+		switch (op) {
+		case Script::kOpEnd:
+		case Script::kOpReturn:
+			return executed;
+
+		case Script::kOpPushInt:
+			// Top-level integer atoms act as statement separators/padding; the
+			// main loop skips runs of them (TI.EXE 0x0040c1a1-0x0040c1b2).
+			pc++;
+			break;
+
+		case Script::kOpIf: {
+			uint32 condPc = pc + 1;
+			Value cond = evaluateExpression(script, condPc);
+			if (isTruthy(cond)) {
+				pc = condPc; // enter THEN block
+			} else {
+				int elseStart = script.findMatchingElse(here);
+				if (elseStart >= 0) {
+					pc = (uint32)elseStart; // enter ELSE block
+				} else {
+					int endIf = script.findMatchingEndIf(here);
+					pc = (endIf >= 0) ? (uint32)endIf + 1 : count;
+				}
+			}
+			break;
+		}
+
+		case Script::kOpElse: {
+			// Reached only after a THEN block executed; skip the else body.
+			int endIf = script.findEndIfFrom(pc + 1);
+			pc = (endIf >= 0) ? (uint32)endIf + 1 : count;
+			break;
+		}
+
+		case Script::kOpEndIf:
+			pc++;
+			break;
+
+		default: {
+			// Method calls, assignments and other statement expressions. Consume
+			// the expression so the PC advances; side effects are wired in as the
+			// method handlers and subsystems land (files/opcode-map.md).
+			uint32 next = pc;
+			evaluateExpression(script, next);
+			pc = (next > here) ? next : here + 1;
+			break;
+		}
+		}
+
+		if (_trace) {
+			debug(0, "  stmt %4u: %-8s -> pc=%u", here,
+					Script::opcodeName(op), pc);
+		}
+		executed++;
+	}
+
+	return executed;
+}
+
 } // End of namespace Cyberflix

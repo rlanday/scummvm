@@ -75,9 +75,24 @@ public:
 	/** Run @p script from the top until the terminator or a step budget. */
 	void run(const Script &script, uint32 maxSteps = 100000);
 
+	/**
+	 * Execute @p script as a statement program: a statement loop that handles
+	 * the control-flow builtins (if/else/endif/return) using the verified block
+	 * scanners, evaluating conditions through the expression evaluator. Other
+	 * statements (method calls, assignments) are consumed as expressions for
+	 * now; their side effects land as the subsystems are implemented.
+	 *
+	 * Returns the number of statements executed. Mirrors the TI.EXE main loop
+	 * at vaddr 0x0040ba4f (see files/opcode-map.md sections 3 and 8).
+	 */
+	uint32 runProgram(const Script &script, uint32 maxSteps = 100000);
+
 private:
 	void execute(const Script &script, uint32 index);
 	void applyOperator(uint16 opcode);
+	static bool isTruthy(const Value &v) {
+		return (v.type == Value::kBool || v.type == Value::kInt) && v.intValue != 0;
+	}
 
 	/**
 	 * Evaluate the expression starting at instruction @p pc, advancing @p pc

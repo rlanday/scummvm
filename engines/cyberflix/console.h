@@ -44,6 +44,7 @@ private:
 
 	// Executes a script resource on the VM harness with tracing.
 	bool cmdVmTrace(int argc, const char **argv);
+	bool cmdVmRun(int argc, const char **argv);
 };
 
 } // End of namespace Cyberflix
