@@ -480,7 +480,6 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 	// also doubles as the frame's {uint16 H, uint16 P} header, so the decoder
 	// source is the 4 info bytes followed by the resource payload, i.e. the
 	// bytes starting four bytes before the payload (dataOffset - 4).
-	const uint32 kFrameInfoTag = 0x02000108;
 	Common::Array<uint32> frameIndices;
 	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
 		const Archive::Resource &res = archive.getResource(i);

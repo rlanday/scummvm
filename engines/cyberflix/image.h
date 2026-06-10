@@ -64,13 +64,50 @@ struct CelImage {
 };
 
 /**
+ * CYBERFLIX MOV VIDEO FILE FORMAT (.MOV)
+ * =====================================
+ * Despite the extension these are NOT QuickTime; a .MOV is a CyberFlix
+ * "Bicycle"-engine LPPALPPA container (see Archive) whose resources hold the
+ * video frames, the soundtrack and a palette. Reversed and validated end-to-end
+ * against MOVIES/LOGO.MOV (the "CyberFlix Incorporated presents" logo).
+ *
+ * Layout (all framing little-endian; see Archive for the container header and
+ * the resource directory at file offset 0x400):
+ *
+ *   - VIDEO FRAMES are the resources whose @c info tag is @c kFrameInfoTag
+ *     (0x02000108). The tag is not just a type id: its four little-endian bytes
+ *     ARE the frame header @c {uint16 H; uint16 P} (0x02000108 -> H=0x0108=264,
+ *     P=0x0200=512). The compressed stream consumed by the decoder therefore
+ *     begins at the @c info field and runs through the payload, i.e. at
+ *     @c (recordOffset + 8) == @c (dataOffset - 4) for @c (payloadLength + 4)
+ *     bytes. All frames of a movie share one (H, P).
+ *
+ *   - AUDIO resources carry @c info tag 0x6 and are interleaved one per video
+ *     frame (decoding is handled elsewhere; the video path ignores them).
+ *
+ *   - PALETTE is a single embedded Macintosh 'clut' resource shared by every
+ *     frame; loadPalette() locates it by its sequential ColorSpec value run.
+ *
+ * Frames are INTER-CODED. Only the first frame of a run is a full keyframe;
+ * later frames update just the regions that changed and rely on the retained
+ * contents of the previous frame for the rest (row opcode K==10 and the per-row
+ * skip mode leave pixels untouched). Playback therefore composites frames in
+ * order into a persistent surface (FrameSequence); decoding a frame standalone
+ * into a fresh buffer (decodeFrame) is correct only for keyframes such as SET
+ * room backgrounds.
+ */
+
+/** Resource @c info tag identifying a MOV video frame; doubles as its H/P header. */
+static const uint32 kFrameInfoTag = 0x02000108;
+
+/**
  * A decoded full-screen frame: an 8-bit palettised image, @c width * @c height
  * pixels packed at a stride equal to @c width.
  *
- * These are produced by the CyberFlix full-screen intra-frame decompressor
- * (TI.EXE FUN_00423600), a hand-written assembly routine shared by MOV video
- * keyframes and SET room backgrounds. Unlike a cel it is always fully opaque
- * (every pixel is written), so there is no transparency mask.
+ * These are produced by the CyberFlix full-screen frame decompressor (TI.EXE
+ * FUN_00423600), a hand-written assembly routine shared by MOV video frames and
+ * SET room backgrounds. Unlike a cel it is always fully opaque (every pixel is
+ * written), so there is no transparency mask.
  */
 struct FrameImage {
 	uint16 width = 0;   ///< P: image bytes per row.
@@ -169,6 +206,11 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
  * @c {uint16 value; uint16 R, G, B}; the 8-bit channel is the high byte. The
  * runtime apply routine (FUN_0041ba80) forces index 0 to black and 255 to
  * white, which we reproduce here.
+ *
+ * Caveat for MOV video: that index 0/255 forcing is a SET-background era
+ * assumption. A movie's own black background is a non-zero index (in LOGO.MOV
+ * index 0 is in fact white), so the forcing is cosmetically harmless there but
+ * should be revisited when MOV playback is wired into the engine proper.
  *
  * @return true if a clut was found (identified by its sequential value field).
  */
