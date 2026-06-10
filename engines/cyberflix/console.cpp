@@ -44,6 +44,7 @@ Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
 	registerCmd("vmrun", WRAP_METHOD(Console, cmdVmRun));
 	registerCmd("showshape", WRAP_METHOD(Console, cmdShowShape));
 	registerCmd("showframe", WRAP_METHOD(Console, cmdShowFrame));
+	registerCmd("showmovie", WRAP_METHOD(Console, cmdShowMovie));
 }
 
 bool Console::cmdDumpArchive(int argc, const char **argv) {
@@ -434,6 +435,105 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 			int sx = x0 + x, sy = y0 + y;
 			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
 				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
+		}
+	}
+	g_system->unlockScreen();
+	g_system->getPaletteManager()->setPalette(rgb, 0, 256);
+	g_system->updateScreen();
+
+	free(fileData);
+	debugPrintf("Blitted. Close the console to view.\n");
+	return true;
+}
+
+bool Console::cmdShowMovie(int argc, const char **argv) {
+	if (argc < 2) {
+		debugPrintf("Plays a MOV's frame sequence into a persistent framebuffer.\n");
+		debugPrintf("Usage: %s <movfile> [frameIndex]\n", argv[0]);
+		debugPrintf("  Decodes frames 0..frameIndex (default: the last frame) and\n");
+		debugPrintf("  blits the composited result.  e.g. %s MOVIES/LOGO.MOV 150\n", argv[0]);
+		return true;
+	}
+
+	Common::File file;
+	if (!file.open(argv[1])) {
+		debugPrintf("Could not open '%s'\n", argv[1]);
+		return true;
+	}
+
+	uint32 size = (uint32)file.size();
+	byte *fileData = (byte *)malloc(size);
+	if (!fileData || file.read(fileData, size) != size) {
+		debugPrintf("Could not read '%s'\n", argv[1]);
+		free(fileData);
+		return true;
+	}
+
+	Archive archive;
+	if (!archive.open(new Common::MemoryReadStream(fileData, size, DisposeAfterUse::NO), argv[1])) {
+		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
+		free(fileData);
+		return true;
+	}
+
+	// Video frames are the resources whose info tag is kFrameInfoTag; that tag
+	// also doubles as the frame's {uint16 H, uint16 P} header, so the decoder
+	// source is the 4 info bytes followed by the resource payload, i.e. the
+	// bytes starting four bytes before the payload (dataOffset - 4).
+	const uint32 kFrameInfoTag = 0x02000108;
+	Common::Array<uint32> frameIndices;
+	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
+		const Archive::Resource &res = archive.getResource(i);
+		if (!res.empty && res.info == kFrameInfoTag && res.dataOffset >= 4)
+			frameIndices.push_back(i);
+	}
+	if (frameIndices.empty()) {
+		debugPrintf("No video frames (info 0x%08x) found in '%s'\n", kFrameInfoTag, argv[1]);
+		free(fileData);
+		return true;
+	}
+
+	uint32 target = frameIndices.size() - 1;
+	if (argc >= 3) {
+		uint32 want = (uint32)atoi(argv[2]);
+		if (want < frameIndices.size())
+			target = want;
+		else
+			debugPrintf("Frame %u out of range; clamping to last (%u)\n", want, target);
+	}
+
+	// Apply each frame in order on top of the retained framebuffer.
+	FrameSequence seq;
+	for (uint32 f = 0; f <= target; ++f) {
+		const Archive::Resource &res = archive.getResource(frameIndices[f]);
+		if (seq.applyFrame(fileData + res.dataOffset - 4, res.length + 4) == 0) {
+			debugPrintf("Frame %u failed to decode\n", f);
+			free(fileData);
+			return true;
+		}
+	}
+
+	byte rgb[256 * 3];
+	memset(rgb, 0, sizeof(rgb));
+	bool havePalette = loadPalette(fileData, size, rgb);
+
+	debugPrintf("Movie '%s': %u frames, showing frame %u (%ux%u), palette %s\n",
+			argv[1], frameIndices.size(), target, seq.width(), seq.height(),
+			havePalette ? "loaded" : "MISSING (grayscale)");
+	if (!havePalette)
+		for (int i = 0; i < 256; ++i)
+			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = (byte)i;
+
+	const byte *pixels = seq.pixels();
+	Graphics::Surface *screen = g_system->lockScreen();
+	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	int x0 = (kScreenWidth - seq.width()) / 2;
+	int y0 = (kScreenHeight - seq.height()) / 2;
+	for (int y = 0; y < seq.height(); ++y) {
+		for (int x = 0; x < seq.width(); ++x) {
+			int sx = x0 + x, sy = y0 + y;
+			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
+				*((byte *)screen->getBasePtr(sx, sy)) = pixels[(uint)y * seq.width() + x];
 		}
 	}
 	g_system->unlockScreen();

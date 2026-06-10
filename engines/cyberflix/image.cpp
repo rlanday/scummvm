@@ -387,7 +387,7 @@ private:
 	bool _ok;
 };
 
-uint32 decodeFrame(const byte *src, uint32 srcSize, FrameImage &out) {
+uint32 FrameSequence::applyFrame(const byte *src, uint32 srcSize) {
 	if (srcSize < 4)
 		return 0;
 	const int height = src[0] | (src[1] << 8);
@@ -395,26 +395,47 @@ uint32 decodeFrame(const byte *src, uint32 srcSize, FrameImage &out) {
 	if (height <= 0 || width <= 0 || width > 0x400 || height > 0x400)
 		return 0;
 
-	// Decode at a stride equal to the content width (full-screen frames fill the
-	// surface), into a buffer padded by reference-row reach on each side.
-	const int kPad = 8;
-	const int pitch = width;
-	const int rows = height + 2 * kPad;
-	const int dstSize = rows * pitch;
-	Common::Array<byte> work;
-	work.resize(dstSize);
-	memset(work.begin(), 0, dstSize);
+	// The first frame fixes the dimensions and allocates the retained surface;
+	// later frames must match and decode on top of the existing contents.
+	if (empty()) {
+		_width = (uint16)width;
+		_height = (uint16)height;
+		_pitch = width;
+		_work.resize((height + 2 * kPad) * _pitch);
+		memset(_work.begin(), 0, _work.size());
+	} else if (width != _width || height != _height) {
+		return 0;
+	}
 
-	FrameDecoder dec(src, srcSize, work.begin(), dstSize, pitch);
-	dec.run(height, width, kPad * pitch);
+	FrameDecoder dec(src, srcSize, _work.begin(), (int)_work.size(), _pitch);
+	dec.run(height, width, kPad * _pitch);
 	if (!dec.ok())
 		return 0;
-
-	out.width = (uint16)width;
-	out.height = (uint16)height;
-	out.pixels.resize((uint)width * height);
-	memcpy(out.pixels.begin(), work.begin() + kPad * pitch, (uint)width * height);
 	return dec.consumed();
+}
+
+const byte *FrameSequence::pixels() const {
+	if (empty())
+		return nullptr;
+	return _work.begin() + kPad * _pitch;
+}
+
+void FrameSequence::copyTo(FrameImage &out) const {
+	out.width = _width;
+	out.height = _height;
+	out.pixels.resize((uint)_width * _height);
+	if (!empty())
+		memcpy(out.pixels.begin(), pixels(), (uint)_width * _height);
+}
+
+uint32 decodeFrame(const byte *src, uint32 srcSize, FrameImage &out) {
+	// A standalone frame is just a one-frame sequence (keyframe).
+	FrameSequence seq;
+	const uint32 consumed = seq.applyFrame(src, srcSize);
+	if (consumed == 0)
+		return 0;
+	seq.copyTo(out);
+	return consumed;
 }
 
 bool loadPalette(const byte *fileData, uint32 fileSize, byte *rgb) {

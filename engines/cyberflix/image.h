@@ -102,6 +102,56 @@ struct FrameImage {
 uint32 decodeFrame(const byte *src, uint32 srcSize, FrameImage &out);
 
 /**
+ * A persistent full-screen framebuffer that decodes a CyberFlix movie one
+ * frame at a time.
+ *
+ * MOV video is inter-coded: only the first frame of a run is a full keyframe;
+ * every later frame updates just the regions that changed, relying on the
+ * retained contents of the previous frame for everything else (the row opcode
+ * K == 10 and the per-row skip mode deliberately leave pixels untouched).
+ * Decoding such a frame into a fresh, zeroed buffer therefore leaves the
+ * unchanged areas as palette index 0 instead of the prior image. This class
+ * keeps the working surface alive across calls so successive frames composite
+ * correctly.
+ */
+class FrameSequence {
+public:
+	/**
+	 * Apply one frame's control stream on top of the retained framebuffer.
+	 *
+	 * The first applied frame establishes the dimensions and should be a
+	 * keyframe; later frames must share those dimensions. The frame format is
+	 * the one documented on @ref decodeFrame.
+	 *
+	 * @param src      Frame data; must begin at the @c H header word.
+	 * @param srcSize  Bytes available at @p src.
+	 * @return bytes consumed from @p src, or 0 on malformed input. On failure
+	 *         the retained framebuffer is left unchanged.
+	 */
+	uint32 applyFrame(const byte *src, uint32 srcSize);
+
+	uint16 width() const { return _width; }
+	uint16 height() const { return _height; }
+	bool empty() const { return _width == 0 || _height == 0; }
+
+	/** Tightly packed @c width*height palette indices of the current frame. */
+	const byte *pixels() const;
+
+	/** Copy the current frame out as a standalone @ref FrameImage. */
+	void copyTo(FrameImage &out) const;
+
+private:
+	// Reference rows reach up to four lines past the frame, so the working
+	// surface is padded by this many rows top and bottom.
+	static const int kPad = 8;
+
+	Common::Array<byte> _work; ///< Padded persistent surface (stride == width).
+	int _pitch = 0;
+	uint16 _width = 0;
+	uint16 _height = 0;
+};
+
+/**
  * Decode a shape/cel resource stream into @p out.
  *
  * @param stream  Resource payload (positioned at originX). Fully consumed.

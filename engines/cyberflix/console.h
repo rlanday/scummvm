@@ -52,6 +52,10 @@ private:
 	// Decodes a full-screen frame (MOV keyframe / SET background) at a byte
 	// offset within a file and blits it to the screen for inspection.
 	bool cmdShowFrame(int argc, const char **argv);
+
+	// Plays a MOV's frame sequence up to a given index into a persistent
+	// framebuffer and blits the result (exercises inter-frame decoding).
+	bool cmdShowMovie(int argc, const char **argv);
 };
 
 } // End of namespace Cyberflix
