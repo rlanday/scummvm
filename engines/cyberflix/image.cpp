@@ -460,10 +460,16 @@ bool loadPalette(const byte *fileData, uint32 fileSize, byte *rgb) {
 			continue;
 
 		for (uint32 k = 0; k < 256; ++k) {
+			// Each ColorSpec entry is {uint16 value; uint16 R, G, B} little-
+			// endian. The channels are 16-bit, but only the high byte carries
+			// the 8-bit value we want, so we read the odd byte of each pair
+			// (b+3/b+5/b+7). MOV cluts happen to replicate the value into both
+			// bytes (e.g. 0xf1f1), but SET cluts leave the low byte zero
+			// (e.g. 0x1900), so reading the low byte would render them black.
 			const uint32 b = o + k * 8;
-			rgb[k * 3 + 0] = fileData[b + 2]; // high byte of the R channel
-			rgb[k * 3 + 1] = fileData[b + 4]; // high byte of the G channel
-			rgb[k * 3 + 2] = fileData[b + 6]; // high byte of the B channel
+			rgb[k * 3 + 0] = fileData[b + 3]; // high byte of the R channel
+			rgb[k * 3 + 1] = fileData[b + 5]; // high byte of the G channel
+			rgb[k * 3 + 2] = fileData[b + 7]; // high byte of the B channel
 		}
 		// The runtime forces the palette's extreme indices (FUN_0041ba80).
 		rgb[0] = rgb[1] = rgb[2] = 0;

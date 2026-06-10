@@ -203,8 +203,11 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
  * container and expand it to @p rgb (256 * 3 bytes, R,G,B order).
  *
  * The palette is stored as an 8-byte header followed by 256 ColorSpec entries
- * @c {uint16 value; uint16 R, G, B}; the 8-bit channel is the high byte. The
- * runtime apply routine (FUN_0041ba80) forces index 0 to black and 255 to
+ * @c {uint16 value; uint16 R, G, B}; the 8-bit channel is the high byte of each
+ * 16-bit pair. MOV cluts replicate the value into both bytes (e.g. 0xf1f1) so
+ * the byte order is irrelevant there, but SET cluts leave the low byte zero
+ * (e.g. 0x1900), so we must read the high byte to avoid rendering them black.
+ * The runtime apply routine (FUN_0041ba80) forces index 0 to black and 255 to
  * white, which we reproduce here.
  *
  * Caveat for MOV video: that index 0/255 forcing is a SET-background era
