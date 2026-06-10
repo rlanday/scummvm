@@ -257,8 +257,10 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 				a += ", ";
 			a += args[i].toString();
 		}
-		debug(0, "    call %s#%#06x(%s)", name.empty() ? "method" : name.c_str(),
-				opcode, a.c_str());
+		const char *builtin = Script::methodName(opcode);
+		const char *label = !name.empty() ? name.c_str()
+				: (builtin ? builtin : "method");
+		debug(0, "    call %s#%#06x(%s)", label, opcode, a.c_str());
 	}
 	return Value();
 }

@@ -194,6 +194,15 @@ public:
 	/** Human-readable mnemonic for @p opcode. */
 	static const char *opcodeName(uint16 opcode);
 
+	/**
+	 * Name of the CyberFlix builtin method @p opcode, or nullptr if unknown.
+	 *
+	 * Recovered from the TI.EXE name registration table (6-byte records
+	 * [u32 name ptr][u16 opcode] at ~0x00459000). These are the hardcoded
+	 * builtin method IDs dispatched by the VM (e.g. clut, openset, frame).
+	 */
+	static const char *methodName(uint16 opcode);
+
 private:
 	bool _valid;
 	bool _terminated;
