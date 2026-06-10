@@ -180,7 +180,7 @@ public:
 			} else if (k >= 11 && k <= 18) {
 				// Exact copy of a neighbouring row 1..4 lines above or below.
 				static const int kCopyRef[19] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-						-4, -3, -2, -1, 1, 2, 3, 4 };
+						0, -4, -3, -2, -1, 1, 2, 3, 4 };
 				dcopy(di, di + kCopyRef[k] * _w, contentWidth);
 				di = rowStart + _w;
 			} else {

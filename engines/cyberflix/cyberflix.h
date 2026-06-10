@@ -28,10 +28,12 @@
 #include "engines/engine.h"
 
 #include "cyberflix/detection.h"
+#include "cyberflix/vm.h"
 
 namespace Cyberflix {
 
 class Console;
+class Script;
 
 // The original ran in a 640x480, 8-bit palettised WinG framebuffer.
 enum {
@@ -39,7 +41,7 @@ enum {
 	kScreenHeight = 480
 };
 
-class CyberflixEngine : public Engine {
+class CyberflixEngine : public Engine, public VMHost {
 public:
 	CyberflixEngine(OSystem *syst, const CyberflixGameDescription *gameDesc);
 	~CyberflixEngine() override;
@@ -53,7 +55,18 @@ public:
 	Common::Language getLanguage() const;
 	Common::Platform getPlatform() const;
 
+	// VMHost
+	void playMovie(const Common::String &name) override;
+
 private:
+	/**
+	 * Special-case the boot script: excise its CD presence check so the game
+	 * can be run from an installed directory. The check is the if-block guarded
+	 * by the "titanic1:" path literal; replacing it with no-op padding removes
+	 * the notedialog/quit it would otherwise reach. Returns true if patched.
+	 */
+	static bool exciseBootCdCheck(Script &script);
+
 	const CyberflixGameDescription *_gameDescription;
 	Common::RandomSource _rnd;
 	Console *_console;

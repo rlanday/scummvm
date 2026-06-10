@@ -36,7 +36,7 @@ Common::String Value::toString() const {
 	}
 }
 
-ScriptVM::ScriptVM() : _pc(0), _trace(false) {
+ScriptVM::ScriptVM() : _pc(0), _trace(false), _host(nullptr) {
 }
 
 Value ScriptVM::getVar(const Common::String &name) const {
@@ -261,6 +261,18 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		const char *label = !name.empty() ? name.c_str()
 				: (builtin ? builtin : "method");
 		debug(0, "    call %s#%#06x(%s)", label, opcode, a.c_str());
+	}
+
+	// Forward the effectful builtins we implement to the engine host. Opcodes
+	// not handled here remain logged no-ops (see files/method-catalog.md).
+	if (_host) {
+		switch (opcode) {
+		case 0x2ef1: // playmovie('name.mov')
+			_host->playMovie(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		default:
+			break;
+		}
 	}
 	return Value();
 }

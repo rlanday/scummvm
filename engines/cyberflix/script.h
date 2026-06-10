@@ -101,6 +101,9 @@ public:
 		kOpOperatorLast  = 0x1F4D
 	};
 
+	/** Resource @c info tag identifying a script resource (BOOTFILE, .SET, ...). */
+	static const uint32 kScriptInfoTag = 0x0FA1;
+
 	/** True if @p opcode is an infix binary operator (0x1F41..0x1F4D). */
 	static bool isOperator(uint16 opcode) {
 		return opcode >= kOpOperatorFirst && opcode <= kOpOperatorLast;
@@ -170,6 +173,16 @@ public:
 	bool isValid() const { return _valid; }
 	uint32 getInstructionCount() const { return _code.size(); }
 	const Instruction &getInstruction(uint32 i) const { return _code[i]; }
+
+	/**
+	 * Overwrite instructions [@p first, @p last] (inclusive) with harmless
+	 * integer-push padding (kOpPushInt 0), which the statement loop treats as a
+	 * no-op separator. This is a structural editing primitive used by the engine
+	 * to special-case individual scripts (e.g. excising the boot script's CD
+	 * presence check so the game can run from an installed directory) without
+	 * altering any shared opcode/method semantics.
+	 */
+	void neutralizeRange(uint32 first, uint32 last);
 
 	/** True if the instruction stream ended with an explicit 0x0000. */
 	bool isTerminated() const { return _terminated; }

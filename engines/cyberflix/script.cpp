@@ -98,6 +98,16 @@ Common::String Script::getSelfRelString(uint32 index) const {
 	return getPoolString(opcodeFieldOffset + _code[index].operandA);
 }
 
+void Script::neutralizeRange(uint32 first, uint32 last) {
+	if (last >= _code.size())
+		last = _code.size() - 1;
+	for (uint32 i = first; i <= last; ++i) {
+		_code[i].operandB = 0;
+		_code[i].opcode = kOpPushInt;
+		_code[i].operandA = 0;
+	}
+}
+
 const char *Script::opcodeName(uint16 opcode) {
 	switch (opcode) {
 	case kOpEnd:     return "end";

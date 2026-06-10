@@ -62,6 +62,22 @@ struct Value {
 };
 
 /**
+ * Host interface through which the VM drives engine subsystems (video, audio,
+ * navigation, ...). The interpreter itself is engine-agnostic and only knows
+ * how to evaluate scripts; effectful builtins are forwarded here so the engine
+ * can realise them. A null host (the default) makes every effectful builtin a
+ * logged no-op, which keeps the VM usable as a standalone reverse-engineering
+ * harness.
+ */
+class VMHost {
+public:
+	virtual ~VMHost() {}
+
+	/** Play the movie named @p name (a MOVIES/ basename, e.g. "logo.mov"). */
+	virtual void playMovie(const Common::String &name) = 0;
+};
+
+/**
  * Executes a parsed CyberFlix Script. This is the structural harness that
  * mirrors the TI.EXE interpreter: a program counter indexing the 8-byte
  * instruction array and an operand stack. Opcode semantics are added
@@ -73,6 +89,12 @@ public:
 	ScriptVM();
 
 	void setTrace(bool on) { _trace = on; }
+
+	/**
+	 * Attach the engine host that realises effectful builtins (playMovie, ...).
+	 * Without a host, those builtins are logged no-ops. Not owned.
+	 */
+	void setHost(VMHost *host) { _host = host; }
 
 	/** Run @p script from the top until the terminator or a step budget. */
 	void run(const Script &script, uint32 maxSteps = 100000);
@@ -163,6 +185,7 @@ private:
 
 	uint32 _pc;
 	bool _trace;
+	VMHost *_host; ///< Engine host for effectful builtins; null = no-op. Not owned.
 };
 
 } // End of namespace Cyberflix
