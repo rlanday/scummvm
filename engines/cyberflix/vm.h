@@ -74,7 +74,7 @@ public:
 	void run(const Script &script, uint32 maxSteps = 100000);
 
 private:
-	void execute(const Script &script, const Script::Instruction &inst);
+	void execute(const Script &script, uint32 index);
 	void push(const Value &v) { _stack.push_back(v); }
 	Value pop();
 

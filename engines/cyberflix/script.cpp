@@ -89,6 +89,15 @@ Common::String Script::getPoolString(uint32 offset) const {
 	return result;
 }
 
+Common::String Script::getSelfRelString(uint32 index) const {
+	if (index >= _code.size())
+		return Common::String();
+	// The operand is relative to the instruction's opcode field, which sits 4
+	// bytes into the 8-byte record (after the leading operandB dword).
+	uint32 opcodeFieldOffset = index * 8 + 4;
+	return getPoolString(opcodeFieldOffset + _code[index].operandA);
+}
+
 const char *Script::opcodeName(uint16 opcode) {
 	switch (opcode) {
 	case kOpEnd:     return "end";

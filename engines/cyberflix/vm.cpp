@@ -58,7 +58,7 @@ void ScriptVM::run(const Script &script, uint32 maxSteps) {
 
 		uint32 here = _pc;
 		_pc++;
-		execute(script, inst);
+		execute(script, here);
 
 		if (_trace) {
 			debug(0, "  %4u: %-8s a=%#06x b=%#010x  [stack=%u]", here,
@@ -69,7 +69,8 @@ void ScriptVM::run(const Script &script, uint32 maxSteps) {
 	}
 }
 
-void ScriptVM::execute(const Script &script, const Script::Instruction &inst) {
+void ScriptVM::execute(const Script &script, uint32 index) {
+	const Script::Instruction &inst = script.getInstruction(index);
 	switch (inst.opcode) {
 	case Script::kOpPushInt:
 		// 0x0006: push the 16-bit operandA as an integer constant. Confirmed
@@ -78,28 +79,26 @@ void ScriptVM::execute(const Script &script, const Script::Instruction &inst) {
 		break;
 
 	case Script::kOpPushSym: {
-		// 0x0005: push a symbol reference. operandA addresses a symbol; the
-		// exact resolution (evaluator 0x00419cf0) is being recovered. For now
-		// resolve it as a pool string when operandA lands on one, else keep the
-		// raw operand so traces remain informative.
-		Common::String sym = script.getPoolString(inst.operandA);
+		// 0x0005: push a symbol reference. operandA is a self-relative offset to
+		// the symbol-name Pascal string (TI.EXE evaluator 0x00419cc0). The name
+		// is resolved against the variable scope at execution time.
+		Common::String sym = script.getSelfRelString(index);
 		if (sym.empty())
-			push(Value::makeSymbol(Common::String::format("@%#x", inst.operandA)));
-		else
-			push(Value::makeSymbol(sym));
+			sym = Common::String::format("@%#x", inst.operandA);
+		push(Value::makeSymbol(sym));
 		break;
 	}
 
 	case Script::kOpPush3:
 	case Script::kOpPush4:
-		// Push variants whose exact source operand is not yet decoded.
-		push(Value::makeInt((int16)inst.operandA));
+		// Atom push variants that also carry a self-relative symbol/string.
+		push(Value::makeSymbol(script.getSelfRelString(index)));
 		break;
 
 	default:
-		// Builtin (0x0Fxx) and method (0x1F..0x5D) opcodes are not implemented
-		// yet; they are mapped from TI.EXE in files/opcode-map.md and wired in
-		// incrementally. Skip so the VM can still be stepped over real scripts.
+		// Builtin (0x0Fxx), operator (0x1F4x) and method (0x2E/0x3E/0x4Exx)
+		// opcodes are mapped in files/opcode-map.md and wired in incrementally.
+		// Skip so the VM can still be stepped over real scripts.
 		break;
 	}
 }

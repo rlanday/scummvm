@@ -91,6 +91,17 @@ public:
 	/** Read the Pascal string at @p offset within the payload, or "". */
 	Common::String getPoolString(uint32 offset) const;
 
+	/**
+	 * Resolve the self-relative symbol name referenced by instruction @p index.
+	 *
+	 * pushSym (0x0005) and related operand atoms encode the symbol name as a
+	 * Pascal string located at (opcodeFieldOffset + operandA), i.e. the operand
+	 * is a byte offset relative to the instruction's own opcode field. This was
+	 * recovered from the TI.EXE evaluator (vaddr 0x00419cc0:
+	 * "mov ecx,[eax+2]; add ecx,eax") and verified against the boot script.
+	 */
+	Common::String getSelfRelString(uint32 index) const;
+
 	/** Human-readable mnemonic for @p opcode. */
 	static const char *opcodeName(uint16 opcode);
 

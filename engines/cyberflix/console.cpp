@@ -124,7 +124,11 @@ bool Console::cmdDisasm(int argc, const char **argv) {
 	uint32 limit = (argc >= 4) ? (uint32)atoi(argv[3]) : 40;
 	for (uint32 i = 0; i < script.getInstructionCount() && i < limit; ++i) {
 		const Script::Instruction &inst = script.getInstruction(i);
-		Common::String str = script.getPoolString(inst.operandA);
+		// Symbol/string atoms encode a self-relative pool offset in operandA.
+		Common::String str;
+		if (inst.opcode == Script::kOpPushSym || inst.opcode == Script::kOpPush3 ||
+				inst.opcode == Script::kOpPush4)
+			str = script.getSelfRelString(i);
 		debugPrintf("  %4u: %-8s op=%#06x a=%#06x b=%#010x%s%s\n", i,
 				Script::opcodeName(inst.opcode), inst.opcode, inst.operandA, inst.operandB,
 				str.empty() ? "" : "  ; ", str.c_str());
