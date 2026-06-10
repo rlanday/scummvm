@@ -208,9 +208,11 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
  * white, which we reproduce here.
  *
  * Caveat for MOV video: that index 0/255 forcing is a SET-background era
- * assumption. A movie's own black background is a non-zero index (in LOGO.MOV
- * index 0 is in fact white), so the forcing is cosmetically harmless there but
- * should be revisited when MOV playback is wired into the engine proper.
+ * assumption. It is invisible for the LOGO.MOV intro only because no frame in
+ * that movie references index 0 or 255 as a pixel value (the black background
+ * is index 229; the clut itself even maps 0->white, 255->black). The forcing
+ * should be revisited when MOV playback is wired into the engine proper, in
+ * case other movies do use those indices.
  *
  * @return true if a clut was found (identified by its sequential value field).
  */
