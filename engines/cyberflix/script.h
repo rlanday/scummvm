@@ -72,6 +72,11 @@ public:
 		kOpIf      = 0x0FA6, ///< Evaluate condition; enter or skip THEN block.
 		kOpEndIf   = 0x0FA7, ///< Close an if/then(/else) block.
 		kOpElse    = 0x0FA8, ///< Else marker; skipped after the THEN ran.
+		kOpFor     = 0x0FAC, ///< For-loop setup (loop var + start bound).
+		kOpForTo   = 0x0FAD, ///< For-loop bound separator ("to").
+		kOpForNext = 0x0FAF, ///< For-loop iterate/close.
+		kOpWhile   = 0x0FB0, ///< While: test condition, enter or skip body.
+		kOpEndWhile = 0x0FB1, ///< While close: re-test and loop or exit.
 		kOpAssign  = 0x0FB2, ///< Assignment marker (symbol kOpAssign expr).
 
 		// Infix operator opcodes, applied by the TI.EXE evaluator
@@ -126,6 +131,19 @@ public:
 	 * is reached first (no else), return -1. Mirrors TI.EXE 0x0040c6d0.
 	 */
 	int findMatchingElse(uint32 index) const;
+
+	/**
+	 * Index of the kOpEndWhile at the current nesting level, scanning forward
+	 * from @p index inside a while body (counting nested kOpWhile). Mirrors the
+	 * scanner at TI.EXE 0x0040c5b0; aborts (-1) on end/return.
+	 */
+	int findEndWhileFrom(uint32 index) const;
+
+	/**
+	 * Index of the kOpForNext at the current nesting level, scanning forward from
+	 * @p index inside a for body (counting nested kOpFor), or -1.
+	 */
+	int findForNextFrom(uint32 index) const;
 
 	struct Instruction {
 		uint32 operandB;

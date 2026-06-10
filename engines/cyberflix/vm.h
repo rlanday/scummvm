@@ -112,6 +112,7 @@ private:
 	Value pop();
 
 	Common::Array<Value> _stack;
+	Common::Array<uint32> _whileStack; ///< Saved condition-start PCs for active whiles.
 	uint32 _pc;
 	bool _trace;
 };

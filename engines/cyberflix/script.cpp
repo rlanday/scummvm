@@ -174,4 +174,38 @@ int Script::findMatchingElse(uint32 index) const {
 	return -1;
 }
 
+int Script::findEndWhileFrom(uint32 index) const {
+	int depth = 0;
+	for (uint32 i = index; i < _code.size(); ++i) {
+		uint16 op = _code[i].opcode;
+		if (op == kOpEnd || op == kOpReturn)
+			return -1;
+		if (op == kOpWhile) {
+			++depth;
+		} else if (op == kOpEndWhile) {
+			if (depth == 0)
+				return (int)i;
+			--depth;
+		}
+	}
+	return -1;
+}
+
+int Script::findForNextFrom(uint32 index) const {
+	int depth = 0;
+	for (uint32 i = index; i < _code.size(); ++i) {
+		uint16 op = _code[i].opcode;
+		if (op == kOpEnd || op == kOpReturn)
+			return -1;
+		if (op == kOpFor) {
+			++depth;
+		} else if (op == kOpForNext) {
+			if (depth == 0)
+				return (int)i;
+			--depth;
+		}
+	}
+	return -1;
+}
+
 } // End of namespace Cyberflix

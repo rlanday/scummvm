@@ -205,6 +205,7 @@ Value ScriptVM::evaluateExpression(const Script &script, uint32 &pc) {
 
 uint32 ScriptVM::runProgram(const Script &script, uint32 maxSteps) {
 	_stack.clear();
+	_whileStack.clear();
 	uint32 pc = 0;
 	uint32 executed = 0;
 	const uint32 count = script.getInstructionCount();
@@ -251,6 +252,52 @@ uint32 ScriptVM::runProgram(const Script &script, uint32 maxSteps) {
 		case Script::kOpEndIf:
 			pc++;
 			break;
+
+		case Script::kOpWhile: {
+			// Save the condition start, evaluate it; on true enter the body and
+			// remember where to re-test, on false skip past the matching
+			// kOpEndWhile (TI.EXE 0x0040c066, while-stack 0x45ecf8).
+			uint32 condPc = pc + 1;
+			Value cond = evaluateExpression(script, condPc);
+			if (isTruthy(cond)) {
+				_whileStack.push_back(pc + 1);
+				pc = condPc; // enter body
+			} else {
+				int endWhile = script.findEndWhileFrom(condPc);
+				pc = (endWhile >= 0) ? (uint32)endWhile + 1 : count;
+			}
+			break;
+		}
+
+		case Script::kOpEndWhile: {
+			// Re-test the saved condition; loop back to the body or pop and exit
+			// (TI.EXE 0x0040c0eb).
+			if (_whileStack.empty()) {
+				pc++;
+				break;
+			}
+			uint32 condPc = _whileStack.back();
+			uint32 scan = condPc;
+			Value cond = evaluateExpression(script, scan);
+			if (isTruthy(cond)) {
+				pc = scan; // back to body start
+			} else {
+				_whileStack.pop_back();
+				pc++;
+			}
+			break;
+		}
+
+		case Script::kOpFor: {
+			// For-loops bind a loop variable and iterate over a numeric range
+			// (TI.EXE 0x0040bda9, frame stack 0x45ed48, with a kOpForTo bound
+			// separator and kOpForNext terminator). Iteration needs the variable
+			// scope model, which is not implemented yet, so skip the whole
+			// construct for now rather than execute it incorrectly.
+			int forNext = script.findForNextFrom(pc + 1);
+			pc = (forNext >= 0) ? (uint32)forNext + 1 : count;
+			break;
+		}
 
 		default: {
 			// Method calls, assignments and other statement expressions. Consume
