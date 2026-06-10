@@ -41,6 +41,9 @@ private:
 
 	// Disassembles a script resource (info tag 0x0FA1).
 	bool cmdDisasm(int argc, const char **argv);
+
+	// Executes a script resource on the VM harness with tracing.
+	bool cmdVmTrace(int argc, const char **argv);
 };
 
 } // End of namespace Cyberflix

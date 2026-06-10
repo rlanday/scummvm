@@ -5,7 +5,8 @@ MODULE_OBJS = \
 	console.o \
 	cyberflix.o \
 	metaengine.o \
-	script.o
+	script.o \
+	vm.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_CYBERFLIX), DYNAMIC_PLUGIN)

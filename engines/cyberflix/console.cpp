@@ -25,12 +25,14 @@
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/archive.h"
 #include "cyberflix/script.h"
+#include "cyberflix/vm.h"
 
 namespace Cyberflix {
 
 Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
 	registerCmd("dumpArchive", WRAP_METHOD(Console, cmdDumpArchive));
 	registerCmd("disasm", WRAP_METHOD(Console, cmdDisasm));
+	registerCmd("vmtrace", WRAP_METHOD(Console, cmdVmTrace));
 }
 
 bool Console::cmdDumpArchive(int argc, const char **argv) {
@@ -127,6 +129,57 @@ bool Console::cmdDisasm(int argc, const char **argv) {
 				Script::opcodeName(inst.opcode), inst.opcode, inst.operandA, inst.operandB,
 				str.empty() ? "" : "  ; ", str.c_str());
 	}
+	return true;
+}
+
+bool Console::cmdVmTrace(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Executes a script resource on the VM harness with tracing.\n");
+		debugPrintf("Usage: %s <filename> <resIndex> [maxSteps]\n", argv[0]);
+		return true;
+	}
+
+	Common::File file;
+	if (!file.open(argv[1])) {
+		debugPrintf("Could not open '%s'\n", argv[1]);
+		return true;
+	}
+
+	Archive archive;
+	if (!archive.open(file.readStream(file.size()), argv[1])) {
+		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
+		return true;
+	}
+
+	uint32 idx = (uint32)atoi(argv[2]);
+	if (idx >= archive.getResourceCount()) {
+		debugPrintf("Resource index %u out of range (%u resources)\n",
+				idx, archive.getResourceCount());
+		return true;
+	}
+
+	Common::SeekableReadStream *stream = archive.createReadStreamForResource(idx);
+	if (!stream) {
+		debugPrintf("Resource %u is empty\n", idx);
+		return true;
+	}
+
+	Script script;
+	bool ok = script.parse(stream);
+	delete stream;
+	if (!ok) {
+		debugPrintf("Failed to parse resource %u as a script\n", idx);
+		return true;
+	}
+
+	uint32 maxSteps = (argc >= 4) ? (uint32)atoi(argv[3]) : 200;
+	debugPrintf("Tracing %u instructions (max %u steps):\n",
+			script.getInstructionCount(), maxSteps);
+
+	ScriptVM vm;
+	vm.setTrace(true);
+	vm.run(script, maxSteps);
+	debugPrintf("VM trace complete.\n");
 	return true;
 }
 
