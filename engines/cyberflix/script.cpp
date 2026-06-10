@@ -125,4 +125,17 @@ const char *Script::opcodeName(uint16 opcode) {
 	}
 }
 
+uint8 Script::operatorPrecedence(uint16 opcode) {
+	switch (opcode) {
+	case kOpMul: case kOpDiv:                       return 0;
+	case kOpAdd: case kOpSub:                        return 1;
+	case kOpConcat:                                  return 2;
+	case kOpGt: case kOpLt: case kOpGe: case kOpLe:  return 3;
+	case kOpEq: case kOpNe:                          return 4;
+	case kOpAnd:                                     return 5;
+	case kOpOr:                                      return 6;
+	default:                                         return 0xFF;
+	}
+}
+
 } // End of namespace Cyberflix

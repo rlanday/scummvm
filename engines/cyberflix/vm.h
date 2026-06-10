@@ -78,6 +78,21 @@ public:
 private:
 	void execute(const Script &script, uint32 index);
 	void applyOperator(uint16 opcode);
+
+	/**
+	 * Evaluate the expression starting at instruction @p pc, advancing @p pc
+	 * past every instruction consumed. Mirrors the TI.EXE evaluator 0x00419cf0:
+	 * an atom followed by zero or more (operator, atom) pairs, reduced by the
+	 * operator precedence recovered in files/opcode-map.md section 8.
+	 */
+	Value evaluateExpression(const Script &script, uint32 &pc);
+
+	/** Decode a single atom (literal/symbol) at @p pc, advancing @p pc. */
+	Value decodeAtom(const Script &script, uint32 &pc);
+
+	/** Apply @p opcode to two operand values (no stack involved). */
+	Value applyBinary(uint16 opcode, const Value &lhs, const Value &rhs);
+
 	void push(const Value &v) { _stack.push_back(v); }
 	Value pop();
 

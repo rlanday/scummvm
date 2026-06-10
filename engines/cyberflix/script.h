@@ -91,6 +91,14 @@ public:
 		return opcode >= kOpOperatorFirst && opcode <= kOpOperatorLast;
 	}
 
+	/**
+	 * Precedence class of an infix operator (0 binds tightest, 6 loosest).
+	 *
+	 * Recovered from the TI.EXE classifier at vaddr 0x0041a4c0 (byte map
+	 * 0x41a534, value table 0x41a514). Returns 0xFF for non-operators.
+	 */
+	static uint8 operatorPrecedence(uint16 opcode);
+
 	struct Instruction {
 		uint32 operandB;
 		uint16 opcode;

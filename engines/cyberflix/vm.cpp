@@ -109,45 +109,98 @@ void ScriptVM::execute(const Script &script, uint32 index) {
 }
 
 void ScriptVM::applyOperator(uint16 opcode) {
-	// Binary infix operators. The TI.EXE evaluator (applier 0x00419f30) pops two
-	// operands; lhs is the first-pushed value, rhs the second. See section 7 of
-	// files/opcode-map.md for the verified opcode->operation mapping.
+	// Stack form of a binary operator (used by the flat tracing run()).
 	Value rhs = pop();
 	Value lhs = pop();
+	push(applyBinary(opcode, lhs, rhs));
+}
+
+Value ScriptVM::applyBinary(uint16 opcode, const Value &lhs, const Value &rhs) {
+	// Binary infix operators. The TI.EXE applier 0x00419f30 takes lhs as the
+	// first-pushed operand and rhs as the second. See section 7 of
+	// files/opcode-map.md for the verified opcode->operation mapping.
 	int32 a = lhs.intValue;
 	int32 b = rhs.intValue;
 
 	switch (opcode) {
-	case Script::kOpAdd: push(Value::makeInt(a + b)); break;
-	case Script::kOpSub: push(Value::makeInt(a - b)); break;
-	case Script::kOpMul: push(Value::makeInt(a * b)); break;
+	case Script::kOpAdd: return Value::makeInt(a + b);
+	case Script::kOpSub: return Value::makeInt(a - b);
+	case Script::kOpMul: return Value::makeInt(a * b);
 	case Script::kOpDiv:
 		// Matches idiv at 0x41a048; guard the divide-by-zero the VM rejects.
-		push(Value::makeInt(b != 0 ? a / b : 0));
-		break;
-	case Script::kOpAnd: push(Value::makeBool(a && b)); break;
-	case Script::kOpOr:  push(Value::makeBool(a || b)); break;
-	case Script::kOpConcat:
-		push(Value::makeString(lhs.strValue + rhs.strValue));
-		break;
+		return Value::makeInt(b != 0 ? a / b : 0);
+	case Script::kOpAnd: return Value::makeBool(a && b);
+	case Script::kOpOr:  return Value::makeBool(a || b);
+	case Script::kOpConcat: return Value::makeString(lhs.strValue + rhs.strValue);
 	case Script::kOpEq:
 		if (lhs.type == Value::kString || lhs.type == Value::kSymbol)
-			push(Value::makeBool(lhs.strValue == rhs.strValue));
-		else
-			push(Value::makeBool(a == b));
-		break;
+			return Value::makeBool(lhs.strValue == rhs.strValue);
+		return Value::makeBool(a == b);
 	case Script::kOpNe:
 		if (lhs.type == Value::kString || lhs.type == Value::kSymbol)
-			push(Value::makeBool(lhs.strValue != rhs.strValue));
-		else
-			push(Value::makeBool(a != b));
-		break;
-	case Script::kOpGt: push(Value::makeBool(a > b)); break;
-	case Script::kOpLt: push(Value::makeBool(a < b)); break;
-	case Script::kOpGe: push(Value::makeBool(a >= b)); break;
-	case Script::kOpLe: push(Value::makeBool(a <= b)); break;
-	default: break;
+			return Value::makeBool(lhs.strValue != rhs.strValue);
+		return Value::makeBool(a != b);
+	case Script::kOpGt: return Value::makeBool(a > b);
+	case Script::kOpLt: return Value::makeBool(a < b);
+	case Script::kOpGe: return Value::makeBool(a >= b);
+	case Script::kOpLe: return Value::makeBool(a <= b);
+	default: return Value();
 	}
+}
+
+Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
+	const Script::Instruction &inst = script.getInstruction(pc);
+	switch (inst.opcode) {
+	case Script::kOpPushInt:
+		pc++;
+		return Value::makeInt((int16)inst.operandA);
+
+	case Script::kOpPushSym:
+	case Script::kOpPush3:
+	case Script::kOpPush4: {
+		Common::String sym = script.getSelfRelString(pc);
+		pc++;
+		return Value::makeSymbol(sym);
+	}
+
+	default:
+		// Method-call atoms (0x3E80-0x4E9A) and atom-builtins (0x0FB5-0x0FBB)
+		// consume a variable number of instructions and depend on subsystems
+		// not yet wired (files/opcode-map.md section 8). Consume one instruction
+		// and yield a placeholder so the evaluator stays well-formed.
+		pc++;
+		return Value();
+	}
+}
+
+Value ScriptVM::evaluateExpression(const Script &script, uint32 &pc) {
+	// atom (operator atom)* reduced by precedence, per evaluator 0x00419cf0.
+	Common::Array<Value> operands;
+	Common::Array<uint16> operators;
+
+	operands.push_back(decodeAtom(script, pc));
+	while (pc < script.getInstructionCount() &&
+			Script::isOperator(script.getInstruction(pc).opcode)) {
+		operators.push_back(script.getInstruction(pc).opcode);
+		pc++;
+		operands.push_back(decodeAtom(script, pc));
+	}
+
+	// Reduce by precedence class (0 binds tightest), left-to-right within a
+	// class, matching the reduction loop at 0x00419e5e.
+	for (uint8 prec = 0; prec <= 6; ++prec) {
+		for (uint32 i = 0; i < operators.size();) {
+			if (Script::operatorPrecedence(operators[i]) == prec) {
+				operands[i] = applyBinary(operators[i], operands[i], operands[i + 1]);
+				operands.remove_at(i + 1);
+				operators.remove_at(i);
+			} else {
+				++i;
+			}
+		}
+	}
+
+	return operands[0];
 }
 
 } // End of namespace Cyberflix
