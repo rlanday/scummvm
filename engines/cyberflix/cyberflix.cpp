@@ -32,6 +32,8 @@
 
 #include "engines/util.h"
 
+#include "gui/message.h"
+
 #include "audio/audiostream.h"
 #include "audio/mixer.h"
 #include "audio/decoders/raw.h"
@@ -394,6 +396,108 @@ bool CyberflixEngine::exciseBootCdCheck(Script &script) {
 	return true;
 }
 
+uint32 CyberflixEngine::handleMovieHotkeys(const Common::Event &event, bool skippable,
+		const Audio::SoundHandle &audioHandle, bool &skip) {
+	if (event.type != Common::EVENT_KEYDOWN)
+		return 0;
+
+	const Common::KeyCode kc = event.kbd.keycode;
+	const bool ctrl = (event.kbd.flags & Common::KBD_CTRL) != 0;
+
+	// SKIP. TI.EXE's WndProc (FUN_00403690) forces VK_ESCAPE into a '.' event
+	// carrying the modifier word 0x1fa0; the movie key handler (FUN_0040e430,
+	// case 0x2e/'.', 0x51/'Q', 0x71/'q') then aborts playback, but only when the
+	// master header flags byte (+0x18) has bit 0 set. Ctrl is what sets 0x1fa0
+	// for the letter keys, so the faithful combos are Esc, Ctrl+Q and Ctrl+period.
+	if (kc == Common::KEYCODE_ESCAPE ||
+			(ctrl && (kc == Common::KEYCODE_q || kc == Common::KEYCODE_PERIOD))) {
+		if (skippable)
+			skip = true;
+		return 0;
+	}
+
+	// PAUSE / RESUME. FUN_0040e430 case 0x54/0x74 ('T'/'t', gated by the 0x1fa0
+	// modifier) toggles the pause latch DAT_0045ef88 (FUN_0042f930 pauses the
+	// audio, FUN_0042f690 resumes). We pause the soundtrack handle and freeze the
+	// picture until Ctrl+T again (or quit), returning the elapsed paused time so
+	// the caller can shift its wall clock.
+	if (ctrl && kc == Common::KEYCODE_t) {
+		const uint32 pauseStart = _system->getMillis();
+		_mixer->pauseHandle(audioHandle, true);
+		bool paused = true;
+		Common::Event e2;
+		while (paused && !shouldQuit()) {
+			while (_eventMan->pollEvent(e2)) {
+				if (e2.type == Common::EVENT_KEYDOWN &&
+						(e2.kbd.flags & Common::KBD_CTRL) && e2.kbd.keycode == Common::KEYCODE_t)
+					paused = false;
+				else if (e2.type == Common::EVENT_KEYDOWN &&
+						e2.kbd.keycode == Common::KEYCODE_ESCAPE && skippable) {
+					skip = true;
+					paused = false;
+				}
+			}
+			_system->updateScreen();
+			_system->delayMillis(10);
+		}
+		_mixer->pauseHandle(audioHandle, false);
+		return _system->getMillis() - pauseStart;
+	}
+
+	// ABOUT. WndProc maps VK_F12 (0x7b) directly to FUN_00404120 (no modifier).
+	if (kc == Common::KEYCODE_F12) {
+		showAboutDialog();
+		return 0;
+	}
+
+	// Open the ScummVM debug console (a development aid, not an original
+	// shortcut): backquote or Ctrl+D.
+	if (kc == Common::KEYCODE_BACKQUOTE || (ctrl && kc == Common::KEYCODE_d))
+		_console->attach();
+
+	// NOT IMPLEMENTED (no faithful analog in our pre-mixed, single-stream audio):
+	//
+	// * F1-F9 audio playback-RATE tuning. WndProc FUN_00403690 maps VK_F1..VK_F9
+	//   (0x70..0x78) to FUN_00403bf0(p1,p2,p3,p4), which scales three per-channel
+	//   rate multipliers (_DAT_00457040/48/50; default 0.65, clamp [0.15, 2.5])
+	//   by an up/down factor (_DAT_00456018/20). F1/F2 = all channels down/up,
+	//   F3/F4 = ch1, F5/F6 = ch2, F7/F8 = ch3, F9 (0,0,0,0) = reset all to 0.65.
+	//   To implement: split the soundtrack into the three source channels
+	//   (music/sfx/speech) instead of pre-mixing, then drive each channel's
+	//   Audio::RateConverter / output sample rate from a per-channel multiplier.
+	//
+	// * Ctrl+0..9 audio channel/level select. FUN_0040e430 case 0x30..0x39 ->
+	//   FUN_0042f620(n) -> FUN_0042f630: DAT_00460a54 = (long)n + DAT_00460a38,
+	//   then invokes the DirectSound mixer callback (*DAT_00460ab8)(). To
+	//   implement: reproduce that mixer object so the index has a target; with a
+	//   single pre-mixed stream there is nothing to address.
+	//
+	// * Arrow keys -> navigation. WndProc maps VK_LEFT/UP/RIGHT/DOWN
+	//   (0x25..0x28) to the nav chars 0x1c/0x1e/0x1d/0x1f, posted as char events
+	//   and consumed by the scene/stage navigation handler. To implement: once
+	//   node-to-node / scene-to-scene navigation exists, route these keycodes to
+	//   the same nav entry point the directional hotspots use.
+
+	return 0;
+}
+
+void CyberflixEngine::showAboutDialog() {
+	// Faithful reproduction of TI.EXE FUN_00404120's "About" MessageBox (format
+	// string @0x00457380, build stamp @0x004574d0). The original also appends
+	// live OS/heap/joystick/audio lines; under ScummVM we show the static engine
+	// identification (the meaningful, stable part) plus a ScummVM host note.
+	GUI::MessageDialog dialog(
+			"DreamFactory v4.0\n"
+			"(C) Copyright 1993-1996 CyberFlix, Inc.\n"
+			"All rights reserved.\n"
+			"\n"
+			"Windows RT4 engine, DirectX version\n"
+			"Compiled Mar 10 1997 at 15:52:38\n"
+			"\n"
+			"Running under ScummVM");
+	dialog.runModal();
+}
+
 void CyberflixEngine::playMovie(const Common::String &name) {
 	if (name.empty())
 		return;
@@ -471,6 +575,11 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// timeline that paces linear movies.
 	Common::Array<uint32> pfHoldMs;
 
+	// Whether the movie may be skipped by the user. The original input handler
+	// (TI.EXE FUN_0040e430) only honours the '.'/'Q'/'q' skip keys when the
+	// master header flags byte (+0x18) has bit 0 set.
+	bool movieSkippable = false;
+
 	int masterIdx = -1;
 	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
 		if (!archive.getResource(i).empty && archive.getResource(i).info == kMasterHeaderInfoTag) {
@@ -484,6 +593,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		const byte *hdr = engineBase(fileData, archive.getResource(masterIdx));
 		// Guard the per-frame table extent before trusting the header layout.
 		if (hdr && hdr + 0x87c <= fileData.end()) {
+			movieSkippable = (hdr[0x18] & 1) != 0;
 			uint32 musicTableIdx = READ_LE_UINT32(hdr + 0x64); // masterHdr[0x19]
 			uint32 sfxTableIdx   = READ_LE_UINT32(hdr + 0x60); // masterHdr[0x18]
 			uint32 pfCount       = READ_LE_UINT32(hdr + 0x878);
@@ -630,7 +740,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		_system->getPaletteManager()->setPalette(rgb, 0, 256);
 
 	// Composite frames in order into a persistent surface (frames are
-	// inter-coded) and present them on the movie's own timeline. ESC/quit skips.
+	// inter-coded) and present them on the movie's own timeline. Esc skips a
+	// movie flagged skippable (header +0x18 bit 0); quit always stops.
 	//
 	// There is NO stored frames-per-second field. Each frame carries its own
 	// hold time in its event chunk (offset +2, floored by masterHdr[+0x1c]),
@@ -689,7 +800,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			pcm ? (uint32)((uint64)pcmLen * 1000 / kAudioSampleRate) : 0);
 
 	// Composite frames in order into a persistent surface (frames are
-	// inter-coded) and present them. ESC/quit skips.
+	// inter-coded) and present them. Esc skips a skippable movie; quit stops.
 	//
 	// There is NO stored frames-per-second field. Each frame carries its own
 	// hold time in its event chunk (offset +2, floored by masterHdr[+0x1c]),
@@ -712,7 +823,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	if (frameCount == 0)
 		warning("Cyberflix: movie '%s' has no frames to show", name.c_str());
 
-	const uint32 wallStartMs = _system->getMillis();
+	uint32 wallStartMs = _system->getMillis();
 	uint32 fi = 0;
 	while (fi < frameCount && !shouldQuit() && !skip) {
 		uint32 resIdx = usePF ? pfVideoRes[fi] : frames[fi];
@@ -773,10 +884,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			int32 nextFi = -1;
 			while (nextFi < 0 && !shouldQuit() && !skip) {
 				while (_eventMan->pollEvent(event)) {
-					if (event.type == Common::EVENT_KEYDOWN &&
-							event.kbd.keycode == Common::KEYCODE_ESCAPE) {
-						skip = true;
-					} else if (event.type == Common::EVENT_LBUTTONDOWN) {
+					handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
+					if (event.type == Common::EVENT_LBUTTONDOWN) {
 						int fx = event.mouse.x - x0;
 						int fy = event.mouse.y - y0;
 						for (uint b = 0; b < pfButtons[fi].size(); ++b) {
@@ -801,6 +910,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 					// Composite the cursor at its new position and keep the
 					// window live. ScummVM draws the mouse during updateScreen,
 					// so without this the cursor would appear frozen.
+					_console->onFrame();
 					_system->updateScreen();
 					_system->delayMillis(10);
 				}
@@ -822,11 +932,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			uint32 holdMs = (fi < pfHoldMs.size()) ? pfHoldMs[fi] : kFallbackFrameDelayMs;
 			uint32 holdStart = _system->getMillis();
 			while (!shouldQuit() && !skip) {
-				while (_eventMan->pollEvent(event)) {
-					if (event.type == Common::EVENT_KEYDOWN &&
-							event.kbd.keycode == Common::KEYCODE_ESCAPE)
-						skip = true;
-				}
+				while (_eventMan->pollEvent(event))
+					holdStart += handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
 				if (_system->getMillis() - holdStart >= holdMs)
 					break;
 				_system->updateScreen();
@@ -848,11 +955,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		// NEXT (cmd 6, and any not-yet-implemented command): wait until this
 		// frame's authored end time on the playback clock, then advance.
 		for (;;) {
-			while (_eventMan->pollEvent(event)) {
-				if (event.type == Common::EVENT_KEYDOWN &&
-						event.kbd.keycode == Common::KEYCODE_ESCAPE)
-					skip = true;
-			}
+			while (_eventMan->pollEvent(event))
+				wallStartMs += handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
 			if (shouldQuit() || skip)
 				break;
 			uint32 t = (pcm && _mixer->isSoundHandleActive(audioHandle))

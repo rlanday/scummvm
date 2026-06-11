@@ -42,6 +42,11 @@ class Stage;
 
 namespace Common {
 class PEResources;
+struct Event;
+}
+
+namespace Audio {
+class SoundHandle;
 }
 
 namespace Graphics {
@@ -106,6 +111,21 @@ private:
 	 * palette and show the navigation cursor. Mirrors TI.EXE FUN_0040b180.
 	 */
 	void renderStageNode(int node);
+
+	/**
+	 * Process the global/movie keyboard shortcuts that the original handles
+	 * during playback, mirroring TI.EXE's WndProc (FUN_00403690) and movie key
+	 * handler (FUN_0040e430): Esc / Ctrl+Q / Ctrl+. skip (when @p skippable),
+	 * Ctrl+T pause/resume, F12 the About dialog, and backquote/Ctrl+D the debug
+	 * console. Sets @p skip when the movie should be aborted. Returns the number
+	 * of milliseconds spent paused, so wall-clock callers can shift their time
+	 * references. @p audioHandle is the movie soundtrack handle (paused/resumed).
+	 */
+	uint32 handleMovieHotkeys(const Common::Event &event, bool skippable,
+			const Audio::SoundHandle &audioHandle, bool &skip);
+
+	/** Show the original's F12 "About" dialog (TI.EXE FUN_00404120). */
+	void showAboutDialog();
 
 	const CyberflixGameDescription *_gameDescription;
 	Common::RandomSource _rnd;
