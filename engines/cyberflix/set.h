@@ -54,15 +54,27 @@ namespace Cyberflix {
  *   +0x12 uint32 scriptId     (scene behavior script, info 0x0fa1)
  *   +0x16 Pascal name         (e.g. "Scene1")
  *
- * A PANORAMA FRAME TABLE is a data resource: uint32 entry count, then that many
- * 0x3c-byte records, each a camera/transform matrix plus, at record +0x30, a
- * uint32 BACKGROUND FRAME resource id. Those frames are full-screen inter-codec
- * keyframes (info tag high half 0x0200, the same codec as MOV video and stage
- * backgrounds), so each is decodable standalone via decodeFrame.
+ * A PANORAMA FRAME TABLE is the resource a scene record's panorama field points
+ * at. In the engine-base frame the runtime addresses it through, it is:
+ *   +0x04 uint32 entryCount
+ *   +0x0c records, @c entryCount of them, stride 0x3c (TI.EXE FUN_00442970
+ *         indexes @c base+0xc+frame*0x3c), each a camera/transform matrix plus,
+ *         at record +0x2c, a uint32 BACKGROUND FRAME resource id.
+ * (Equivalently, from the raw payload pointer: count @ +0x00, first record @
+ * +0x04, frame id @ record +0x30 -- the framing this class uses; both resolve
+ * to the same absolute frame-id dword.)
  *
- * Rendering a room is therefore: pick a scene, pick a panorama table (A/B) and
- * an angle, resolve that record's frame id, decode it, and apply the set clut.
- * Panorama navigation, hotspots and the scene behavior script come later.
+ * The panorama is a CONTINUOUS CYCLIC DELTA-ANIMATION, not random-access
+ * keyframes: FUN_00442970 advances/wraps a frame index and applies each frame
+ * onto the retained framebuffer via the inter-frame decoder FUN_00423600. Frame
+ * 0 is the cold-start keyframe; every later angle is inter-coded against the
+ * previous one. There is no per-angle keyframe flag. To show an arbitrary angle
+ * from cold, replay frames 0..angle through a FrameSequence (decoding a delta
+ * angle standalone leaves its "copy from previous" pixels unwritten -> garbage).
+ *
+ * Rendering a room is therefore: pick a scene, pick a panorama table (A/B),
+ * replay frames 0..angle, and apply the set clut. Panorama navigation, hotspots
+ * and the behavior script come later.
  */
 class Set {
 public:

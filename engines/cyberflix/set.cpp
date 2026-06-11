@@ -189,21 +189,33 @@ bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameImage &out)
 		return false;
 	}
 
-	uint32 frameId = READ_LE_UINT32(pano + 4 + angle * kPanoramaRecordStride + kPanoramaFrameIdOffset);
-	int idx = resourceIndexById(frameId);
-	if (idx < 0) {
-		warning("Cyberflix: set '%s' scene %u angle %u references missing frame res %u",
-				_name.c_str(), scene, angle, frameId);
-		return false;
+	// The panorama is a continuous cyclic delta-animation (TI.EXE FUN_00442970:
+	// it advances/wraps a frame index and applies each frame onto the retained
+	// framebuffer via FUN_00423600). Frame 0 is the cold-start keyframe; every
+	// later angle is inter-coded against the previous one. So to show an
+	// arbitrary angle from cold we replay frames 0..angle, exactly the buffer
+	// state the engine would have built up. Decoding a delta angle standalone
+	// would leave its "copy from previous" regions unwritten (visible garbage).
+	FrameSequence seq;
+	for (uint32 a = 0; a <= angle; ++a) {
+		uint32 frameId = READ_LE_UINT32(pano + 4 + a * kPanoramaRecordStride + kPanoramaFrameIdOffset);
+		int idx = resourceIndexById(frameId);
+		if (idx < 0) {
+			warning("Cyberflix: set '%s' scene %u angle %u references missing frame res %u",
+					_name.c_str(), scene, a, frameId);
+			return false;
+		}
+		const byte *frame = engineBase((uint32)idx);
+		if (!frame)
+			return false;
+		uint32 frameLen = _archive.getResource((uint32)idx).length + 4; // payload + info word
+		if (seq.applyFrame(frame, frameLen) == 0) {
+			warning("Cyberflix: set '%s' scene %u angle %u frame decode failed", _name.c_str(), scene, a);
+			return false;
+		}
 	}
-	const byte *frame = engineBase((uint32)idx);
-	if (!frame)
-		return false;
-	uint32 frameLen = _archive.getResource((uint32)idx).length + 4; // payload + info word
-	if (decodeFrame(frame, frameLen, out) == 0) {
-		warning("Cyberflix: set '%s' scene %u angle %u frame decode failed", _name.c_str(), scene, angle);
-		return false;
-	}
+
+	seq.copyTo(out);
 	return true;
 }
 
