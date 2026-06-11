@@ -34,8 +34,6 @@ public:
 	~Console() override = default;
 
 private:
-	CyberflixEngine *_engine;
-
 	// Dumps the LPPALPPA container header of a given asset file.
 	bool cmdDumpArchive(int argc, const char **argv);
 
@@ -56,6 +54,10 @@ private:
 	// Plays a MOV's frame sequence up to a given index into a persistent
 	// framebuffer and blits the result (exercises inter-frame decoding).
 	bool cmdShowMovie(int argc, const char **argv);
+
+	// Opens a STG deck and renders one of its nodes (exercises the Stage
+	// parser + node renderer used by openstagefile/sendtostage).
+	bool cmdShowNode(int argc, const char **argv);
 };
 
 } // End of namespace Cyberflix

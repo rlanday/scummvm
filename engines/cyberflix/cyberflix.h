@@ -26,6 +26,7 @@
 #include "common/error.h"
 #include "common/hashmap.h"
 #include "common/hash-str.h"
+#include "common/ptr.h"
 
 #include "engines/engine.h"
 
@@ -36,6 +37,7 @@ namespace Cyberflix {
 
 class Console;
 class Script;
+class Stage;
 }
 
 namespace Common {
@@ -72,6 +74,8 @@ public:
 
 	// VMHost
 	void playMovie(const Common::String &name) override;
+	void openStageFile(const Common::String &name) override;
+	void sendToStage(int node) override;
 
 private:
 	/**
@@ -96,14 +100,23 @@ private:
 	 *  it cannot be found (the game can still run without a custom cursor). */
 	Common::PEResources *gameExe();
 
+	/**
+	 * Render node @p node of the currently open stage to the screen: decode its
+	 * background frame (compositing from the nearest keyframe), apply the stage
+	 * palette and show the navigation cursor. Mirrors TI.EXE FUN_0040b180.
+	 */
+	void renderStageNode(int node);
+
 	const CyberflixGameDescription *_gameDescription;
 	Common::RandomSource _rnd;
-	Console *_console;
+	Console *_console; ///< Owned by the engine framework's debugger, not by us.
 
-	Common::PEResources *_exe = nullptr;
+	Common::ScopedPtr<Common::PEResources> _exe;
 	bool _exeTried = false;
-	Common::HashMap<Common::String, Graphics::WinCursorGroup *> _cursorCache;
+	Common::HashMap<Common::String, Common::SharedPtr<Graphics::WinCursorGroup> > _cursorCache;
 	Common::String _activeCursor;
+
+	Common::ScopedPtr<Stage> _stage; ///< Currently open stage (DATA/*.STG), or null.
 };
 
 } // End of namespace Cyberflix

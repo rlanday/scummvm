@@ -270,6 +270,12 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x2ef1: // playmovie('name.mov')
 			_host->playMovie(args.empty() ? Common::String() : args[0].strValue);
 			break;
+		case 0x2f1c: // openstagefile('name.stg')
+			_host->openStageFile(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x2f26: // sendtostage(node)
+			_host->sendToStage(args.empty() ? 0 : args[0].intValue);
+			break;
 		default:
 			break;
 		}

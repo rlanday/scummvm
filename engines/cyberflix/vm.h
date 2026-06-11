@@ -75,6 +75,12 @@ public:
 
 	/** Play the movie named @p name (a MOVIES/ basename, e.g. "logo.mov"). */
 	virtual void playMovie(const Common::String &name) = 0;
+
+	/** Open the stage file @p name (a DATA/ basename, e.g. "main.stg"). */
+	virtual void openStageFile(const Common::String &name) {}
+
+	/** Navigate to (and render) node @p node of the open stage. */
+	virtual void sendToStage(int node) {}
 };
 
 /**

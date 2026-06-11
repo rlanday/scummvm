@@ -50,6 +50,7 @@
 #include "cyberflix/image.h"
 #include "cyberflix/script.h"
 #include "cyberflix/sound.h"
+#include "cyberflix/stage.h"
 #include "cyberflix/vm.h"
 
 namespace Cyberflix {
@@ -126,10 +127,7 @@ CyberflixEngine::CyberflixEngine(OSystem *syst, const CyberflixGameDescription *
 
 CyberflixEngine::~CyberflixEngine() {
 	// _console is owned by the debugger registered with the engine framework.
-	for (Common::HashMap<Common::String, Graphics::WinCursorGroup *>::iterator
-			it = _cursorCache.begin(); it != _cursorCache.end(); ++it)
-		delete it->_value;
-	delete _exe;
+	// _exe, _cursorCache (SharedPtr values) and _stage free themselves.
 }
 
 int CyberflixEngine::getGameType() const {
@@ -159,7 +157,7 @@ bool CyberflixEngine::hasFeature(EngineFeature f) const {
 // CURS.ARROW, CURS.HAND, CURS.GOUP, ... (see files/decomp/movie-playback.md).
 Common::PEResources *CyberflixEngine::gameExe() {
 	if (_exeTried)
-		return _exe;
+		return _exe.get();
 	_exeTried = true;
 
 	const Common::FSNode gameDir(ConfMan.getPath("path"));
@@ -175,12 +173,12 @@ Common::PEResources *CyberflixEngine::gameExe() {
 		Common::SeekableReadStream *stream = node.createReadStream();
 		if (!stream)
 			continue;
-		Common::PEResources *exe = new Common::PEResources();
+		Common::ScopedPtr<Common::PEResources> exe(new Common::PEResources());
 		if (exe->loadFromEXE(stream, DisposeAfterUse::YES)) {
-			_exe = exe;
-			return _exe;
+			_exe.reset(exe.release());
+			return _exe.get();
 		}
-		delete exe; // disposes stream
+		// exe (and the stream it owns) is freed as it goes out of scope.
 	}
 	warning("Cyberflix: could not locate TI.EXE for cursor resources");
 	return nullptr;
@@ -190,15 +188,16 @@ bool CyberflixEngine::setGameCursor(const Common::String &name) {
 	if (_activeCursor == name && _cursorCache.contains(name))
 		return true;
 
-	Graphics::WinCursorGroup *group = nullptr;
+	Common::SharedPtr<Graphics::WinCursorGroup> group;
 	if (_cursorCache.contains(name)) {
 		group = _cursorCache[name];
 	} else {
 		Common::PEResources *exe = gameExe();
 		if (!exe)
 			return false;
-		group = Graphics::WinCursorGroup::createCursorGroup(exe, Common::WinResourceID(name));
-		_cursorCache[name] = group; // cache even nullptr to avoid re-parsing
+		group = Common::SharedPtr<Graphics::WinCursorGroup>(
+				Graphics::WinCursorGroup::createCursorGroup(exe, Common::WinResourceID(name)));
+		_cursorCache[name] = group; // cache even null to avoid re-parsing
 	}
 	if (!group || group->cursors.empty())
 		return false;
@@ -206,6 +205,64 @@ bool CyberflixEngine::setGameCursor(const Common::String &name) {
 	CursorMan.replaceCursor(group->cursors[0].cursor);
 	_activeCursor = name;
 	return true;
+}
+
+// openstagefile(name): open a DATA/*.STG deck. The boot script calls this for
+// MAIN.STG just before sendtostage(0). Mirrors TI.EXE FUN_004090b0 (which parses
+// via FUN_00409150). See files/decomp/stage-notes.md.
+void CyberflixEngine::openStageFile(const Common::String &name) {
+	if (name.empty())
+		return;
+	Common::ScopedPtr<Stage> stage(new Stage());
+	if (!stage->open(name))
+		return;
+	_stage.reset(stage.release());
+	debug(1, "Cyberflix: stage '%s' open (%u nodes)", name.c_str(), _stage->nodeCount());
+}
+
+// sendtostage(node): navigate to a node of the open stage and render it. Mirrors
+// TI.EXE FUN_0040ad60 -> FUN_0040b180 (the node renderer); per-node enter scripts
+// (interactivity/hotspots) land in a later phase.
+void CyberflixEngine::sendToStage(int node) {
+	renderStageNode(node);
+}
+
+void CyberflixEngine::renderStageNode(int node) {
+	if (!_stage || !_stage->isOpen()) {
+		warning("Cyberflix: sendtostage(%d) with no stage open", node);
+		return;
+	}
+
+	FrameImage frame;
+	if (!_stage->renderNode((uint32)node, frame))
+		return;
+
+	byte rgb[256 * 3];
+	memset(rgb, 0, sizeof(rgb));
+	if (_stage->loadStagePalette(rgb))
+		_system->getPaletteManager()->setPalette(rgb, 0, 256);
+
+	Graphics::Surface *screen = _system->lockScreen();
+	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	int x0 = (kScreenWidth - frame.width) / 2;
+	int y0 = (kScreenHeight - frame.height) / 2;
+	for (int y = 0; y < frame.height; ++y) {
+		for (int x = 0; x < frame.width; ++x) {
+			int sx = x0 + x, sy = y0 + y;
+			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
+				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
+		}
+	}
+	_system->unlockScreen();
+
+	// Show the default arrow over the rendered node until per-node hotspot
+	// hit-testing (directional cursors) is implemented.
+	if (setGameCursor("CURS.ARROW"))
+		CursorMan.showMouse(true);
+	_system->updateScreen();
+
+	debug(1, "Cyberflix: rendered stage '%s' node %d (%ux%u)",
+			_stage->name().c_str(), node, frame.width, frame.height);
 }
 
 Common::Error CyberflixEngine::run() {

@@ -8,6 +8,7 @@ MODULE_OBJS = \
 	metaengine.o \
 	script.o \
 	sound.o \
+	stage.o \
 	vm.o
 
 # This module can be built as a plugin
