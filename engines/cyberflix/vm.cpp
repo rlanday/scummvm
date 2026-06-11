@@ -36,20 +36,37 @@ Common::String Value::toString() const {
 	}
 }
 
-ScriptVM::ScriptVM() : _pc(0), _trace(false), _host(nullptr) {
+ScriptVM::ScriptVM() : _pc(0), _executed(0), _trace(false), _host(nullptr), _callDepth(0) {
 }
 
 Value ScriptVM::getVar(const Common::String &name) const {
-	// Resolve against the flat variable scope. Unbound names are returned as
-	// symbol values so they can still flow through expressions harmlessly
-	// (mirrors the lookup miss at TI.EXE 0x0041395b returning the name).
-	if (_vars.contains(name))
-		return _vars[name];
+	// Scope lookup: innermost local scope first (TI.EXE 0x004138f0 against the
+	// per-call scope object), then the global object ([0x45f010]). Names are
+	// matched case-insensitively (TI.EXE compares via the case-folding
+	// FUN_0041ae80); we normalise to lowercase keys. Unbound names are
+	// returned as symbol values so they can still flow through expressions
+	// harmlessly (lookup miss at 0x0041395b returns the name).
+	Common::String key = name;
+	key.toLowercase();
+	if (!_locals.empty() && _locals.back().contains(key))
+		return _locals.back()[key];
+	if (_vars.contains(key))
+		return _vars[key];
 	return Value::makeSymbol(name);
 }
 
 void ScriptVM::setVar(const Common::String &name, const Value &v) {
-	_vars[name] = v;
+	// Assignment resolution order per the FUN_0040ba20 default case: store into
+	// the local scope when the name is declared there, else into the global
+	// scope. (TI.EXE errors 0x10 on fully undeclared names; we tolerate them
+	// as implicit globals to stay permissive while subsystems land.)
+	Common::String key = name;
+	key.toLowercase();
+	if (!_locals.empty() && _locals.back().contains(key)) {
+		_locals.back()[key] = v;
+		return;
+	}
+	_vars[key] = v;
 }
 
 Value ScriptVM::pop() {
@@ -170,6 +187,33 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 		pc++;
 		return Value::makeInt((int16)inst.operandA);
 
+	case Script::kOpTrue:
+		// 0x0fb5: boolean TRUE literal (atom decoder 0x0041a550).
+		pc++;
+		return Value::makeBool(true);
+
+	case Script::kOpFalse:
+		// 0x0fb6: boolean FALSE literal.
+		pc++;
+		return Value::makeBool(false);
+
+	case Script::kOpNot: {
+		// 0x0fb7: prefix logical NOT — decode the following atom and invert
+		// (TI.EXE recurses then XORs the bool with 1).
+		pc++;
+		Value v = decodeAtom(script, pc);
+		return Value::makeBool(!isTruthy(v));
+	}
+
+	case Script::kOpOpenParen: {
+		// 0x0fb2 as an atom head is a parenthesised subexpression.
+		pc++;
+		Value v = evaluateExpression(script, pc);
+		if (pc < count && script.getInstruction(pc).opcode == Script::kOpCloseParen)
+			pc++;
+		return v;
+	}
+
 	case Script::kOpSub: {
 		// Leading kOpSub is unary minus: decode the following atom and negate
 		// it (TI.EXE atom decoder 0x0041a8e5).
@@ -183,15 +227,30 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 	case Script::kOpPush4: {
 		Common::String sym = script.getSelfRelString(pc);
 		uint16 headOp = inst.opcode;
+		uint16 lowWord = inst.operandA;
 		pc++;
+		// push4 (0x0004) is a 32-bit INTEGER literal, not a name: the value's
+		// low 16 bits live in operandA (atom decoder 0x0041a550 case 4 reads a
+		// dword from the instruction record; e.g. actionframe(1) and for-loop
+		// bounds use push4). Small literals confirmed; revisit the high word if
+		// a >16-bit literal ever shows up in game scripts.
+		if (headOp == Script::kOpPush4)
+			return Value::makeInt((int16)lowWord);
 		// A name immediately followed by '(' is a call atom: parse and evaluate
 		// the balanced argument list, then dispatch (TI.EXE 0x0041a609 checks
 		// the next opcode for kOpOpenParen and sizes the span via 0x0040b690).
 		if (pc < count && script.getInstruction(pc).opcode == Script::kOpOpenParen) {
 			Common::Array<Value> args;
 			parseCallArgs(script, pc, args);
+			// A symbol head is a script-function call, dispatched against the
+			// library scope chain (TI.EXE 0x0041a609 -> FUN_0040b690).
+			if (headOp == Script::kOpPushSym)
+				return callFunction(sym, args);
 			return callMethod(headOp, sym, args);
 		}
+		// push3 (0x0003) is a string literal from the pool (type 3).
+		if (headOp == Script::kOpPush3)
+			return Value::makeString(sym);
 		// Otherwise a symbol reference evaluates to its bound value.
 		return getVar(sym);
 	}
@@ -202,6 +261,15 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 		uint16 headOp = inst.opcode;
 		pc++;
 		if (pc < count && script.getInstruction(pc).opcode == Script::kOpOpenParen) {
+			// The message-carrying builtins sendtoactor (0x2ef0), sendtoscene
+			// (0x2f02), sendtocast (0x2f10), sendtoshop (0x2f1b) and
+			// sendtostage (0x2f26) pass their final argument UNevaluated: it is
+			// a message `name(args)` matched against script definitions
+			// (TI.EXE FUN_0040ad80 hands the raw code span to the dispatcher
+			// FUN_0040b690). Leading arguments (e.g. the cast-file target) are
+			// evaluated normally.
+			if (headOp == 0x2ef0 || headOp == 0x2f10 || headOp == 0x2f1b || headOp == 0x2f26)
+				return dispatchMessageBuiltin(script, pc, headOp);
 			Common::Array<Value> args;
 			parseCallArgs(script, pc, args);
 			return callMethod(headOp, Common::String(), args);
@@ -209,6 +277,67 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 		return Value();
 	}
 	}
+}
+
+Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 opcode) {
+	// pc references the kOpOpenParen of e.g. sendtostage(advanceday()) or
+	// sendtocast('gang.cst', initactors()). Evaluate any leading target
+	// arguments, then capture the trailing message WITHOUT evaluating it.
+	const uint32 count = script.getInstructionCount();
+	Common::Array<Value> targets;
+	Common::String message;
+	Common::Array<Value> msgArgs;
+
+	pc++; // consume '('
+	while (pc < count) {
+		const Script::Instruction &head = script.getInstruction(pc);
+		if (head.opcode == Script::kOpCloseParen) {
+			pc++;
+			break;
+		}
+		// `name (` here is the message call: bind its name and evaluate its
+		// arguments in the CALLER's scope (the matcher FUN_0040b870 evaluates
+		// caller-arg values before binding them to the callee's formals).
+		if (head.opcode == Script::kOpPushSym && pc + 1 < count &&
+				script.getInstruction(pc + 1).opcode == Script::kOpOpenParen) {
+			message = script.getSelfRelString(pc);
+			message.toLowercase();
+			pc++;
+			parseCallArgs(script, pc, msgArgs);
+		} else {
+			targets.push_back(evaluateExpression(script, pc));
+		}
+		if (pc < count && script.getInstruction(pc).opcode == Script::kOpArgSep) {
+			pc++;
+			continue;
+		}
+		if (pc < count && script.getInstruction(pc).opcode == Script::kOpCloseParen) {
+			pc++;
+			break;
+		}
+		break; // malformed; statement loop resynchronises on separators
+	}
+
+	if (_trace)
+		debug(0, "    message #%#06x -> %s(%u args)", opcode, message.c_str(), msgArgs.size());
+
+	switch (opcode) {
+	case 0x2f26: // sendtostage(message(...)) -> TI.EXE FUN_0040ad80
+		if (_host)
+			_host->sendToStage(message, msgArgs);
+		break;
+	case 0x2ef0: // sendtoactor(actor, message) -> dispatch against the actor's
+	             // cast script (TI.EXE 0x2ef0 handler). Cast subsystem not yet
+	             // implemented; no-op so initactors()-style loops run dry.
+	case 0x2f10: // sendtocast('file.cst', message) -> per-cast script dispatch.
+	case 0x2f1b: // sendtoshop('file.shp', message) -> per-shop script dispatch.
+		if (_trace)
+			debug(0, "    (cast/shop message '%s' ignored: subsystem pending)", message.c_str());
+		break;
+	default:
+		break;
+	}
+	return Value();
 }
 
 void ScriptVM::parseCallArgs(const Script &script, uint32 &pc, Common::Array<Value> &outArgs) {
@@ -265,6 +394,8 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 
 	// Forward the effectful builtins we implement to the engine host. Opcodes
 	// not handled here remain logged no-ops (see files/method-catalog.md).
+	// (The message-carrying send* builtins never reach this path; they are
+	// routed through dispatchMessageBuiltin with the message unevaluated.)
 	if (_host) {
 		switch (opcode) {
 		case 0x2ef1: // playmovie('name.mov')
@@ -273,15 +404,29 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x2f1c: // openstagefile('name.stg')
 			_host->openStageFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2f26: // sendtostage(node)
-			_host->sendToStage(args.empty() ? 0 : args[0].intValue);
+		case 0x2f00: // opensetfile('name.set'[, scene[, view]]) -> FUN_00430690
+			_host->openSetFile(args.size() > 0 ? args[0].strValue : Common::String(),
+					args.size() > 1 ? args[1].strValue : Common::String(),
+					args.size() > 2 ? args[2].strValue : Common::String());
 			break;
-		case 0x2f00: // opensetfile('name.set') -> TI.EXE FUN_00430690
-			_host->openSetFile(args.empty() ? Common::String() : args[0].strValue);
+		case 0x2f01: // closesetfile() -> TI.EXE set-archive close
+			_host->closeSetFile();
 			break;
 		case 0x2f02: // sendtoscene('scenename') -> TI.EXE FUN_004311e0/FUN_00431200
 			_host->sendToScene(args.empty() ? Common::String() : args[0].strValue);
 			break;
+		case 0x4e55: // currentset() -> open set name or 'none'
+			return Value::makeString(_host->currentSet());
+		case 0x4e73: // actionframe(n) -> bool, FUN_004362c0 (n must be 1 or 2)
+			return Value::makeBool(_host->actionFrame(args.empty() ? 0 : args[0].intValue));
+		case 0x3e96: // framerate(n): sets the global frame pacing (TI.EXE
+		             // dispatch A case 0x15). Engine paces from per-frame
+		             // authored holds instead; accept and ignore.
+			break;
+		case 0x4e2c: // countactors(): cast subsystem pending -> 0, so the
+		             // initall()/advanceday() actor loops run dry.
+		case 0x4e3f: // countprops(): shop subsystem pending -> 0.
+			return Value::makeInt(0);
 		default:
 			break;
 		}
@@ -323,9 +468,80 @@ uint32 ScriptVM::runProgram(const Script &script, uint32 maxSteps) {
 	_stack.clear();
 	_whileStack.clear();
 	_forStack.clear();
-	uint32 pc = 0;
+
+	// A script resource is a sequence of named definitions separated by
+	// kOpScriptMarker. "Running the program" means running the FIRST
+	// definition's body (e.g. BOOTFILE res1 starts with `boot()`); the
+	// remaining definitions are message handlers reached only by dispatch
+	// (TI.EXE never falls through a marker: FUN_0040ba20 treats it as end).
+	uint32 start = 0;
+	const Common::Array<Script::Definition> &defs = script.definitions();
+	if (!defs.empty())
+		start = defs[0].bodyStart;
+
+	Value result;
+	_executed = 0;
+	runBody(script, start, result, maxSteps);
+	return _executed;
+}
+
+Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Value> &args,
+		bool *handled) {
+	// Message dispatch (TI.EXE FUN_0040b690 -> FUN_0040b7a0 -> FUN_0040b870):
+	// walk the scope chain newest-first; in each library find a definition
+	// matching the (case-insensitive) name, bind its formal parameters to the
+	// already-evaluated argument values in a fresh local scope, and execute the
+	// body. A kOpPass statement returns "pretend no match" (code 4) and the
+	// next library is tried.
+	if (handled)
+		*handled = false;
+	Value result;
+
+	if (_callDepth >= 64) { // TI.EXE has no explicit guard; protect the engine
+		warning("Cyberflix: script call depth overflow at '%s'", name.c_str());
+		return result;
+	}
+
+	for (int li = (int)_libraries.size() - 1; li >= 0; --li) {
+		const Script *lib = _libraries[li];
+		const Script::Definition *def = lib->findDefinition(name);
+		if (!def)
+			continue;
+
+		_locals.push_back(Common::HashMap<Common::String, Value>());
+		for (uint32 i = 0; i < def->params.size(); ++i)
+			_locals.back()[def->params[i]] = (i < args.size()) ? args[i] : Value();
+
+		_callDepth++;
+		RunResult rr = runBody(*lib, def->bodyStart, result, 100000);
+		_callDepth--;
+		_locals.pop_back();
+
+		if (rr == kRunPassed)
+			continue; // try the next scope on the chain
+		if (handled)
+			*handled = true;
+		if (_trace)
+			debug(0, "  dispatch %s(%u args) -> %s", name.c_str(), args.size(),
+					result.toString().c_str());
+		return result;
+	}
+
+	if (_trace)
+		debug(0, "  dispatch %s: no matching definition", name.c_str());
+	return result;
+}
+
+ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &result,
+		uint32 maxSteps) {
 	uint32 executed = 0;
 	const uint32 count = script.getInstructionCount();
+
+	// Loop stacks are per-body in TI.EXE (depth counters local_24/local_22 in
+	// FUN_0040ba20); save/restore so a dispatched call inside a loop body
+	// cannot corrupt the caller's frames.
+	uint32 whileBase = _whileStack.size();
+	uint32 forBase = _forStack.size();
 
 	while (pc < count && executed < maxSteps) {
 		uint32 here = pc;
@@ -334,7 +550,60 @@ uint32 ScriptVM::runProgram(const Script &script, uint32 maxSteps) {
 		switch (op) {
 		case Script::kOpEnd:
 		case Script::kOpReturn:
-			return executed;
+		case Script::kOpScriptMarker:
+			// End of this definition's body. kOpScriptMarker introduces the
+			// NEXT definition and is never executed (FUN_0040ba20 returns on
+			// it via the 0xfa4/stream-end paths).
+			goto done;
+
+		case Script::kOpExit:
+			// 0x0fa5 'exit': early return with no result, unwinding any loop
+			// bookkeeping opened inside this body (TI.EXE 0x0040bb05).
+			goto done;
+
+		case Script::kOpReturnValue: {
+			// 0x0fb8 'return <expr>': evaluate into the caller's result slot
+			// (TI.EXE 0x0040bdf3; err 5 there if the caller expected none).
+			uint32 p = pc + 1;
+			result = evaluateExpression(script, p);
+			_whileStack.resize(whileBase);
+			_forStack.resize(forBase);
+			return kRunReturned;
+		}
+
+		case Script::kOpPass:
+			// 0x0fb9 'pass': pretend this definition did not match; the
+			// dispatcher continues down the scope chain (TI.EXE returns 4).
+			_whileStack.resize(whileBase);
+			_forStack.resize(forBase);
+			return kRunPassed;
+
+		case Script::kOpDeclGlobal:
+		case Script::kOpDeclLocal: {
+			// 0x0fa2/0x0fa3: declare a comma-separated symbol list into the
+			// global or current local scope (TI.EXE FUN_0040c480). Entries are
+			// created unset; we register them so assignment targets resolve to
+			// the right scope.
+			bool global = (op == Script::kOpDeclGlobal) || _locals.empty();
+			pc++;
+			while (pc < count && script.getInstruction(pc).opcode == Script::kOpPushSym) {
+				Common::String var = script.getSelfRelString(pc);
+				var.toLowercase();
+				if (global) {
+					if (!_vars.contains(var))
+						_vars[var] = Value();
+				} else {
+					if (!_locals.back().contains(var))
+						_locals.back()[var] = Value();
+				}
+				pc++;
+				if (pc < count && script.getInstruction(pc).opcode == Script::kOpArgSep)
+					pc++; // ',' continues the list
+				else
+					break;
+			}
+			break;
+		}
 
 		case Script::kOpPushInt:
 			// Top-level integer atoms act as statement separators/padding; the
@@ -459,9 +728,37 @@ uint32 ScriptVM::runProgram(const Script &script, uint32 maxSteps) {
 		}
 
 		default: {
-			// Method calls, assignments and other statement expressions. Consume
-			// the expression so the PC advances; side effects are wired in as the
-			// method handlers and subsystems land (files/opcode-map.md).
+			// Statement-level dispatch (FUN_0040ba20 default case). Three forms:
+			//  - `pushSym name == expr`  ASSIGNMENT (store via 0x413610: local
+			//    scope first, else global; TI.EXE errs 0x10 on undeclared).
+			//  - `pushSym name ( args )` script-function CALL: recursive
+			//    dispatch FUN_0040b690 over the SAME scope chain.
+			//  - anything else: builtin statement (dispatch B FUN_00444c60),
+			//    consumed by the expression evaluator which routes builtins
+			//    through callMethod.
+			if (op == Script::kOpPushSym) {
+				uint32 p = pc + 1;
+				uint16 nextOp = (p < count) ? script.getInstruction(p).opcode : 0;
+				if (nextOp == Script::kOpEq) {
+					Common::String var = script.getSelfRelString(pc);
+					var.toLowercase();
+					p++;
+					Value v = evaluateExpression(script, p);
+					setVar(var, v);
+					if (_trace)
+						debug(0, "    assign %s = %s", var.c_str(), v.toString().c_str());
+					pc = p;
+					break;
+				}
+				if (nextOp == Script::kOpOpenParen) {
+					Common::String fn = script.getSelfRelString(pc);
+					Common::Array<Value> args;
+					parseCallArgs(script, p, args);
+					callFunction(fn, args);
+					pc = p;
+					break;
+				}
+			}
 			uint32 next = pc;
 			evaluateExpression(script, next);
 			pc = (next > here) ? next : here + 1;
@@ -474,9 +771,12 @@ uint32 ScriptVM::runProgram(const Script &script, uint32 maxSteps) {
 					Script::opcodeName(op), pc);
 		}
 		executed++;
+		_executed++;
 	}
-
-	return executed;
+done:
+	_whileStack.resize(whileBase);
+	_forStack.resize(forBase);
+	return kRunDone;
 }
 
 } // End of namespace Cyberflix

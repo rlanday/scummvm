@@ -81,9 +81,14 @@ public:
 	// VMHost
 	void playMovie(const Common::String &name) override;
 	void openStageFile(const Common::String &name) override;
-	void sendToStage(int node) override;
-	void openSetFile(const Common::String &name) override;
+	void sendToStage(const Common::String &message, const Common::Array<Value> &args) override;
+	void openSetFile(const Common::String &name,
+			const Common::String &scene = Common::String(),
+			const Common::String &view = Common::String()) override;
+	void closeSetFile() override;
+	Common::String currentSet() override;
 	void sendToScene(const Common::String &scene) override;
+	bool actionFrame(int n) override;
 
 private:
 	/**
@@ -153,6 +158,24 @@ private:
 	Common::ScopedPtr<Set> _set;     ///< Currently open set (DATA/*.SET), or null.
 	int _setScene = -1;              ///< Active scene index within _set, or -1.
 	int _setAngle = 0;               ///< Active panorama angle within _setScene.
+
+	/**
+	 * The script VM driving the boot/stage scripts, with BOOTFILE res2
+	 * registered as the global function library (TI.EXE keeps the equivalent
+	 * scope chain around DAT_0045f010 / the boot resources).
+	 */
+	ScriptVM _vm;
+	Common::ScopedPtr<Script> _globalLib;  ///< BOOTFILE res2 (function library).
+	Common::ScopedPtr<Script> _bootScript; ///< BOOTFILE res1 (boot + handlers).
+
+	/**
+	 * Action-frame bitmask, mirroring TI.EXE DAT_0046112a: cleared by each
+	 * playmovie (FUN_00446f80), bit 0/1 ORed in by the player main loop when
+	 * the presented frame matches the master header cue-name field at +0x40 /
+	 * +0x50 (FUN_0043b800 callers at 0x0040d19a/0x0040d1af). actionframe(n)
+	 * (0x4e73, FUN_004362c0) tests bit n-1. See decomp/movie-playback.md.
+	 */
+	uint16 _actionFrameMask = 0;
 };
 
 } // End of namespace Cyberflix

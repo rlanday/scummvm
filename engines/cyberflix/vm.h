@@ -79,14 +79,38 @@ public:
 	/** Open the stage file @p name (a DATA/ basename, e.g. "main.stg"). */
 	virtual void openStageFile(const Common::String &name) {}
 
-	/** Navigate to (and render) node @p node of the open stage. */
-	virtual void sendToStage(int node) {}
+	/**
+	 * Deliver the message call `message(args)` to the open stage's script. The
+	 * original sendtostage (TI.EXE FUN_0040ad80) passes the message UNevaluated
+	 * and dispatches it against the stage script's definitions with the global
+	 * library as fallback scope. The engine realises that by calling back into
+	 * ScriptVM::callFunction over its registered libraries.
+	 */
+	virtual void sendToStage(const Common::String &message, const Common::Array<Value> &args) {}
 
-	/** Open the set file @p name (a DATA/ basename, e.g. "bedsit1.set"). */
-	virtual void openSetFile(const Common::String &name) {}
+	/**
+	 * Open the set file @p name. @p scene / @p view optionally name the scene
+	 * and view to make current (the opensetfile optional args; TI.EXE
+	 * FUN_00430690). Empty = default to the set's first scene.
+	 */
+	virtual void openSetFile(const Common::String &name,
+			const Common::String &scene = Common::String(),
+			const Common::String &view = Common::String()) {}
+
+	/** Close the open set file (closesetfile, TI.EXE opcode 0x2f01). */
+	virtual void closeSetFile() {}
+
+	/** Name of the open set (currentset, 0x4e55), or "none". */
+	virtual Common::String currentSet() { return "none"; }
 
 	/** Navigate to (and render) the scene named @p scene of the open set. */
 	virtual void sendToScene(const Common::String &scene) {}
+
+	/**
+	 * actionframe(n): true if the last movie ended on action frame @p n —
+	 * i.e. which menu button the user clicked (TI.EXE 0x4e73 FUN_00435026).
+	 */
+	virtual bool actionFrame(int n) { return false; }
 };
 
 /**
@@ -123,9 +147,46 @@ public:
 	 */
 	uint32 runProgram(const Script &script, uint32 maxSteps = 100000);
 
+	/**
+	 * Register @p script as a function library on the dispatch scope chain
+	 * (later additions are searched FIRST, mirroring the 2-entry chain built by
+	 * TI.EXE FUN_0040ad80: [stage script, BOOTFILE res2 global library]).
+	 * @p script is retained, not owned, and must outlive the VM's use.
+	 */
+	void addLibrary(const Script *script) { _libraries.push_back(script); }
+	void clearLibraries() { _libraries.clear(); }
+
+	/**
+	 * Dispatch the message `name(args)` against the library chain: find a
+	 * matching definition (TI.EXE FUN_0040b7a0/FUN_0040b870), bind the formal
+	 * params to @p args in a fresh local scope, and run the body with the
+	 * statement executor (FUN_0040ba20). A kOpPass statement makes the
+	 * definition "pretend unhandled" and the next library is tried.
+	 *
+	 * @param handled optionally receives whether any definition ran to
+	 *        completion (false = no match anywhere on the chain).
+	 * @return the kOpReturnValue result, or a default Value.
+	 */
+	Value callFunction(const Common::String &name, const Common::Array<Value> &args,
+			bool *handled = nullptr);
+
 private:
 	void execute(const Script &script, uint32 index);
 	void applyOperator(uint16 opcode);
+
+	/// Result codes of the statement executor, mirroring TI.EXE FUN_0040ba20.
+	enum RunResult {
+		kRunDone,     ///< Body finished (kOpReturn / marker / end).
+		kRunReturned, ///< kOpReturnValue produced a result.
+		kRunPassed    ///< kOpPass: pretend no match, try next scope (code 4).
+	};
+
+	/**
+	 * Run one definition body (or a whole flat program when @p stopAtMarker is
+	 * false) starting at @p pc. The single statement loop behind runProgram and
+	 * callFunction; mirrors TI.EXE FUN_0040ba20.
+	 */
+	RunResult runBody(const Script &script, uint32 pc, Value &result, uint32 maxSteps);
 	static bool isTruthy(const Value &v) {
 		return (v.type == Value::kBool || v.type == Value::kInt) && v.intValue != 0;
 	}
@@ -153,6 +214,14 @@ private:
 
 	/** Decode a single atom (literal/symbol/call) at @p pc, advancing @p pc. */
 	Value decodeAtom(const Script &script, uint32 &pc);
+
+	/**
+	 * Handle a message-carrying builtin (sendtostage/sendtocast/sendtoshop/
+	 * sendtoactor) whose kOpOpenParen is at @p pc: evaluate leading target
+	 * args, capture the trailing message UNevaluated and route it (TI.EXE
+	 * FUN_0040ad80 -> dispatcher FUN_0040b690). Advances @p pc past ')'.
+	 */
+	Value dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 opcode);
 
 	/**
 	 * Parse a call argument list whose opening kOpOpenParen is at @p pc,
@@ -191,11 +260,23 @@ private:
 	};
 	Common::Array<ForFrame> _forStack;
 
-	/// Variable scope. A flat name->value map standing in for the TI.EXE object
-	/// scope chain (global object at [0x45f010]) until objects are modelled.
+	/// Global variable scope (the TI.EXE global object at [0x45f010]).
 	Common::HashMap<Common::String, Value> _vars;
 
+	/**
+	 * Local-scope stack: one map per active function call, created by the
+	 * dispatcher to bind formal parameters and kOpDeclLocal variables (TI.EXE
+	 * builds a fresh scope object per dispatch in FUN_0040b870; lookup checks
+	 * local first via 0x4138f0, then global). Empty at top level.
+	 */
+	Common::Array<Common::HashMap<Common::String, Value> > _locals;
+
+	/// Function-library scope chain for callFunction (latest searched first).
+	Common::Array<const Script *> _libraries;
+	uint32 _callDepth; ///< Recursion guard for script-to-script calls.
+
 	uint32 _pc;
+	uint32 _executed; ///< Statements executed by the last runProgram (for the console).
 	bool _trace;
 	VMHost *_host; ///< Engine host for effectful builtins; null = no-op. Not owned.
 };

@@ -223,11 +223,18 @@ void CyberflixEngine::openStageFile(const Common::String &name) {
 	debug(1, "Cyberflix: stage '%s' open (%u nodes)", name.c_str(), _stage->nodeCount());
 }
 
-// sendtostage(node): navigate to a node of the open stage and render it. Mirrors
-// TI.EXE FUN_0040ad60 -> FUN_0040b180 (the node renderer); per-node enter scripts
-// (interactivity/hotspots) land in a later phase.
-void CyberflixEngine::sendToStage(int node) {
-	renderStageNode(node);
+// sendtostage(message(...)): deliver a message call to the stage's script
+// scope chain. Mirrors TI.EXE FUN_0040ad80, which dispatches the unevaluated
+// message against [stage script, BOOTFILE res2 global library]; our VM holds
+// that chain, so dispatch is a callFunction over its libraries. The per-node
+// enter/idle handler scripts inside MAIN.STG land in a later phase — see
+// files/decomp/stage-notes.md ("Script FUNCTIONS + message dispatch").
+void CyberflixEngine::sendToStage(const Common::String &message, const Common::Array<Value> &args) {
+	debug(1, "Cyberflix: sendtostage -> %s(%u args)", message.c_str(), args.size());
+	bool handled = false;
+	_vm.callFunction(message, args, &handled);
+	if (!handled)
+		warning("Cyberflix: stage message '%s' unhandled", message.c_str());
 }
 
 void CyberflixEngine::renderStageNode(int node) {
@@ -268,11 +275,13 @@ void CyberflixEngine::renderStageNode(int node) {
 			_stage->name().c_str(), node, frame.width, frame.height);
 }
 
-// opensetfile(name): open a DATA/*.SET room file. The MAIN.STG node-0 ENTER
-// script's changeset() wrapper calls this before sendtoscene(). Mirrors TI.EXE
-// FUN_00430690 (which loads via FUN_004307f0 into the set-archive global
-// DAT_00461180). See files/decomp/stage-notes.md.
-void CyberflixEngine::openSetFile(const Common::String &name) {
+// opensetfile(name[, scene[, view]]): open a DATA/*.SET room file and make the
+// optionally named scene/view current. The global changeset() function (BOOTFILE
+// res2) calls opensetfile(setname & '.set', scenename, viewname). Mirrors TI.EXE
+// FUN_00430690 (loads via FUN_004307f0 into the set-archive global DAT_00461180,
+// then resolves the optional scene/view names). See files/decomp/stage-notes.md.
+void CyberflixEngine::openSetFile(const Common::String &name,
+		const Common::String &scene, const Common::String &view) {
 	if (name.empty())
 		return;
 	Common::ScopedPtr<Set> set(new Set());
@@ -284,6 +293,40 @@ void CyberflixEngine::openSetFile(const Common::String &name) {
 	_setScene = -1;
 	_setAngle = 0;
 	debug(1, "Cyberflix: set '%s' open (%u scenes)", name.c_str(), _set->sceneCount());
+
+	if (!scene.empty()) {
+		// View names ("view14") select the initial camera angle within the
+		// scene's panorama; the name->heading mapping lives in the view
+		// directory (TI.EXE FUN_00442b70 / FUN_00426250) which lands with
+		// panorama navigation. Until then the scene renders at angle 0.
+		if (!view.empty())
+			debug(1, "Cyberflix: opensetfile view '%s' pending view-directory support", view.c_str());
+		sendToScene(scene);
+	}
+}
+
+// closesetfile(): drop the open set (TI.EXE builtin 0x2f01; releases the
+// set-archive global DAT_00461180).
+void CyberflixEngine::closeSetFile() {
+	_set.reset();
+	_setScene = -1;
+	_setAngle = 0;
+}
+
+// currentset(): the open set's name, or 'none' (TI.EXE builtin 0x4e55; the
+// global changeset() compares it against 'none' to decide on closesetfile()).
+Common::String CyberflixEngine::currentSet() {
+	if (_set && _set->isOpen())
+		return _set->name();
+	return "none";
+}
+
+// actionframe(n): did the last movie display its n'th action-cue frame?
+// Mirrors TI.EXE FUN_004362c0 reading the DAT_0046112a bitmask (n in 1..2).
+bool CyberflixEngine::actionFrame(int n) {
+	if (n < 1 || n > 2)
+		return false;
+	return (_actionFrameMask & (1 << (n - 1))) != 0;
 }
 
 // sendtoscene(name): select a scene of the open set by name and render it.
@@ -371,8 +414,14 @@ Common::Error CyberflixEngine::run() {
 	_system->updateScreen();
 
 	// Drive the boot script. BOOTFILE holds the master header plus two script
-	// resources (info tag 0x0FA1); the first is the boot/intro script that, once
-	// its CD check is excised, runs engine setup and plays the intro movies.
+	// resources (info tag 0x0FA1): res1 is the boot script (its first
+	// definition `boot()` runs engine setup, the CD check, the intro movies
+	// and the menu branch; later definitions are event handlers like
+	// keydown()), and res2 is the GLOBAL function library (changeset, initall,
+	// advanceday, advancetour, ... — see files/decomp/stage-notes.md). Both
+	// stay registered on the VM's dispatch scope chain for the lifetime of the
+	// session, mirroring the TI.EXE chain [current script, global library]
+	// built by FUN_0040ad80.
 	Common::File bootFile;
 	if (!bootFile.open("BOOTFILE")) {
 		warning("Cyberflix: could not locate DATA/BOOTFILE");
@@ -385,35 +434,38 @@ Common::Error CyberflixEngine::run() {
 		return Common::kUnknownError;
 	}
 
-	int bootScriptIndex = -1;
 	for (uint32 i = 0; i < boot.getResourceCount(); ++i) {
 		const Archive::Resource &res = boot.getResource(i);
-		if (!res.empty && res.info == Script::kScriptInfoTag) {
-			bootScriptIndex = (int)i;
-			break;
+		if (res.empty || res.info != Script::kScriptInfoTag)
+			continue;
+		Common::SeekableReadStream *scriptStream = boot.createReadStreamForResource(i);
+		Common::ScopedPtr<Script> script(new Script());
+		bool parsed = scriptStream && script->parse(scriptStream);
+		delete scriptStream;
+		if (!parsed) {
+			warning("Cyberflix: failed to parse BOOTFILE script resource %u", i);
+			continue;
 		}
+		if (!_bootScript)
+			_bootScript.reset(script.release());
+		else if (!_globalLib)
+			_globalLib.reset(script.release());
 	}
-	if (bootScriptIndex < 0) {
+	if (!_bootScript) {
 		warning("Cyberflix: BOOTFILE has no script resource");
 		return Common::kUnknownError;
 	}
 
-	Common::SeekableReadStream *scriptStream =
-			boot.createReadStreamForResource((uint32)bootScriptIndex);
-	Script bootScript;
-	bool parsed = scriptStream && bootScript.parse(scriptStream);
-	delete scriptStream;
-	if (!parsed) {
-		warning("Cyberflix: failed to parse boot script resource %d", bootScriptIndex);
-		return Common::kUnknownError;
-	}
-
-	if (!exciseBootCdCheck(bootScript))
+	if (!exciseBootCdCheck(*_bootScript))
 		warning("Cyberflix: boot script CD check not found; running unmodified");
 
-	ScriptVM vm;
-	vm.setHost(this);
-	vm.runProgram(bootScript);
+	_vm.setHost(this);
+	// Searched newest-first: boot res1 handlers shadow the global library,
+	// matching the per-dispatch chain order in TI.EXE FUN_0040ad80.
+	if (_globalLib)
+		_vm.addLibrary(_globalLib.get());
+	_vm.addLibrary(_bootScript.get());
+	_vm.runProgram(*_bootScript);
 
 	// Minimal event loop so the window stays responsive after the boot script
 	// returns, until the main interactive loop lands.
@@ -660,6 +712,13 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// master header flags byte (+0x18) has bit 0 set.
 	bool movieSkippable = false;
 
+	// Action-cue frame indices, resolved from the master header's two cue-name
+	// fields at +0x40/+0x50 (TI.EXE FUN_0040ca80 resolves them via FUN_0040e050
+	// before the frame loop). Reaching cue N during playback sets bit N of the
+	// action-frame mask that the script builtin actionframe(N) tests.
+	int actionCue1 = -1, actionCue2 = -1;
+	_actionFrameMask = 0; // playmovie clears the mask (TI.EXE FUN_00446f80)
+
 	int masterIdx = -1;
 	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
 		if (!archive.getResource(i).empty && archive.getResource(i).info == kMasterHeaderInfoTag) {
@@ -801,6 +860,12 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				cumMs += holdMs;
 			}
 			frameStartMs.push_back(cumMs); // total movie duration
+
+			// 3. Action-cue frames: resolve the master header's cue names
+			//    against the per-frame name column (TI.EXE iVar12/iVar9 in
+			//    FUN_0040ca80). Missing names resolve to -1 (never matched).
+			actionCue1 = resolveFrameName(pfName, readPascalString(hdr + 0x40, fileData));
+			actionCue2 = resolveFrameName(pfName, readPascalString(hdr + 0x50, fileData));
 		}
 	}
 
@@ -917,6 +982,14 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		}
 
 		const bool interactive = usePF && fi < pfButtons.size() && !pfButtons[fi].empty();
+
+		// Record action-cue hits for the actionframe() builtin. The original
+		// ORs the bits after decoding every frame it iterates (FUN_0043b800
+		// call sites 0x0040d19a/0x0040d1af), clicked-to frames included.
+		if ((int)fi == actionCue1)
+			_actionFrameMask |= 1;
+		if ((int)fi == actionCue2)
+			_actionFrameMask |= 2;
 
 		// Current playback clock: real audio position while the track plays,
 		// else elapsed wall time (covers the post-music fade and silent movies).
