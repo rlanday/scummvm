@@ -24,6 +24,8 @@
 
 #include "common/random.h"
 #include "common/error.h"
+#include "common/hashmap.h"
+#include "common/hash-str.h"
 
 #include "engines/engine.h"
 
@@ -34,11 +36,24 @@ namespace Cyberflix {
 
 class Console;
 class Script;
+}
 
-// The original ran in a 640x480, 8-bit palettised WinG framebuffer.
+namespace Common {
+class PEResources;
+}
+
+namespace Graphics {
+struct WinCursorGroup;
+}
+
+namespace Cyberflix {
+
+// The game renders into a 512x384, 8-bit palettised framebuffer (the menu and
+// in-game node images are full 512x384; the LOGO movie's frames are 512x264 and
+// sit letterboxed within it).
 enum {
-	kScreenWidth = 640,
-	kScreenHeight = 480
+	kScreenWidth = 512,
+	kScreenHeight = 384
 };
 
 class CyberflixEngine : public Engine, public VMHost {
@@ -67,9 +82,28 @@ private:
 	 */
 	static bool exciseBootCdCheck(Script &script);
 
+	/**
+	 * Install the named mouse cursor, decoding it on demand from the user's
+	 * copy of TI.EXE. The cursor bitmaps are copyrighted game assets, so they
+	 * are never embedded in ScummVM: they are read at runtime from the game's
+	 * PE executable (RT_GROUP_CURSOR resources named CURS.ARROW, CURS.HAND, ...
+	 * documented in files/decomp/movie-playback.md). The PEResources handle and
+	 * decoded cursor groups are cached for reuse. Returns true on success.
+	 */
+	bool setGameCursor(const Common::String &name);
+
+	/** Lazily open the game's TI.EXE for resource access. Returns nullptr if
+	 *  it cannot be found (the game can still run without a custom cursor). */
+	Common::PEResources *gameExe();
+
 	const CyberflixGameDescription *_gameDescription;
 	Common::RandomSource _rnd;
 	Console *_console;
+
+	Common::PEResources *_exe = nullptr;
+	bool _exeTried = false;
+	Common::HashMap<Common::String, Graphics::WinCursorGroup *> _cursorCache;
+	Common::String _activeCursor;
 };
 
 } // End of namespace Cyberflix

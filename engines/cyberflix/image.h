@@ -101,6 +101,13 @@ struct CelImage {
 static const uint32 kFrameInfoTag = 0x02000108;
 
 /**
+ * High half of a full-screen frame's @c info word (the low half is the height).
+ * 0x02000108 is a 512x264 video frame; 0x02000180 is a 512x384 menu frame. Both
+ * decode with the same FrameSequence, so detect frames by this high half.
+ */
+static const uint32 kFrameInfoHigh = 0x0200;
+
+/**
  * A decoded full-screen frame: an 8-bit palettised image, @c width * @c height
  * pixels packed at a stride equal to @c width.
  *

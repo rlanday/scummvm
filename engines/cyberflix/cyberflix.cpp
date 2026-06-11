@@ -36,9 +36,13 @@
 #include "audio/mixer.h"
 #include "audio/decoders/raw.h"
 
+#include "common/formats/winexe_pe.h"
+
+#include "graphics/cursorman.h"
 #include "graphics/palette.h"
 #include "graphics/paletteman.h"
 #include "graphics/surface.h"
+#include "graphics/wincursor.h"
 
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/archive.h"
@@ -88,12 +92,44 @@ static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, u
 	}
 }
 
+// A clickable region on an interactive movie frame. The original player reads
+// these as 0x40-byte records starting at event chunk +0x446 (the count is
+// (resourceLen - 0x446) / 0x40); FUN_0040d710 hit-tests the rect against the
+// click point and runs the action. Field offsets within the record:
+//   +0x00 u16 action (1=END, 2=GOTO target, 6=NEXT, 7=PREV),
+//   +0x02 byte flags (bit0 => also require a per-pixel mask hit; our menu
+//         buttons clear it so a rect hit is enough),
+//   +0x08 rect {left, top, right, bottom} as int16 (see FUN_0041ac60),
+//   +0x30 Pascal string = GOTO target frame name (for action 2).
+struct MovieButton {
+	uint16 action;
+	int16 left, top, right, bottom;
+	Common::String target;
+	bool contains(int x, int y) const {
+		return x >= left && x < right && y >= top && y < bottom;
+	}
+};
+
+// Resolve a frame name (as used by GOTO buttons) to its index in the per-frame
+// table, mirroring FUN_0040e050. Returns -1 if not found.
+static int resolveFrameName(const Common::Array<Common::String> &names, const Common::String &target) {
+	for (uint i = 0; i < names.size(); ++i)
+		if (names[i].equalsIgnoreCase(target))
+			return (int)i;
+	return -1;
+}
+
+
 CyberflixEngine::CyberflixEngine(OSystem *syst, const CyberflixGameDescription *gameDesc) :
 		Engine(syst), _gameDescription(gameDesc), _rnd("cyberflix"), _console(nullptr) {
 }
 
 CyberflixEngine::~CyberflixEngine() {
 	// _console is owned by the debugger registered with the engine framework.
+	for (Common::HashMap<Common::String, Graphics::WinCursorGroup *>::iterator
+			it = _cursorCache.begin(); it != _cursorCache.end(); ++it)
+		delete it->_value;
+	delete _exe;
 }
 
 int CyberflixEngine::getGameType() const {
@@ -114,6 +150,62 @@ Common::Platform CyberflixEngine::getPlatform() const {
 
 bool CyberflixEngine::hasFeature(EngineFeature f) const {
 	return (f == kSupportsReturnToLauncher);
+}
+
+// The cursor bitmaps are copyrighted game art, so they are loaded at runtime
+// from the player's own TI.EXE rather than shipped with ScummVM. TI.EXE is the
+// CyberFlix "Bicycle" runtime; in an installed game it lives under INSTALL/BINX
+// (or INSTALL/BIN). It is a Win32 PE whose RT_GROUP_CURSOR resources are named
+// CURS.ARROW, CURS.HAND, CURS.GOUP, ... (see files/decomp/movie-playback.md).
+Common::PEResources *CyberflixEngine::gameExe() {
+	if (_exeTried)
+		return _exe;
+	_exeTried = true;
+
+	const Common::FSNode gameDir(ConfMan.getPath("path"));
+	static const char *const candidates[][3] = {
+		{ "INSTALL", "BINX", "TI.EXE" },
+		{ "INSTALL", "BIN", "TI.EXE" }
+	};
+	for (uint c = 0; c < ARRAYSIZE(candidates); ++c) {
+		Common::FSNode node = gameDir.getChild(candidates[c][0])
+				.getChild(candidates[c][1]).getChild(candidates[c][2]);
+		if (!node.exists())
+			continue;
+		Common::SeekableReadStream *stream = node.createReadStream();
+		if (!stream)
+			continue;
+		Common::PEResources *exe = new Common::PEResources();
+		if (exe->loadFromEXE(stream, DisposeAfterUse::YES)) {
+			_exe = exe;
+			return _exe;
+		}
+		delete exe; // disposes stream
+	}
+	warning("Cyberflix: could not locate TI.EXE for cursor resources");
+	return nullptr;
+}
+
+bool CyberflixEngine::setGameCursor(const Common::String &name) {
+	if (_activeCursor == name && _cursorCache.contains(name))
+		return true;
+
+	Graphics::WinCursorGroup *group = nullptr;
+	if (_cursorCache.contains(name)) {
+		group = _cursorCache[name];
+	} else {
+		Common::PEResources *exe = gameExe();
+		if (!exe)
+			return false;
+		group = Graphics::WinCursorGroup::createCursorGroup(exe, Common::WinResourceID(name));
+		_cursorCache[name] = group; // cache even nullptr to avoid re-parsing
+	}
+	if (!group || group->cursors.empty())
+		return false;
+
+	CursorMan.replaceCursor(group->cursors[0].cursor);
+	_activeCursor = name;
+	return true;
 }
 
 Common::Error CyberflixEngine::run() {
@@ -272,18 +364,17 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		return;
 	}
 
-	// Video frames are the resources tagged kFrameInfoTag; that tag doubles as
-	// the frame's {uint16 H, uint16 P} header, so the decoder source begins four
-	// bytes before the payload (see image.h / Console::cmdShowMovie).
+	// Full-screen frames are the resources whose info word's high half is 0x0200;
+	// that word doubles as the frame's {uint16 H, uint16 W} header (W is always
+	// 512, H is the low half: 264 for LOGO video, 384 for the PLAYMODE menu), so
+	// the decoder source begins four bytes before the payload (see image.h). This
+	// linear scan is only a fallback frame order; when the movie has a master
+	// header we drive playback from its authoritative per-frame table below.
 	Common::Array<uint32> frames;
 	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
 		const Archive::Resource &res = archive.getResource(i);
-		if (!res.empty && res.info == kFrameInfoTag && res.dataOffset >= 4)
+		if (!res.empty && (res.info >> 16) == kFrameInfoHigh && res.dataOffset >= 4)
 			frames.push_back(i);
-	}
-	if (frames.empty()) {
-		warning("Cyberflix: movie '%s' has no video frames", name.c_str());
-		return;
 	}
 
 	// Build the soundtrack. A linear movie's master header (info==0x40000)
@@ -305,6 +396,18 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// duration. Built from the per-frame event chunks below. Empty => no usable
 	// master header, in which case the frame loop falls back to a fixed cadence.
 	Common::Array<uint32> frameStartMs;
+	// Per-frame table, captured from the master header: the video resource id to
+	// composite (event record +0xc) and the navigation command of its event
+	// chunk (event chunk +0: 6 = NEXT, 1 = HOLD/wait). When populated this is the
+	// authoritative playback order; the kFrameInfoHigh scan above is the fallback.
+	Common::Array<uint32> pfVideoRes;
+	Common::Array<uint16> pfNavCmd;
+	// Per-frame name (event record +0x1a, Pascal) used to resolve GOTO targets,
+	// and the per-frame interactive button table (empty => non-interactive frame
+	// that obeys its nav command; non-empty => the player holds the frame and
+	// waits for a click, as the main menu does).
+	Common::Array<Common::String> pfName;
+	Common::Array<Common::Array<MovieButton> > pfButtons;
 
 	int masterIdx = -1;
 	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
@@ -374,10 +477,39 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 					break;
 				const byte *eb = nullptr;
 				uint32 eventId = READ_LE_UINT32(rec + 0x10);
-				if (eventId < archive.getResourceCount())
+				uint32 ebLen = 0;
+				if (eventId < archive.getResourceCount()) {
 					eb = engineBase(fileData, archive.getResource(eventId));
+					ebLen = archive.getResource(eventId).length;
+				}
 
 				frameStartMs.push_back(cumMs);
+				pfVideoRes.push_back(READ_LE_UINT32(rec + 0xc));
+				pfNavCmd.push_back((eb && eb + 2 <= fileData.end())
+						? READ_LE_UINT16(eb) : 6 /* default NEXT */);
+				pfName.push_back(readPascalString(rec + 0x1a, fileData));
+
+				// Interactive buttons: any bytes past the 0x446-byte event-chunk
+				// base are 0x40-byte button records (the original reads the count
+				// from the parser's allocated struct at +0x221; the raw resource
+				// only stores as many records as fit past the base, so the size
+				// delta is the reliable count).
+				Common::Array<MovieButton> buttons;
+				uint32 btnCount = (eb && ebLen > 0x446) ? (ebLen - 0x446) / 0x40 : 0;
+				for (uint32 b = 0; b < btnCount; ++b) {
+					const byte *br = eb + 0x446 + b * 0x40;
+					if (br + 0x40 > fileData.end())
+						break;
+					MovieButton mb;
+					mb.action = READ_LE_UINT16(br);
+					mb.left   = (int16)READ_LE_UINT16(br + 8);
+					mb.top    = (int16)READ_LE_UINT16(br + 10);
+					mb.right  = (int16)READ_LE_UINT16(br + 12);
+					mb.bottom = (int16)READ_LE_UINT16(br + 14);
+					mb.target = readPascalString(br + 0x30, fileData);
+					buttons.push_back(mb);
+				}
+				pfButtons.push_back(buttons);
 
 				// Mix this frame's SFX (if it names a cue and we have a track).
 				if (eb && !pcmBuf.empty()) {
@@ -453,56 +585,173 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	bool skip = false;
 	Common::Event event;
 
+	// A movie is interactive if any frame carries buttons (the main menu). Such
+	// movies loop their soundtrack while they wait for the user; linear movies
+	// (the logo) play their track once.
+	bool hasInteractive = false;
+	for (uint i = 0; i < pfButtons.size(); ++i)
+		if (!pfButtons[i].empty()) {
+			hasInteractive = true;
+			break;
+		}
+
+	// The original movie player shows the Windows arrow cursor while an
+	// interactive frame (the menu) is up and hides it during linear playback
+	// (FUN_004051b0/FUN_00405210, gated by movie flag bit 0x10). Mirror that:
+	// the arrow is decoded on demand from the user's TI.EXE.
+	if (hasInteractive && setGameCursor("CURS.ARROW"))
+		CursorMan.showMouse(true);
+	else
+		CursorMan.showMouse(false);
+
 	Audio::SoundHandle audioHandle;
 	if (pcm && pcmLen) {
 		Audio::SeekableAudioStream *stream = Audio::makeRawStream(
 				pcm, pcmLen, kAudioSampleRate, Audio::FLAG_UNSIGNED,
 				DisposeAfterUse::YES);
-		_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, stream);
+		if (hasInteractive) {
+			Audio::AudioStream *loop = new Audio::LoopingAudioStream(stream, 0);
+			_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, loop);
+		} else {
+			_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, stream);
+		}
 	} else {
 		free(pcm);
 		pcm = nullptr;
 	}
 
 	debug(0, "Cyberflix: movie '%s' frames=%u audioBytes=%u audioMs=%u",
-			name.c_str(), frames.size(), pcmLen,
+			name.c_str(), pfVideoRes.empty() ? frames.size() : pfVideoRes.size(), pcmLen,
 			pcm ? (uint32)((uint64)pcmLen * 1000 / kAudioSampleRate) : 0);
-	uint32 startMs = _system->getMillis();
-	for (uint32 f = 0; f < frames.size() && !shouldQuit() && !skip; ++f) {
-		const Archive::Resource &res = archive.getResource(frames[f]);
-		if (seq.applyFrame(fileData.begin() + res.dataOffset - 4, res.length + 4) == 0) {
-			warning("Cyberflix: movie '%s' frame %u failed to decode", name.c_str(), f);
+
+	// Composite frames in order into a persistent surface (frames are
+	// inter-coded) and present them. ESC/quit skips.
+	//
+	// There is NO stored frames-per-second field. Each frame carries its own
+	// hold time in its event chunk (offset +2, floored by masterHdr[+0x1c]),
+	// expressed in the scaled-timer units returned by TI.EXE FUN_00405130
+	// (timeGetTime * 0.06, i.e. 1 unit == 1000/60 ms). We precompute the
+	// cumulative start time of every frame into frameStartMs above.
+	//
+	// SYNC: the SFX (e.g. LOGO.MOV's gunshots) are mixed into the soundtrack at
+	// their exact frame time, so they are locked to the music sample-for-sample.
+	// To keep the *picture* locked to those sounds even when frame decoding/blit
+	// lags, we clock the video off the real audio position (the mixer's elapsed
+	// time) rather than a free-running wall clock, and DROP the present of any
+	// frame whose slot has already passed (still decoding it, since frames are
+	// inter-coded). This mirrors the original's adaptive frame-drop in
+	// FUN_0040e8b0. Once the music ends (the video timeline can run ~0.75 s
+	// longer than the music, e.g. LOGO's trailing fade) we continue on the wall
+	// clock so the fade still plays out.
+	const bool usePF = !pfVideoRes.empty();
+	const uint32 frameCount = usePF ? pfVideoRes.size() : frames.size();
+	if (frameCount == 0)
+		warning("Cyberflix: movie '%s' has no frames to show", name.c_str());
+
+	const uint32 wallStartMs = _system->getMillis();
+	uint32 fi = 0;
+	while (fi < frameCount && !shouldQuit() && !skip) {
+		uint32 resIdx = usePF ? pfVideoRes[fi] : frames[fi];
+		if (resIdx >= archive.getResourceCount())
+			break;
+		const Archive::Resource &res = archive.getResource(resIdx);
+		if (res.empty || res.dataOffset < 4 ||
+				seq.applyFrame(fileData.begin() + res.dataOffset - 4, res.length + 4) == 0) {
+			warning("Cyberflix: movie '%s' frame %u failed to decode", name.c_str(), fi);
 			break;
 		}
 
+		const bool interactive = usePF && fi < pfButtons.size() && !pfButtons[fi].empty();
+
+		// Current playback clock: real audio position while the track plays,
+		// else elapsed wall time (covers the post-music fade and silent movies).
+		uint32 nowMs = (pcm && _mixer->isSoundHandleActive(audioHandle))
+				? _mixer->getSoundElapsedTime(audioHandle)
+				: (_system->getMillis() - wallStartMs);
+		uint32 frameEndMs = (fi + 1 < frameStartMs.size())
+				? frameStartMs[fi + 1] : (fi + 1) * kFallbackFrameDelayMs;
+
+		// Drop the present of a late linear frame to let the picture catch up to
+		// the audio; always present interactive frames (the menu) and the last.
+		bool present = interactive || nowMs < frameEndMs || fi + 1 >= frameCount;
+
 		const byte *pixels = seq.pixels();
 		int w = seq.width(), h = seq.height();
-
 		int x0 = (kScreenWidth - w) / 2;
 		int y0 = (kScreenHeight - h) / 2;
-		Graphics::Surface *screen = _system->lockScreen();
-		for (int y = 0; y < h; ++y) {
-			int sy = y0 + y;
-			if (sy < 0 || sy >= kScreenHeight)
-				continue;
-			for (int x = 0; x < w; ++x) {
-				int sx = x0 + x;
-				if (sx >= 0 && sx < kScreenWidth)
-					*((byte *)screen->getBasePtr(sx, sy)) = pixels[(uint)y * w + x];
+		if (present) {
+			Graphics::Surface *screen = _system->lockScreen();
+			for (int y = 0; y < h; ++y) {
+				int sy = y0 + y;
+				if (sy < 0 || sy >= kScreenHeight)
+					continue;
+				for (int x = 0; x < w; ++x) {
+					int sx = x0 + x;
+					if (sx >= 0 && sx < kScreenWidth)
+						*((byte *)screen->getBasePtr(sx, sy)) = pixels[(uint)y * w + x];
+				}
 			}
+			_system->unlockScreen();
+			_system->updateScreen();
 		}
-		_system->unlockScreen();
-		_system->updateScreen();
 
-		// Hold this frame until its real on-screen end time (the next frame's
-		// start, from the precomputed timeline), measured on a wall clock so the
-		// video keeps its authored pacing even past the end of the music. Falls
-		// back to a fixed cadence when there is no timeline.
-		uint32 until;
-		if (f + 1 < frameStartMs.size())
-			until = frameStartMs[f + 1];
-		else
-			until = (f + 1) * kFallbackFrameDelayMs;
+		if (interactive) {
+			// Interactive frame (the main menu): the original player suppresses
+			// the frame's nav command and waits on the button table
+			// (FUN_0040d710). Hold here, looping the soundtrack, until the user
+			// clicks a button or quits. A click inside a button rect runs its
+			// action: GOTO jumps to the named frame, NEXT/PREV step, END (and any
+			// click on an action-1 button) returns from the movie.
+			int32 nextFi = -1;
+			while (nextFi < 0 && !shouldQuit() && !skip) {
+				while (_eventMan->pollEvent(event)) {
+					if (event.type == Common::EVENT_KEYDOWN &&
+							event.kbd.keycode == Common::KEYCODE_ESCAPE) {
+						skip = true;
+					} else if (event.type == Common::EVENT_LBUTTONDOWN) {
+						int fx = event.mouse.x - x0;
+						int fy = event.mouse.y - y0;
+						for (uint b = 0; b < pfButtons[fi].size(); ++b) {
+							const MovieButton &mb = pfButtons[fi][b];
+							if (!mb.contains(fx, fy))
+								continue;
+							if (mb.action == 2) { // GOTO target frame
+								int idx = resolveFrameName(pfName, mb.target);
+								nextFi = (idx >= 0) ? idx : (int32)fi;
+							} else if (mb.action == 6) { // NEXT
+								nextFi = (fi + 1 < frameCount) ? (int32)(fi + 1) : (int32)fi;
+							} else if (mb.action == 7) { // PREV
+								nextFi = (fi > 0) ? (int32)(fi - 1) : 0;
+							} else { // END / unsupported -> leave the movie
+								skip = true;
+							}
+							break;
+						}
+					}
+				}
+				if (nextFi < 0 && !skip) {
+					// Composite the cursor at its new position and keep the
+					// window live. ScummVM draws the mouse during updateScreen,
+					// so without this the cursor would appear frozen.
+					_system->updateScreen();
+					_system->delayMillis(10);
+				}
+			}
+			if (nextFi >= 0)
+				fi = (uint32)nextFi;
+			continue;
+		}
+
+		uint16 nav = usePF ? pfNavCmd[fi] : 6;
+		if (nav == 1) {
+			// END: nav cmd 1 is the last-frame marker. The original player
+			// (FUN_0040ca80: when FUN_0040d710 returns 1 -> goto cleanup) shows
+			// this frame and then RETURNS from playback, leaving it on screen.
+			break;
+		}
+
+		// NEXT (cmd 6, and any not-yet-implemented command): wait until this
+		// frame's authored end time on the playback clock, then advance.
 		for (;;) {
 			while (_eventMan->pollEvent(event)) {
 				if (event.type == Common::EVENT_KEYDOWN &&
@@ -511,13 +760,21 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			}
 			if (shouldQuit() || skip)
 				break;
-			if (_system->getMillis() - startMs >= until)
+			uint32 t = (pcm && _mixer->isSoundHandleActive(audioHandle))
+					? _mixer->getSoundElapsedTime(audioHandle)
+					: (_system->getMillis() - wallStartMs);
+			if (t >= frameEndMs)
 				break;
 			_system->delayMillis(5);
 		}
+		++fi;
 	}
 
 	_mixer->stopHandle(audioHandle);
+
+	// Leave the cursor hidden when we hand control back; the next interactive
+	// movie/node re-shows it.
+	CursorMan.showMouse(false);
 }
 
 } // End of namespace Cyberflix
