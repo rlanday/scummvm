@@ -276,6 +276,12 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x2f26: // sendtostage(node)
 			_host->sendToStage(args.empty() ? 0 : args[0].intValue);
 			break;
+		case 0x2f00: // opensetfile('name.set') -> TI.EXE FUN_00430690
+			_host->openSetFile(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x2f02: // sendtoscene('scenename') -> TI.EXE FUN_004311e0/FUN_00431200
+			_host->sendToScene(args.empty() ? Common::String() : args[0].strValue);
+			break;
 		default:
 			break;
 		}

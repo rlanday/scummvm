@@ -38,6 +38,7 @@ namespace Cyberflix {
 class Console;
 class Script;
 class Stage;
+class Set;
 }
 
 namespace Common {
@@ -81,6 +82,8 @@ public:
 	void playMovie(const Common::String &name) override;
 	void openStageFile(const Common::String &name) override;
 	void sendToStage(int node) override;
+	void openSetFile(const Common::String &name) override;
+	void sendToScene(const Common::String &scene) override;
 
 private:
 	/**
@@ -113,6 +116,16 @@ private:
 	void renderStageNode(int node);
 
 	/**
+	 * Render the current angle of scene @p scene of the currently open set to the
+	 * screen: replay the panorama frames up to the camera angle (cold-start buffer
+	 * state), apply the set palette and show the navigation cursor. Mirrors the
+	 * background-paint half of TI.EXE FUN_00431200 (sendtoscene). @p angle is the
+	 * panorama index; the heading-to-view selection (FUN_00442b70 / FUN_00426250)
+	 * lands with panorama navigation.
+	 */
+	void renderSetScene(int scene, int angle);
+
+	/**
 	 * Process the global/movie keyboard shortcuts that the original handles
 	 * during playback, mirroring TI.EXE's WndProc (FUN_00403690) and movie key
 	 * handler (FUN_0040e430): Esc / Ctrl+Q / Ctrl+. skip (when @p skippable),
@@ -137,6 +150,9 @@ private:
 	Common::String _activeCursor;
 
 	Common::ScopedPtr<Stage> _stage; ///< Currently open stage (DATA/*.STG), or null.
+	Common::ScopedPtr<Set> _set;     ///< Currently open set (DATA/*.SET), or null.
+	int _setScene = -1;              ///< Active scene index within _set, or -1.
+	int _setAngle = 0;               ///< Active panorama angle within _setScene.
 };
 
 } // End of namespace Cyberflix

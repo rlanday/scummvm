@@ -39,7 +39,7 @@
 
 namespace Cyberflix {
 
-Console::Console(CyberflixEngine *engine) : GUI::Debugger() {
+Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
 	registerCmd("dumpArchive", WRAP_METHOD(Console, cmdDumpArchive));
 	registerCmd("disasm", WRAP_METHOD(Console, cmdDisasm));
 	registerCmd("vmtrace", WRAP_METHOD(Console, cmdVmTrace));
@@ -49,6 +49,7 @@ Console::Console(CyberflixEngine *engine) : GUI::Debugger() {
 	registerCmd("showmovie", WRAP_METHOD(Console, cmdShowMovie));
 	registerCmd("shownode", WRAP_METHOD(Console, cmdShowNode));
 	registerCmd("showset", WRAP_METHOD(Console, cmdShowSet));
+	registerCmd("changeset", WRAP_METHOD(Console, cmdChangeSet));
 }
 
 bool Console::cmdDumpArchive(int argc, const char **argv) {
@@ -654,6 +655,32 @@ bool Console::cmdShowSet(int argc, const char **argv) {
 	g_system->getPaletteManager()->setPalette(rgb, 0, 256);
 	g_system->updateScreen();
 	debugPrintf("Blitted. Close the console to view.\n");
+	return true;
+}
+
+bool Console::cmdChangeSet(int argc, const char **argv) {
+	if (argc < 2) {
+		debugPrintf("Drives the engine host path opensetfile()+sendtoscene()\n");
+		debugPrintf("(the script-level changeset wrapper): opens a SET as the active\n");
+		debugPrintf("room and renders a scene with palette and navigation cursor.\n");
+		debugPrintf("Usage: %s <setfile> [scene]\n", argv[0]);
+		debugPrintf("  scene: name (e.g. Scene1), default = first scene\n");
+		debugPrintf("  e.g. %s DATA/BEDSIT1.SET Scene1\n", argv[0]);
+		return true;
+	}
+
+	_engine->openSetFile(argv[1]);
+
+	// Default to the first scene when none is named, matching showset's listing.
+	Common::String scene = (argc >= 3) ? Common::String(argv[2]) : Common::String();
+	if (scene.empty()) {
+		Set probe;
+		if (probe.open(argv[1]) && probe.sceneCount() > 0)
+			scene = probe.sceneName(0);
+	}
+	_engine->sendToScene(scene);
+	debugPrintf("changeset('%s', '%s') issued. Close the console to view.\n",
+			argv[1], scene.c_str());
 	return true;
 }
 

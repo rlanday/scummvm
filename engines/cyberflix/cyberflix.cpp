@@ -51,6 +51,7 @@
 #include "cyberflix/console.h"
 #include "cyberflix/image.h"
 #include "cyberflix/script.h"
+#include "cyberflix/set.h"
 #include "cyberflix/sound.h"
 #include "cyberflix/stage.h"
 #include "cyberflix/vm.h"
@@ -265,6 +266,85 @@ void CyberflixEngine::renderStageNode(int node) {
 
 	debug(1, "Cyberflix: rendered stage '%s' node %d (%ux%u)",
 			_stage->name().c_str(), node, frame.width, frame.height);
+}
+
+// opensetfile(name): open a DATA/*.SET room file. The MAIN.STG node-0 ENTER
+// script's changeset() wrapper calls this before sendtoscene(). Mirrors TI.EXE
+// FUN_00430690 (which loads via FUN_004307f0 into the set-archive global
+// DAT_00461180). See files/decomp/stage-notes.md.
+void CyberflixEngine::openSetFile(const Common::String &name) {
+	if (name.empty())
+		return;
+	Common::ScopedPtr<Set> set(new Set());
+	if (!set->open(name)) {
+		warning("Cyberflix: opensetfile('%s') failed", name.c_str());
+		return;
+	}
+	_set.reset(set.release());
+	_setScene = -1;
+	_setAngle = 0;
+	debug(1, "Cyberflix: set '%s' open (%u scenes)", name.c_str(), _set->sceneCount());
+}
+
+// sendtoscene(name): select a scene of the open set by name and render it.
+// Mirrors TI.EXE FUN_004311e0 -> FUN_00431200 (scene resolved by name via
+// FUN_00432f30). The full path runs the scene's behavior script; for now we
+// paint its panorama background so the room is visible.
+void CyberflixEngine::sendToScene(const Common::String &scene) {
+	if (!_set || !_set->isOpen()) {
+		warning("Cyberflix: sendtoscene('%s') with no set open", scene.c_str());
+		return;
+	}
+	int index = _set->findScene(scene);
+	if (index < 0) {
+		warning("Cyberflix: set '%s' has no scene named '%s'",
+				_set->name().c_str(), scene.c_str());
+		return;
+	}
+	renderSetScene(index, 0);
+}
+
+void CyberflixEngine::renderSetScene(int scene, int angle) {
+	if (!_set || !_set->isOpen()) {
+		warning("Cyberflix: renderSetScene with no set open");
+		return;
+	}
+
+	FrameImage frame;
+	if (!_set->renderScene((uint32)scene, 0, (uint32)angle, frame))
+		return;
+
+	_setScene = scene;
+	_setAngle = angle;
+
+	byte rgb[256 * 3];
+	memset(rgb, 0, sizeof(rgb));
+	if (_set->loadSetPalette(rgb))
+		_system->getPaletteManager()->setPalette(rgb, 0, 256);
+
+	Graphics::Surface *screen = _system->lockScreen();
+	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	int x0 = (kScreenWidth - frame.width) / 2;
+	int y0 = (kScreenHeight - frame.height) / 2;
+	for (int y = 0; y < frame.height; ++y) {
+		for (int x = 0; x < frame.width; ++x) {
+			int sx = x0 + x, sy = y0 + y;
+			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
+				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
+		}
+	}
+	_system->unlockScreen();
+
+	// Default arrow until per-view hotspot hit-testing (directional cursors) is
+	// implemented. Views (the scene's hotspot lists) are documented in
+	// files/decomp/stage-notes.md.
+	if (setGameCursor("CURS.ARROW"))
+		CursorMan.showMouse(true);
+	_system->updateScreen();
+
+	debug(1, "Cyberflix: rendered set '%s' scene %d '%s' angle %d (%ux%u)",
+			_set->name().c_str(), scene, _set->sceneName((uint32)scene).c_str(),
+			angle, frame.width, frame.height);
 }
 
 Common::Error CyberflixEngine::run() {

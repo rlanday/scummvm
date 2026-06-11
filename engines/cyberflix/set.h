@@ -124,10 +124,10 @@ public:
 	uint32 angleCount(uint32 scene, uint32 table) const;
 
 	/**
-	 * Decode scene @p scene's background for panorama @p table (0 = A, 1 = B) at
-	 * camera @p angle into @p out. Each panorama frame is a standalone keyframe,
-	 * so no inter-frame replay is needed. Returns false on a bad index or a
-	 * malformed frame.
+	 * Render scene @p scene's background for panorama @p table (0 = A, 1 = B) at
+	 * camera @p angle into @p out. The panorama is a cyclic delta-animation, so
+	 * frames 0..angle are replayed onto a retained buffer (the engine's cold-start
+	 * state); see the class doc. Returns false on a bad index or malformed frame.
 	 */
 	bool renderScene(uint32 scene, uint32 table, uint32 angle, FrameImage &out);
 

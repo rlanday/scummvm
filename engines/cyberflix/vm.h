@@ -81,6 +81,12 @@ public:
 
 	/** Navigate to (and render) node @p node of the open stage. */
 	virtual void sendToStage(int node) {}
+
+	/** Open the set file @p name (a DATA/ basename, e.g. "bedsit1.set"). */
+	virtual void openSetFile(const Common::String &name) {}
+
+	/** Navigate to (and render) the scene named @p scene of the open set. */
+	virtual void sendToScene(const Common::String &scene) {}
 };
 
 /**
