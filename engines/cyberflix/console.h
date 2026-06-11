@@ -58,6 +58,10 @@ private:
 	// Opens a STG deck and renders one of its nodes (exercises the Stage
 	// parser + node renderer used by openstagefile/sendtostage).
 	bool cmdShowNode(int argc, const char **argv);
+
+	// Opens a SET room and renders one scene's panorama background (exercises
+	// the Set parser + scene renderer used by sendtoscene/changeset).
+	bool cmdShowSet(int argc, const char **argv);
 };
 
 } // End of namespace Cyberflix

@@ -34,6 +34,7 @@
 #include "cyberflix/image.h"
 #include "cyberflix/script.h"
 #include "cyberflix/stage.h"
+#include "cyberflix/set.h"
 #include "cyberflix/vm.h"
 
 namespace Cyberflix {
@@ -47,6 +48,7 @@ Console::Console(CyberflixEngine *engine) : GUI::Debugger() {
 	registerCmd("showframe", WRAP_METHOD(Console, cmdShowFrame));
 	registerCmd("showmovie", WRAP_METHOD(Console, cmdShowMovie));
 	registerCmd("shownode", WRAP_METHOD(Console, cmdShowNode));
+	registerCmd("showset", WRAP_METHOD(Console, cmdShowSet));
 }
 
 bool Console::cmdDumpArchive(int argc, const char **argv) {
@@ -559,6 +561,79 @@ bool Console::cmdShowNode(int argc, const char **argv) {
 
 	debugPrintf("Stage '%s': %ux%u, %u node(s); showing node %u (%ux%u), palette %s\n",
 			argv[1], stage.width(), stage.height(), stage.nodeCount(), node,
+			frame.width, frame.height, havePalette ? "loaded" : "MISSING (grayscale)");
+	if (!havePalette)
+		for (int i = 0; i < 256; ++i)
+			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = (byte)i;
+
+	Graphics::Surface *screen = g_system->lockScreen();
+	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	int x0 = (kScreenWidth - frame.width) / 2;
+	int y0 = (kScreenHeight - frame.height) / 2;
+	for (int y = 0; y < frame.height; ++y) {
+		for (int x = 0; x < frame.width; ++x) {
+			int sx = x0 + x, sy = y0 + y;
+			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
+				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
+		}
+	}
+	g_system->unlockScreen();
+	g_system->getPaletteManager()->setPalette(rgb, 0, 256);
+	g_system->updateScreen();
+	debugPrintf("Blitted. Close the console to view.\n");
+	return true;
+}
+
+bool Console::cmdShowSet(int argc, const char **argv) {
+	if (argc < 2) {
+		debugPrintf("Opens a SET room and renders one scene's panorama background\n");
+		debugPrintf("(the room view drawn by sendtoscene/changeset).\n");
+		debugPrintf("Usage: %s <setfile> [scene] [angle] [table]\n", argv[0]);
+		debugPrintf("  scene: name (e.g. Scene1) or index (default 0)\n");
+		debugPrintf("  angle: panorama camera index (default 0)\n");
+		debugPrintf("  table: panorama table 0=A or 1=B (default 0)\n");
+		debugPrintf("  e.g. %s DATA/BEDSIT1.SET Scene1 0\n", argv[0]);
+		return true;
+	}
+
+	Set set;
+	if (!set.open(argv[1])) {
+		debugPrintf("Could not open set '%s' (see warnings)\n", argv[1]);
+		return true;
+	}
+
+	// List the scenes so the user can pick one when none was given.
+	debugPrintf("Set '%s': %ux%u, %u scene(s):", argv[1], set.width(), set.height(), set.sceneCount());
+	for (uint32 i = 0; i < set.sceneCount(); ++i)
+		debugPrintf(" %u=%s", i, set.sceneName(i).c_str());
+	debugPrintf("\n");
+
+	uint32 scene = 0;
+	if (argc >= 3) {
+		int byName = set.findScene(argv[2]);
+		scene = (byName >= 0) ? (uint32)byName : (uint32)strtol(argv[2], nullptr, 0);
+	}
+	if (scene >= set.sceneCount()) {
+		debugPrintf("Scene '%s' not found\n", argc >= 3 ? argv[2] : "0");
+		return true;
+	}
+	uint32 angle = (argc >= 4) ? (uint32)strtol(argv[3], nullptr, 0) : 0;
+	uint32 table = (argc >= 5) ? (uint32)strtol(argv[4], nullptr, 0) : 0;
+
+	debugPrintf("Scene %u '%s': panorama A=%u angles, B=%u angles\n", scene,
+			set.sceneName(scene).c_str(), set.angleCount(scene, 0), set.angleCount(scene, 1));
+
+	FrameImage frame;
+	if (!set.renderScene(scene, table, angle, frame)) {
+		debugPrintf("Scene %u table %u angle %u failed to render (see warnings)\n", scene, table, angle);
+		return true;
+	}
+
+	byte rgb[256 * 3];
+	memset(rgb, 0, sizeof(rgb));
+	bool havePalette = set.loadSetPalette(rgb);
+
+	debugPrintf("Showing scene %u table %u angle %u (%ux%u), palette %s\n", scene, table, angle,
 			frame.width, frame.height, havePalette ? "loaded" : "MISSING (grayscale)");
 	if (!havePalette)
 		for (int i = 0; i < 256; ++i)
