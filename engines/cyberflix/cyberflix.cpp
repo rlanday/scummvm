@@ -408,6 +408,11 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// waits for a click, as the main menu does).
 	Common::Array<Common::String> pfName;
 	Common::Array<Common::Array<MovieButton> > pfButtons;
+	// Per-frame hold duration in ms (event chunk +2 in scaled timer units,
+	// floored by masterHdr[+0x1c]). Used to pace interactive movies frame by
+	// frame (the menu and its pressed-button frames), independent of the audio
+	// timeline that paces linear movies.
+	Common::Array<uint32> pfHoldMs;
 
 	int masterIdx = -1;
 	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
@@ -544,7 +549,9 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 					if (d > units)
 						units = d;
 				}
-				cumMs += (uint32)((uint64)units * 1000 / 60);
+				uint32 holdMs = (uint32)((uint64)units * 1000 / 60);
+				pfHoldMs.push_back(holdMs);
+				cumMs += holdMs;
 			}
 			frameStartMs.push_back(cumMs); // total movie duration
 		}
@@ -672,8 +679,12 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				? frameStartMs[fi + 1] : (fi + 1) * kFallbackFrameDelayMs;
 
 		// Drop the present of a late linear frame to let the picture catch up to
-		// the audio; always present interactive frames (the menu) and the last.
-		bool present = interactive || nowMs < frameEndMs || fi + 1 >= frameCount;
+		// the audio; always present in interactive movies. The original player
+		// blits every frame (FUN_0040e8b0) before running the nav/button
+		// interpreter (FUN_0040d710), so the pressed-button ("squished") frames
+		// reached by a click are always shown. Frame-drop is a sync aid for the
+		// long linear movies (the logo) only.
+		bool present = hasInteractive || nowMs < frameEndMs || fi + 1 >= frameCount;
 
 		const byte *pixels = seq.pixels();
 		int w = seq.width(), h = seq.height();
@@ -743,6 +754,33 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		}
 
 		uint16 nav = usePF ? pfNavCmd[fi] : 6;
+
+		// Interactive movies (the menu and its pressed-button frames) are paced
+		// frame by frame off a local wall clock by each frame's own authored
+		// hold, NOT the global audio timeline (a click jumps around the frame
+		// table, so cumulative audio time is meaningless here). This is what
+		// makes the "squished" pressed-button frame visible for its hold before
+		// the menu returns.
+		if (hasInteractive) {
+			uint32 holdMs = (fi < pfHoldMs.size()) ? pfHoldMs[fi] : kFallbackFrameDelayMs;
+			uint32 holdStart = _system->getMillis();
+			while (!shouldQuit() && !skip) {
+				while (_eventMan->pollEvent(event)) {
+					if (event.type == Common::EVENT_KEYDOWN &&
+							event.kbd.keycode == Common::KEYCODE_ESCAPE)
+						skip = true;
+				}
+				if (_system->getMillis() - holdStart >= holdMs)
+					break;
+				_system->updateScreen();
+				_system->delayMillis(5);
+			}
+			if (nav == 1)
+				break; // END: leave this (pressed) frame on screen and return
+			++fi;
+			continue;
+		}
+
 		if (nav == 1) {
 			// END: nav cmd 1 is the last-frame marker. The original player
 			// (FUN_0040ca80: when FUN_0040d710 returns 1 -> goto cleanup) shows
