@@ -264,17 +264,15 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 	// Read the whole container so it can both back the archive and be scanned
 	// for the embedded palette.
 	uint32 size = (uint32)file.size();
-	byte *fileData = (byte *)malloc(size);
-	if (!fileData || file.read(fileData, size) != size) {
+	Common::Array<byte> fileData(size);
+	if (file.read(fileData.begin(), size) != size) {
 		debugPrintf("Could not read '%s'\n", argv[1]);
-		free(fileData);
 		return true;
 	}
 
 	Archive archive;
-	if (!archive.open(new Common::MemoryReadStream(fileData, size, DisposeAfterUse::NO), argv[1])) {
+	if (!archive.open(new Common::MemoryReadStream(fileData.begin(), size, DisposeAfterUse::NO), argv[1])) {
 		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
-		free(fileData);
 		return true;
 	}
 
@@ -282,7 +280,6 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 	if (idx >= archive.getResourceCount()) {
 		debugPrintf("Resource index %u out of range (%u resources)\n",
 				idx, archive.getResourceCount());
-		free(fileData);
 		return true;
 	}
 
@@ -294,7 +291,6 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 	Common::SeekableReadStream *stream = archive.createReadStreamForResource(idx);
 	if (!stream) {
 		debugPrintf("Resource %u is empty\n", idx);
-		free(fileData);
 		return true;
 	}
 
@@ -303,7 +299,6 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 	delete stream;
 	if (!ok) {
 		debugPrintf("Resource %u (%ux%u) did not decode as a cel\n", idx, width, height);
-		free(fileData);
 		return true;
 	}
 
@@ -316,16 +311,15 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 		Common::File palFile;
 		if (palFile.open(argv[3])) {
 			uint32 palSize = (uint32)palFile.size();
-			byte *palData = (byte *)malloc(palSize);
-			if (palData && palFile.read(palData, palSize) == palSize)
-				havePalette = loadPalette(palData, palSize, rgb);
-			free(palData);
+			Common::Array<byte> palData(palSize);
+			if (palFile.read(palData.begin(), palSize) == palSize)
+				havePalette = loadPalette(palData.begin(), palSize, rgb);
 		}
 		if (!havePalette)
 			debugPrintf("No palette found in '%s'; falling back to '%s'\n", argv[3], argv[1]);
 	}
 	if (!havePalette)
-		havePalette = loadPalette(fileData, size, rgb);
+		havePalette = loadPalette(fileData.begin(), size, rgb);
 
 	debugPrintf("Resource %u: %ux%u, origin (%d,%d), palette %s\n", idx,
 			cel.width, cel.height, cel.originX, cel.originY,
@@ -351,8 +345,6 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 	g_system->unlockScreen();
 	g_system->getPaletteManager()->setPalette(rgb, 0, 256);
 	g_system->updateScreen();
-
-	free(fileData);
 	debugPrintf("Blitted. Close the console to view.\n");
 	return true;
 }
@@ -375,10 +367,9 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 	// Read the whole file so it can both feed the decoder and be scanned for an
 	// embedded palette.
 	uint32 size = (uint32)file.size();
-	byte *fileData = (byte *)malloc(size);
-	if (!fileData || file.read(fileData, size) != size) {
+	Common::Array<byte> fileData(size);
+	if (file.read(fileData.begin(), size) != size) {
 		debugPrintf("Could not read '%s'\n", argv[1]);
-		free(fileData);
 		return true;
 	}
 
@@ -386,15 +377,13 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 	uint32 offset = (uint32)strtol(argv[2], nullptr, 0);
 	if (offset >= size) {
 		debugPrintf("Offset %u is past end of file (%u bytes)\n", offset, size);
-		free(fileData);
 		return true;
 	}
 
 	FrameImage frame;
-	uint32 consumed = decodeFrame(fileData + offset, size - offset, frame);
+	uint32 consumed = decodeFrame(fileData.begin() + offset, size - offset, frame);
 	if (consumed == 0) {
 		debugPrintf("No valid frame at offset 0x%x\n", offset);
-		free(fileData);
 		return true;
 	}
 
@@ -407,16 +396,15 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 		Common::File palFile;
 		if (palFile.open(argv[3])) {
 			uint32 palSize = (uint32)palFile.size();
-			byte *palData = (byte *)malloc(palSize);
-			if (palData && palFile.read(palData, palSize) == palSize)
-				havePalette = loadPalette(palData, palSize, rgb);
-			free(palData);
+			Common::Array<byte> palData(palSize);
+			if (palFile.read(palData.begin(), palSize) == palSize)
+				havePalette = loadPalette(palData.begin(), palSize, rgb);
 		}
 		if (!havePalette)
 			debugPrintf("No palette found in '%s'; falling back to '%s'\n", argv[3], argv[1]);
 	}
 	if (!havePalette)
-		havePalette = loadPalette(fileData, size, rgb);
+		havePalette = loadPalette(fileData.begin(), size, rgb);
 
 	debugPrintf("Frame at 0x%x: %ux%u, consumed %u bytes, palette %s\n", offset,
 			frame.width, frame.height, consumed,
@@ -440,8 +428,6 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 	g_system->unlockScreen();
 	g_system->getPaletteManager()->setPalette(rgb, 0, 256);
 	g_system->updateScreen();
-
-	free(fileData);
 	debugPrintf("Blitted. Close the console to view.\n");
 	return true;
 }
@@ -462,17 +448,15 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 	}
 
 	uint32 size = (uint32)file.size();
-	byte *fileData = (byte *)malloc(size);
-	if (!fileData || file.read(fileData, size) != size) {
+	Common::Array<byte> fileData(size);
+	if (file.read(fileData.begin(), size) != size) {
 		debugPrintf("Could not read '%s'\n", argv[1]);
-		free(fileData);
 		return true;
 	}
 
 	Archive archive;
-	if (!archive.open(new Common::MemoryReadStream(fileData, size, DisposeAfterUse::NO), argv[1])) {
+	if (!archive.open(new Common::MemoryReadStream(fileData.begin(), size, DisposeAfterUse::NO), argv[1])) {
 		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
-		free(fileData);
 		return true;
 	}
 
@@ -488,7 +472,6 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 	}
 	if (frameIndices.empty()) {
 		debugPrintf("No video frames (info 0x%08x) found in '%s'\n", kFrameInfoTag, argv[1]);
-		free(fileData);
 		return true;
 	}
 
@@ -505,16 +488,15 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 	FrameSequence seq;
 	for (uint32 f = 0; f <= target; ++f) {
 		const Archive::Resource &res = archive.getResource(frameIndices[f]);
-		if (seq.applyFrame(fileData + res.dataOffset - 4, res.length + 4) == 0) {
+		if (seq.applyFrame(fileData.begin() + res.dataOffset - 4, res.length + 4) == 0) {
 			debugPrintf("Frame %u failed to decode\n", f);
-			free(fileData);
 			return true;
 		}
 	}
 
 	byte rgb[256 * 3];
 	memset(rgb, 0, sizeof(rgb));
-	bool havePalette = loadPalette(fileData, size, rgb);
+	bool havePalette = loadPalette(fileData.begin(), size, rgb);
 
 	debugPrintf("Movie '%s': %u frames, showing frame %u (%ux%u), palette %s\n",
 			argv[1], frameIndices.size(), target, seq.width(), seq.height(),
@@ -538,8 +520,6 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 	g_system->unlockScreen();
 	g_system->getPaletteManager()->setPalette(rgb, 0, 256);
 	g_system->updateScreen();
-
-	free(fileData);
 	debugPrintf("Blitted. Close the console to view.\n");
 	return true;
 }

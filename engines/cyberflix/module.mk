@@ -7,6 +7,7 @@ MODULE_OBJS = \
 	image.o \
 	metaengine.o \
 	script.o \
+	sound.o \
 	vm.o
 
 # This module can be built as a plugin

@@ -25,10 +25,16 @@
 #include "common/events.h"
 #include "common/file.h"
 #include "common/fs.h"
+#include "common/endian.h"
 #include "common/memstream.h"
 #include "common/system.h"
+#include "common/util.h"
 
 #include "engines/util.h"
+
+#include "audio/audiostream.h"
+#include "audio/mixer.h"
+#include "audio/decoders/raw.h"
 
 #include "graphics/palette.h"
 #include "graphics/paletteman.h"
@@ -39,9 +45,48 @@
 #include "cyberflix/console.h"
 #include "cyberflix/image.h"
 #include "cyberflix/script.h"
+#include "cyberflix/sound.h"
 #include "cyberflix/vm.h"
 
 namespace Cyberflix {
+
+// The runtime accesses every resource through a "record+8" data pointer (the
+// info tag), which is four bytes before the payload that Archive exposes via
+// dataOffset (== record+12). All master-header/table field offsets below are
+// expressed in that record+8 frame, so we subtract 4 from dataOffset to get the
+// engine's view. See files/decomp/movie-playback.md.
+static const byte *engineBase(const Common::Array<byte> &fileData, const Archive::Resource &res) {
+	if (res.empty || res.dataOffset < 4 || res.dataOffset > fileData.size())
+		return nullptr;
+	return fileData.begin() + res.dataOffset - 4;
+}
+
+// Read a Pascal string (1-byte length prefix) into a Common::String, bounded by
+// the end of the file buffer.
+static Common::String readPascalString(const byte *p, const Common::Array<byte> &fileData) {
+	if (!p || p < fileData.begin() || p >= fileData.end())
+		return Common::String();
+	uint len = *p;
+	const byte *s = p + 1;
+	if (s + len > fileData.end())
+		len = (uint)(fileData.end() - s);
+	return Common::String((const char *)s, len);
+}
+
+// Sample-add an 8-bit unsigned mono SFX buffer into the music track at the given
+// sample offset, extending the track with silence (0x80) if needed and clamping.
+static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, uint32 atSample) {
+	if (sfx.empty())
+		return;
+	uint32 end = atSample + sfx.size();
+	while (track.size() < end)
+		track.push_back(0x80);
+	for (uint32 i = 0; i < sfx.size(); ++i) {
+		int v = ((int)track[atSample + i] - 0x80) + ((int)sfx[i] - 0x80);
+		v = CLIP(v, -128, 127);
+		track[atSample + i] = (byte)(v + 0x80);
+	}
+}
 
 CyberflixEngine::CyberflixEngine(OSystem *syst, const CyberflixGameDescription *gameDesc) :
 		Engine(syst), _gameDescription(gameDesc), _rnd("cyberflix"), _console(nullptr) {
@@ -211,18 +256,19 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	}
 
 	uint32 size = (uint32)file.size();
-	byte *fileData = (byte *)malloc(size);
-	if (!fileData || file.read(fileData, size) != size) {
+	// fileData is declared before archive so it outlives it: the archive owns a
+	// stream that points into this buffer, and the movie loop below reads
+	// payloads through raw pointers into it.
+	Common::Array<byte> fileData(size);
+	if (file.read(fileData.begin(), size) != size) {
 		warning("Cyberflix: could not read movie '%s'", name.c_str());
-		free(fileData);
 		return;
 	}
 	file.close();
 
 	Archive archive;
-	if (!archive.open(new Common::MemoryReadStream(fileData, size, DisposeAfterUse::NO), name)) {
+	if (!archive.open(new Common::MemoryReadStream(fileData.begin(), size, DisposeAfterUse::NO), name)) {
 		warning("Cyberflix: '%s' is not a valid movie container", name.c_str());
-		free(fileData);
 		return;
 	}
 
@@ -237,39 +283,194 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	}
 	if (frames.empty()) {
 		warning("Cyberflix: movie '%s' has no video frames", name.c_str());
-		free(fileData);
 		return;
+	}
+
+	// Build the soundtrack. A linear movie's master header (info==0x40000)
+	// references two cue tables: a MUSIC table (the continuous score, played from
+	// t=0) and an SFX/event table (named one-shots triggered by individual video
+	// frames). The video runs at a fixed 20 fps (50 ms/frame, from the scaled
+	// timer FUN_00405130 * 0.06 and the masterHdr[+0x1c]=3 floor), so 318 frames
+	// == 15.9 s == the music duration: video and music are co-terminous. We
+	// therefore decode the MUSIC cues into one track and MIX each frame-triggered
+	// SFX into it at that frame's time (frame f -> f/frameCount of the track).
+	// This reproduces the original A/V sync (e.g. LOGO.MOV's gunshots land on the
+	// "INCORPORATED" frame). See files/decomp/movie-playback.md.
+	//
+	// NB: do NOT concatenate the SFX resources onto the music track. Doing so
+	// lengthened the track (so frames played too slowly) and made the effects
+	// sound at their concatenation offset instead of their trigger frame.
+	Common::Array<byte> pcmBuf;
+	// Cumulative start time (ms) of each video frame; last entry is the total
+	// duration. Built from the per-frame event chunks below. Empty => no usable
+	// master header, in which case the frame loop falls back to a fixed cadence.
+	Common::Array<uint32> frameStartMs;
+
+	int masterIdx = -1;
+	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
+		if (!archive.getResource(i).empty && archive.getResource(i).info == kMasterHeaderInfoTag) {
+			masterIdx = (int)i;
+			break;
+		}
+	}
+	if (masterIdx < 0) {
+		warning("Cyberflix: movie '%s' has no master header; playing without audio", name.c_str());
+	} else {
+		const byte *hdr = engineBase(fileData, archive.getResource(masterIdx));
+		// Guard the per-frame table extent before trusting the header layout.
+		if (hdr && hdr + 0x87c <= fileData.end()) {
+			uint32 musicTableIdx = READ_LE_UINT32(hdr + 0x64); // masterHdr[0x19]
+			uint32 sfxTableIdx   = READ_LE_UINT32(hdr + 0x60); // masterHdr[0x18]
+			uint32 pfCount       = READ_LE_UINT32(hdr + 0x878);
+			const byte *pfTable  = hdr + 0x87c; // per-frame records, stride 0x2a
+			// Minimum per-frame hold, in the scaled timer's units (FUN_00405130
+			// returns timeGetTime * 0.06, so 1 unit == 1000/60 ms). For LOGO this
+			// floor is 3 units == 50 ms == 20 fps.
+			uint32 frameFloorUnits = READ_LE_UINT32(hdr + 0x1c);
+			if (frameFloorUnits == 0)
+				frameFloorUnits = 3;
+
+			// 1. MUSIC track: decode each music-table cue's 22050 Hz resource in
+			//    order. (Skip non-22050 cues such as the silent 11025 Hz pad.)
+			if (musicTableIdx < archive.getResourceCount()) {
+				const byte *mt = engineBase(fileData, archive.getResource(musicTableIdx));
+				if (mt && mt + 0x10e <= fileData.end()) {
+					uint32 mc = READ_LE_UINT32(mt + 0x10a);
+					for (uint32 e = 0; e < mc; ++e) {
+						const byte *ent = mt + 0x10e + e * 0x1a;
+						if (ent + 0x1a > fileData.end())
+							break;
+						uint32 rid = READ_LE_UINT32(ent + 4);
+						if (rid >= archive.getResourceCount())
+							continue;
+						const Archive::Resource &r = archive.getResource(rid);
+						if (r.empty || r.info != kAudioResourceInfoTag || r.dataOffset < 4)
+							continue;
+						const byte *payload = fileData.begin() + r.dataOffset;
+						if (READ_LE_UINT32(payload + 0x18) != kAudioRate22050)
+							continue;
+						decodeCbxAudio(payload, r.length, pcmBuf);
+					}
+				}
+			}
+
+			// 2. Per-frame timeline + SFX. Walk the per-frame table: each frame's
+			//    event chunk (info==0x6 resource at record[+0x10]) gives its hold
+			//    duration at engine offset +2 (floored by frameFloorUnits) and an
+			//    optional cue NAME at +0x12. We accumulate the real start time of
+			//    every frame, and for each named cue we look it up in the SFX
+			//    table and MIX that effect into the music track at the frame's
+			//    time (sample-add). The two LOGO frames that hold 333/500 ms make
+			//    the video timeline (~16.6 s) slightly longer than the music
+			//    (~15.9 s); the trailing fade plays over silence, as in the
+			//    original.
+			const byte *st = (sfxTableIdx < archive.getResourceCount())
+					? engineBase(fileData, archive.getResource(sfxTableIdx)) : nullptr;
+			uint32 sfxCount = (st && st + 8 <= fileData.end()) ? READ_LE_UINT32(st + 4) : 0;
+			uint32 cumMs = 0;
+			for (uint32 f = 0; f < pfCount; ++f) {
+				const byte *rec = pfTable + f * 0x2a;
+				if (rec + 0x2a > fileData.end())
+					break;
+				const byte *eb = nullptr;
+				uint32 eventId = READ_LE_UINT32(rec + 0x10);
+				if (eventId < archive.getResourceCount())
+					eb = engineBase(fileData, archive.getResource(eventId));
+
+				frameStartMs.push_back(cumMs);
+
+				// Mix this frame's SFX (if it names a cue and we have a track).
+				if (eb && !pcmBuf.empty()) {
+					Common::String cue = readPascalString(eb + 0x12, fileData);
+					if (!cue.empty()) {
+						uint32 sfxResId = (uint32)-1;
+						for (uint32 e = 0; e < sfxCount; ++e) {
+							const byte *ent = st + 8 + e * 0x2a;
+							if (ent + 0x2a > fileData.end())
+								break;
+							if (readPascalString(ent + 0xa, fileData) == cue) {
+								sfxResId = READ_LE_UINT32(ent + 4);
+								break;
+							}
+						}
+						if (sfxResId < archive.getResourceCount()) {
+							const Archive::Resource &sr = archive.getResource(sfxResId);
+							if (!sr.empty && sr.info == kAudioResourceInfoTag && sr.dataOffset >= 4) {
+								Common::Array<byte> sfx;
+								decodeCbxAudio(fileData.begin() + sr.dataOffset, sr.length, sfx);
+								uint32 atSample = (uint32)((uint64)cumMs * kAudioSampleRate / 1000);
+								mixSfx(pcmBuf, sfx, atSample);
+							}
+						}
+					}
+				}
+
+				// Advance the timeline by this frame's hold (scaled units -> ms).
+				uint32 units = frameFloorUnits;
+				if (eb && eb + 6 <= fileData.end()) {
+					uint32 d = READ_LE_UINT32(eb + 2);
+					if (d > units)
+						units = d;
+				}
+				cumMs += (uint32)((uint64)units * 1000 / 60);
+			}
+			frameStartMs.push_back(cumMs); // total movie duration
+		}
+	}
+
+	byte *pcm = nullptr;
+	uint32 pcmLen = pcmBuf.size();
+	if (pcmLen) {
+		pcm = (byte *)malloc(pcmLen);
+		if (pcm)
+			memcpy(pcm, pcmBuf.begin(), pcmLen);
+		else
+			pcmLen = 0;
 	}
 
 	byte rgb[256 * 3];
 	memset(rgb, 0, sizeof(rgb));
-	if (loadPalette(fileData, size, rgb))
+	if (loadPalette(fileData.begin(), size, rgb))
 		_system->getPaletteManager()->setPalette(rgb, 0, 256);
 
 	// Composite frames in order into a persistent surface (frames are
-	// inter-coded) and present each at a fixed cadence. ESC or quit skips ahead.
+	// inter-coded) and present them on the movie's own timeline. ESC/quit skips.
 	//
-	// The original has NO stored frames-per-second field: its player (TI.EXE
-	// fcn.0042eb00 / the wait loop at 0x0043e1cc) is audio-clocked. It advances
-	// one video frame per consumed audio chunk, servicing the sound double
-	// buffer on a 20 ms poll quantum with only a 4000 ms hang watchdog as the
-	// other time constant. The true cadence is therefore audioSampleRate /
-	// samplesPerChunk.
-	//
-	// Both fall out of the MOV audio format, reversed from TI.EXE and the
-	// container: the DirectSound output WAVEFORMATEX built at 0x0042e870 is
-	// 22050 Hz / 16-bit / stereo, and each video frame is paired with one
-	// audio chunk (info tag 0x6) carrying ~1024 8-bit mono samples. That gives
-	// 22050 / 1024 ~= 21.5 fps (~46 ms). Until the audio chunks are decoded and
-	// playback is truly audio-locked, pace video with this derived cadence.
+	// There is NO stored frames-per-second field. Each frame carries its own
+	// hold time in its event chunk (offset +2, floored by masterHdr[+0x1c]),
+	// expressed in the scaled-timer units returned by TI.EXE FUN_00405130
+	// (timeGetTime * 0.06, i.e. 1 unit == 1000/60 ms). We precomputed the
+	// cumulative start time of every frame into frameStartMs above, so the video
+	// is paced by that timeline against a wall clock - NOT slaved to the audio.
+	// The soundtrack (music with SFX mixed in at their frame times) is fired on
+	// the mixer and runs concurrently; both advance in real time so they stay in
+	// step. The video timeline can be slightly longer than the music (the two
+	// long-hold LOGO frames push it to ~16.6 s vs ~15.9 s of music), so the final
+	// fade is no longer cut short. With no usable timeline we fall back to a
+	// fixed cadence.
 	FrameSequence seq;
-	const uint32 frameDelayMs = 46; // 22050 Hz / ~1024 samples per frame ~= 21.5 fps.
+	const uint32 kFallbackFrameDelayMs = 66; // ~15 fps when there is no frame timeline
 	bool skip = false;
 	Common::Event event;
 
+	Audio::SoundHandle audioHandle;
+	if (pcm && pcmLen) {
+		Audio::SeekableAudioStream *stream = Audio::makeRawStream(
+				pcm, pcmLen, kAudioSampleRate, Audio::FLAG_UNSIGNED,
+				DisposeAfterUse::YES);
+		_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, stream);
+	} else {
+		free(pcm);
+		pcm = nullptr;
+	}
+
+	debug(0, "Cyberflix: movie '%s' frames=%u audioBytes=%u audioMs=%u",
+			name.c_str(), frames.size(), pcmLen,
+			pcm ? (uint32)((uint64)pcmLen * 1000 / kAudioSampleRate) : 0);
+	uint32 startMs = _system->getMillis();
 	for (uint32 f = 0; f < frames.size() && !shouldQuit() && !skip; ++f) {
 		const Archive::Resource &res = archive.getResource(frames[f]);
-		if (seq.applyFrame(fileData + res.dataOffset - 4, res.length + 4) == 0) {
+		if (seq.applyFrame(fileData.begin() + res.dataOffset - 4, res.length + 4) == 0) {
 			warning("Cyberflix: movie '%s' frame %u failed to decode", name.c_str(), f);
 			break;
 		}
@@ -293,8 +494,16 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		_system->unlockScreen();
 		_system->updateScreen();
 
-		uint32 until = _system->getMillis() + frameDelayMs;
-		while (_system->getMillis() < until) {
+		// Hold this frame until its real on-screen end time (the next frame's
+		// start, from the precomputed timeline), measured on a wall clock so the
+		// video keeps its authored pacing even past the end of the music. Falls
+		// back to a fixed cadence when there is no timeline.
+		uint32 until;
+		if (f + 1 < frameStartMs.size())
+			until = frameStartMs[f + 1];
+		else
+			until = (f + 1) * kFallbackFrameDelayMs;
+		for (;;) {
 			while (_eventMan->pollEvent(event)) {
 				if (event.type == Common::EVENT_KEYDOWN &&
 						event.kbd.keycode == Common::KEYCODE_ESCAPE)
@@ -302,11 +511,13 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			}
 			if (shouldQuit() || skip)
 				break;
-			_system->delayMillis(10);
+			if (_system->getMillis() - startMs >= until)
+				break;
+			_system->delayMillis(5);
 		}
 	}
 
-	free(fileData);
+	_mixer->stopHandle(audioHandle);
 }
 
 } // End of namespace Cyberflix
