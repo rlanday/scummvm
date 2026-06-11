@@ -26,7 +26,7 @@
 
 namespace Cyberflix {
 
-Script::Script() : _valid(false), _terminated(false), _poolOffset(0) {
+Script::Script() : _valid(false), _terminated(false), _poolOffset(0), _defsScanned(false) {
 }
 
 bool Script::parse(Common::SeekableReadStream *stream) {
@@ -571,6 +571,70 @@ int Script::findCloseParen(uint32 openIndex) const {
 		}
 	}
 	return -1;
+}
+
+const Common::Array<Script::Definition> &Script::definitions() const {
+	// Lazily index the named definitions. The runtime re-scans the resource on
+	// every dispatch (TI.EXE 0x0040b7a0 walks kOpScriptMarker separators and
+	// 0x0040b870 parses each header); scripts are immutable here, so cache.
+	if (_defsScanned)
+		return _defs;
+	_defsScanned = true;
+
+	const uint32 n = _code.size();
+	uint32 i = 0;
+	while (i < n) {
+		// A definition header is `pushSym 'name' ( params... )`; anything else
+		// after a marker (or at the top) is not a definition (e.g. data pads).
+		if (_code[i].opcode == kOpScriptMarker) {
+			++i;
+			continue;
+		}
+		uint32 headerAt = i;
+		// Advance i to the next marker regardless of parse success.
+		uint32 next = headerAt;
+		while (next < n && _code[next].opcode != kOpScriptMarker)
+			++next;
+
+		if (_code[headerAt].opcode == kOpPushSym &&
+				headerAt + 1 < n && _code[headerAt + 1].opcode == kOpOpenParen) {
+			Definition def;
+			def.name = getSelfRelString(headerAt);
+			def.name.toLowercase();
+			int close = findCloseParen(headerAt + 1);
+			if (!def.name.empty() && close >= 0 && (uint32)close < next) {
+				// Formal parameters: symbols separated by kOpArgSep.
+				for (uint32 p = headerAt + 2; p < (uint32)close; ++p) {
+					if (_code[p].opcode == kOpPushSym) {
+						Common::String pn = getSelfRelString(p);
+						pn.toLowercase();
+						def.params.push_back(pn);
+					}
+				}
+				// The body starts after the header's trailing pushInt padding
+				// (the matcher 0x0040b870 skips pushInt records before the
+				// first statement).
+				uint32 body = (uint32)close + 1;
+				while (body < next && _code[body].opcode == kOpPushInt)
+					++body;
+				def.bodyStart = body;
+				_defs.push_back(def);
+			}
+		}
+		i = next;
+	}
+	return _defs;
+}
+
+const Script::Definition *Script::findDefinition(const Common::String &name) const {
+	// Case-insensitive match, mirroring the Pascal-string compare the matcher
+	// uses (TI.EXE 0x0041ae80).
+	const Common::Array<Definition> &defs = definitions();
+	for (uint32 i = 0; i < defs.size(); ++i) {
+		if (defs[i].name.equalsIgnoreCase(name))
+			return &defs[i];
+	}
+	return nullptr;
 }
 
 } // End of namespace Cyberflix

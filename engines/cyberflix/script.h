@@ -60,15 +60,20 @@ class Script {
 public:
 	enum {
 		kOpEnd     = 0x0000, ///< Terminates the instruction stream.
-		kOpPush3   = 0x0003,
-		kOpPush4   = 0x0004,
+		kOpPush3   = 0x0003, ///< String literal (self-relative pool offset).
+		kOpPush4   = 0x0004, ///< 32-bit int literal: operandA | (next operandB low16 << 16).
 		kOpPushSym = 0x0005, ///< Push symbol/variable reference.
-		kOpPushInt = 0x0006, ///< Push integer constant (operandA).
+		kOpPushInt = 0x0006, ///< Push integer constant (operandA); statement separator.
 		kOpCmdBase = 0x0FA0, ///< Start of the built-in command range.
 
 		// Control-flow builtins dispatched by the main loop's small switch
-		// (TI.EXE 0x0040ba4f, map 0x40c458). See files/opcode-map.md section 3.
-		kOpReturn  = 0x0FA4, ///< End of script body; requires balanced blocks.
+		// (TI.EXE 0x0040ba4f, map 0x40c458; statement executor 0x0040ba20).
+		// See files/opcode-map.md section 3 and decomp/stage-notes.md.
+		kOpScriptMarker = 0x0FA1, ///< Separates named definitions in a resource.
+		kOpDeclGlobal   = 0x0FA2, ///< Declare var list in the global scope (0x45f010).
+		kOpDeclLocal    = 0x0FA3, ///< Declare var list in the current local scope.
+		kOpReturn  = 0x0FA4, ///< End of body, no result; requires balanced blocks.
+		kOpExit    = 0x0FA5, ///< Early return, no result (unwinds loop depth).
 		kOpIf      = 0x0FA6, ///< Evaluate condition; enter or skip THEN block.
 		kOpEndIf   = 0x0FA7, ///< Close an if/then(/else) block.
 		kOpElse    = 0x0FA8, ///< Else marker; skipped after the THEN ran.
@@ -80,6 +85,11 @@ public:
 		kOpOpenParen  = 0x0FB2, ///< Open a call argument list: name '(' args ')'.
 		kOpCloseParen = 0x0FB3, ///< Close a call argument list.
 		kOpArgSep     = 0x0FB4, ///< Argument separator (',') inside a call.
+		kOpTrue    = 0x0FB5, ///< Boolean TRUE literal atom (0x41a550 case 0xfb5).
+		kOpFalse   = 0x0FB6, ///< Boolean FALSE literal atom.
+		kOpNot     = 0x0FB7, ///< Prefix boolean NOT (applies to following atom).
+		kOpReturnValue = 0x0FB8, ///< return <expr>: yields the message's result.
+		kOpPass    = 0x0FB9, ///< Pretend unhandled: dispatcher tries next scope.
 
 		// Infix operator opcodes, applied by the TI.EXE evaluator
 		// (applier 0x00419f30, jump table 0x41a484). See files/opcode-map.md.
@@ -158,6 +168,32 @@ public:
 	 */
 	int findCloseParen(uint32 openIndex) const;
 
+	/**
+	 * A named function/handler definition inside a script resource. A resource
+	 * holds multiple definitions separated by kOpScriptMarker instructions;
+	 * each definition is shaped
+	 *
+	 *   pushSym 'name' ( param1 , param2 ... ) pad... body... return
+	 *
+	 * The runtime resolves a call `name(args)` by scanning these definitions
+	 * (per-scope runner TI.EXE 0x0040b7a0, matcher 0x0040b870) and matching the
+	 * name case-insensitively (0x0041ae80). See decomp/stage-notes.md.
+	 */
+	struct Definition {
+		Common::String name;                ///< Definition name (lowercased).
+		Common::Array<Common::String> params; ///< Formal parameter names, in order.
+		uint32 bodyStart;                   ///< Instruction index of the first body statement.
+	};
+
+	/**
+	 * The definitions in this resource, in declaration order. Built lazily on
+	 * first use by scanning for kOpScriptMarker separators (mirrors the per-call
+	 * scan at TI.EXE 0x0040b7a0; cached because scripts are immutable).
+	 */
+	const Common::Array<Definition> &definitions() const;
+
+	/** Find a definition by case-insensitive name, or nullptr. */
+	const Definition *findDefinition(const Common::String &name) const;
 
 	struct Instruction {
 		uint32 operandB;
@@ -222,6 +258,8 @@ private:
 	uint32 _poolOffset;
 	Common::Array<Instruction> _code;
 	Common::Array<byte> _payload;
+	mutable bool _defsScanned;                  ///< Lazy definitions() cache flag.
+	mutable Common::Array<Definition> _defs;    ///< Cached definition index.
 };
 
 } // End of namespace Cyberflix
