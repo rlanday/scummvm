@@ -20,6 +20,7 @@
  */
 
 #include "common/config-manager.h"
+#include "common/math.h"
 #include "common/debug.h"
 #include "common/debug-channels.h"
 #include "common/events.h"
@@ -624,9 +625,32 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 // Program the hardware palette and mirror it in _screenClut ("current",
 // TI.EXE DAT_0045f3c8 programmed by FUN_004010f0). The original forces
 // entry 0 to black and 255 to white; the game palettes already obey that.
+//
+// The runtime never programs the clut values directly: FUN_00401170 maps
+// every component through a per-channel gamma curve built by FUN_00401220,
+// table[i] = trunc(pow(i / 255.0, gamma) * 255.0), with the gamma globals
+// statically initialized to 0.65 (TI.EXE .data 0x457040/48/50) and runtime
+// adjustable from F1-F8 (steps *1.05 / *0.952381, clamped 0.15..2.5,
+// FUN_00403bf0 from the message pump FUN_00403690; F9 resets to 0.65).
+// 0.65 < 1 brightens the mid-tones considerably, which is why the original
+// renders noticeably lighter than the raw clut colors. _screenClut stays
+// pre-gamma like DAT_0045f3c8 (fades interpolate raw cluts and re-apply the
+// curve every step, matching FUN_0041ba80 -> FUN_004010f0).
 void CyberflixEngine::programPalette(const byte (&rgb)[256 * 3]) {
 	memcpy(_screenClut, rgb, sizeof(_screenClut));
-	_system->getPaletteManager()->setPalette(_screenClut, 0, 256);
+
+	static byte gammaTable[256];
+	static bool gammaTableBuilt = false;
+	if (!gammaTableBuilt) {
+		for (int i = 0; i < 256; ++i)
+			gammaTable[i] = (byte)(pow(i / 255.0, 0.65) * 255.0); // trunc, like __ftol
+		gammaTableBuilt = true;
+	}
+
+	byte hw[256 * 3];
+	for (int i = 0; i < 256 * 3; ++i)
+		hw[i] = gammaTable[_screenClut[i]];
+	_system->getPaletteManager()->setPalette(hw, 0, 256);
 }
 
 // clut(name): snap the hardware palette to the named clut instantly
