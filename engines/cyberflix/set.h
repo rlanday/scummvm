@@ -83,9 +83,12 @@ public:
 
 	/** Master-header, scene-record and panorama-record field offsets. */
 	enum {
+		kMasterNameOffset = 0x070,
 		kMasterWidthOffset = 0x084,
 		kMasterHeightOffset = 0x086,
 		kSceneTableIdOffset = 0x060,
+		kMasterDefaultSceneOffset = 0xa0e,
+		kMasterDefaultViewOffset = 0xa1e,
 
 		kSceneRecordStride = 0x2a,
 		kSceneViewDirOffset = 0x06,
@@ -96,7 +99,17 @@ public:
 
 		kPanoramaCountOffset = 0x00,
 		kPanoramaRecordStride = 0x3c,
-		kPanoramaFrameIdOffset = 0x30
+		kPanoramaFrameIdOffset = 0x30,
+
+		// View directory (scene rec +0x06), offsets in our payload frame
+		// (TI reads count @base+0x30, records @base+0x34 with base=payload-4;
+		// FUN_00433960/FUN_004425e0). Per record: pascal name @+0x1e
+		// ('View14'), s16 heading @+0x08 (256-unit circle, FUN_00426250).
+		kViewDirCountOffset = 0x2c,
+		kViewDirRecordsOffset = 0x30,
+		kViewRecordStride = 0x2e,
+		kViewHeadingOffset = 0x08,
+		kViewNameOffset = 0x1e
 	};
 
 	/**
@@ -108,6 +121,23 @@ public:
 
 	bool isOpen() const { return _master >= 0; }
 	const Common::String &name() const { return _name; }
+
+	/**
+	 * The set's embedded name from the master header (pascal @ +0x070, e.g.
+	 * "bedsit1" -- no ".set" extension). TI.EXE copies it into the set record
+	 * (FUN_004307f0, FUN_0041af90 from header+0x70) and currentset() returns
+	 * it; scripts (setupsound, themetype, ...) switch on this form.
+	 */
+	const Common::String &setName() const { return _setName; }
+
+	/** Default scene name from the master header (@ +0xa0e), used by
+	 *  opensetfile when no scene argument is given (FUN_004307f0). */
+	const Common::String &defaultScene() const { return _defaultScene; }
+
+	/** Default view name from the master header (@ +0xa1e), used by
+	 *  opensetfile when no view argument is given (FUN_004307f0). */
+	const Common::String &defaultView() const { return _defaultView; }
+
 	uint16 width() const { return _width; }
 	uint16 height() const { return _height; }
 	uint32 sceneCount() const { return _sceneCount; }
@@ -122,6 +152,21 @@ public:
 	 * (0 = A, 1 = B), or 0 if either index is out of range.
 	 */
 	uint32 angleCount(uint32 scene, uint32 table) const;
+
+	/**
+	 * Index of the view named @p name (case-insensitive) in scene @p scene's
+	 * view directory, or -1. Mirrors the name scan of TI.EXE FUN_004425e0 /
+	 * FUN_00433960 (records stride 0x2e, pascal name @+0x1e).
+	 */
+	int findView(uint32 scene, const Common::String &name) const;
+
+	/**
+	 * The panorama angle (record index in @p table) whose record is tagged
+	 * with view index @p viewIdx, or -1. Mirrors the camera-set scan of
+	 * TI.EXE FUN_004425e0: each panorama record carries the view index it
+	 * faces (u32 @+0x38 in TI's record frame; -1 = between views).
+	 */
+	int angleForView(uint32 scene, uint32 table, int viewIdx) const;
 
 	/**
 	 * Render scene @p scene's background for panorama @p table (0 = A, 1 = B) at
@@ -147,6 +192,9 @@ private:
 	const byte *panoramaTable(uint32 scene, uint32 table, uint32 &count) const;
 
 	Common::String _name;
+	Common::String _setName;      ///< Embedded master-header name (+0x070).
+	Common::String _defaultScene; ///< Master-header default scene (+0xa0e).
+	Common::String _defaultView;  ///< Master-header default view (+0xa1e).
 	// _fileData outlives _archive: the archive's stream and every frame pointer
 	// reference into this buffer.
 	Common::Array<byte> _fileData;

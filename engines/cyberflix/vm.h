@@ -136,6 +136,31 @@ public:
 	/** visualeffect(effect, dur) (0x2ee9 FUN_00446400): set the global default
 	 *  transition for subsequent redraws ('plain' = opcode 0x5dce). */
 	virtual void setVisualEffect(uint16 effect, int duration) {}
+
+	/** opentrackfile('name.trk'): load a .TRK track file (TI.EXE FUN_00411be0). */
+	virtual void openTrackFile(const Common::String &name) {}
+
+	/** closetrackfile('name.trk'): unload a track file (TI.EXE FUN_00412070). */
+	virtual void closeTrackFile(const Common::String &name) {}
+
+	/**
+	 * playtheme('name.trk'): start the track's theme playlist (intro cues once,
+	 * then loop from the loop index forever) on the theme channel, replacing any
+	 * current theme (TI.EXE FUN_00412250).
+	 */
+	virtual void playTheme(const Common::String &name) {}
+
+	/** halttheme(): stop the theme channel (TI.EXE FUN_00412410). */
+	virtual void haltTheme() {}
+
+	/** themevol('name.trk', 0-255): set the track's theme volume (FUN_004125c0). */
+	virtual void themeVolume(const Common::String &name, int volume) {}
+
+	/**
+	 * currenttheme(which): which==1 -> playing cue name, which==2 -> its track
+	 * file name; 'none' when silent (TI.EXE FUN_00412f20).
+	 */
+	virtual Common::String currentTheme(int which) { return "none"; }
 };
 
 /**

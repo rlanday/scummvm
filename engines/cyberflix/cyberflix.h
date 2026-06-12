@@ -30,6 +30,8 @@
 
 #include "engines/engine.h"
 
+#include "audio/mixer.h"
+
 #include "cyberflix/detection.h"
 #include "cyberflix/vm.h"
 
@@ -93,6 +95,12 @@ public:
 	void blackScreen() override;
 	void fadePalette(const Common::String &target, int steps, bool toBlack) override;
 	void setVisualEffect(uint16 effect, int duration) override;
+	void openTrackFile(const Common::String &name) override;
+	void closeTrackFile(const Common::String &name) override;
+	void playTheme(const Common::String &name) override;
+	void haltTheme() override;
+	void themeVolume(const Common::String &name, int volume) override;
+	Common::String currentTheme(int which) override;
 
 private:
 	/**
@@ -180,6 +188,46 @@ private:
 	 * (0x4e73, FUN_004362c0) tests bit n-1. See decomp/movie-playback.md.
 	 */
 	uint16 _actionFrameMask = 0;
+
+	/**
+	 * A loaded .TRK track file (TI.EXE track record, FUN_00411cc0). Holds the
+	 * raw container plus the parsed THEME side: the cue directory, the playlist
+	 * (play order, 1-based cue indices) and the loop index (playlist position
+	 * the chain loops back to after the last entry, so the leading cues play
+	 * once and the tail repeats forever). The SFX-cue side (makeloop/soundloop)
+	 * lands with the SFX subsystem. See files/audio-re-notes.md.
+	 */
+	struct ThemeTrack {
+		Common::String name;          ///< Lowercased file name ('bedrad1.trk').
+		Common::Array<byte> fileData; ///< Whole container; cue payloads point in.
+		struct Cue {
+			Common::String name;      ///< Cue label ('prelude.01').
+			uint32 dataOffset = 0;    ///< Absolute payload offset in fileData.
+			uint32 length = 0;        ///< Payload length.
+		};
+		Common::Array<Cue> cues;        ///< Theme cue directory.
+		Common::Array<uint16> playlist; ///< Play order, 1-based indices into cues.
+		uint32 loopIdx = 0;             ///< Playlist index of the loop target.
+		int volume = 255;               ///< themevol() setting (0-255).
+	};
+
+	/** Open track files, in opentrackfile order (TI.EXE list DAT_0046114c). */
+	Common::Array<Common::SharedPtr<ThemeTrack> > _tracks;
+
+	/** Find an open track by (case-insensitive) file name, or nullptr. */
+	ThemeTrack *findTrack(const Common::String &name);
+
+	Audio::SoundHandle _themeHandle;   ///< Theme channel (TI.EXE DAT_00460a88).
+	Common::String _themeTrackName;    ///< Track of the playing theme, or empty.
+
+	/** Cue boundaries of the playing theme, for currenttheme(1). */
+	struct ThemeCueSpan {
+		uint32 startSample;
+		Common::String name;
+	};
+	Common::Array<ThemeCueSpan> _themeSpans;
+	uint32 _themeIntroSamples = 0; ///< Samples before the loop region.
+	uint32 _themeLoopSamples = 0;  ///< Length of the looping region.
 
 	/**
 	 * Resolve the named CLUT to 256 RGB triplets, mirroring TI.EXE's clut

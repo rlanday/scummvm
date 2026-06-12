@@ -444,6 +444,26 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		             // dispatch A case 0x15). Engine paces from per-frame
 		             // authored holds instead; accept and ignore.
 			break;
+		case 0x2ef3: // opentrackfile('name.trk') -> FUN_00411be0/FUN_00411cc0
+			_host->openTrackFile(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x2ef4: // closetrackfile('name.trk') -> FUN_00412070
+			_host->closeTrackFile(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x2ef5: // playtheme('name.trk') -> FUN_00412250: start the track's
+		             // theme playlist on the theme channel (replaces current)
+			_host->playTheme(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x2efd: // halttheme() -> FUN_00412410: stop the theme channel
+			_host->haltTheme();
+			break;
+		case 0x3ea9: // themevol('name.trk', vol 0-255) -> FUN_004125c0
+			_host->themeVolume(args.size() > 0 ? args[0].strValue : Common::String(),
+					args.size() > 1 ? args[1].intValue : 255);
+			break;
+		case 0x4e6f: // currenttheme(1|2) -> FUN_00412f20: 1 = playing cue name,
+		             // 2 = its track file name; 'none' if silent
+			return Value::makeString(_host->currentTheme(args.empty() ? 1 : args[0].intValue));
 		case 0x4e2c: // countactors(): cast subsystem pending -> 0, so the
 		             // initall()/advanceday() actor loops run dry.
 		case 0x4e3f: // countprops(): shop subsystem pending -> 0.
@@ -657,6 +677,86 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 		}
 
 		case Script::kOpEndIf:
+			pc++;
+			break;
+
+		case Script::kOpSwitch: {
+			// 0x0fa9 'switch <selector>' (TI.EXE 0x0040bcd5): evaluate the
+			// selector (int or string only, err 0xe otherwise), then scan
+			// forward for a matching case value (FUN_0040c750): nested
+			// switches are skipped; at depth 0 each kOpCase's value expr is
+			// evaluated and compared (int ==, string case-insensitive via
+			// 0x41ae80). On a match, consecutive extra `case <value>` clauses
+			// sharing the body are skipped (FUN_0040c930) and execution jumps
+			// to the body. If the closing kOpEndSwitch is reached with no
+			// match, execution resumes just past it (FUN_0040c610).
+			uint32 selPc = pc + 1;
+			Value sel = evaluateExpression(script, selPc);
+			uint32 scan = selPc;
+			int depth = 0;
+			int target = -1;
+			while (scan < count) {
+				uint16 sop = script.getInstruction(scan).opcode;
+				if (sop == Script::kOpEnd || sop == Script::kOpReturn || sop == Script::kOpScriptMarker)
+					break; // unterminated switch: TI.EXE errs 0x1f/0x1b
+				if (sop == Script::kOpSwitch) {
+					depth++;
+					scan++;
+				} else if (sop == Script::kOpEndSwitch) {
+					if (depth == 0) {
+						target = (int)scan + 1; // no case matched: past 0xfaa
+						break;
+					}
+					depth--;
+					scan++;
+				} else if (sop == Script::kOpCase && depth == 0) {
+					uint32 vp = scan + 1;
+					Value cv = evaluateExpression(script, vp);
+					bool match;
+					if (sel.type == Value::kString || sel.type == Value::kSymbol)
+						match = (cv.type == Value::kString || cv.type == Value::kSymbol) &&
+								sel.strValue.equalsIgnoreCase(cv.strValue);
+					else
+						match = (cv.type != Value::kString && cv.type != Value::kSymbol) &&
+								sel.intValue == cv.intValue;
+					if (match) {
+						// FUN_0040c930: skip immediately following extra
+						// `case <value>` clauses (multi-value case bodies).
+						uint32 body = vp;
+						for (;;) {
+							while (body < count && script.getInstruction(body).opcode == Script::kOpPushInt)
+								body++;
+							if (body < count && script.getInstruction(body).opcode == Script::kOpCase) {
+								uint32 p2 = body + 1;
+								evaluateExpression(script, p2); // skip value expr
+								body = p2;
+							} else {
+								break;
+							}
+						}
+						target = (int)body;
+						break;
+					}
+					scan = vp; // continue scanning past the value expr
+				} else {
+					scan++;
+				}
+			}
+			pc = (target >= 0) ? (uint32)target : count;
+			break;
+		}
+
+		case Script::kOpCase: {
+			// A matched case body ran into the next case label: C-style break,
+			// skip past the closing kOpEndSwitch (TI.EXE 0x0040bd7c +
+			// FUN_0040c610). No fall-through between cases.
+			int endSwitch = script.findEndSwitchFrom(pc + 1);
+			pc = (endSwitch >= 0) ? (uint32)endSwitch + 1 : count;
+			break;
+		}
+
+		case Script::kOpEndSwitch:
+			// End of the last case body (TI.EXE 0x0040bd63): just continue.
 			pc++;
 			break;
 

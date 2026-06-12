@@ -537,6 +537,25 @@ int Script::findEndWhileFrom(uint32 index) const {
 	return -1;
 }
 
+int Script::findEndSwitchFrom(uint32 index) const {
+	// TI.EXE FUN_0040c610: scan to the 0xfaa closing the current switch,
+	// nesting on 0xfa9; 0xfa4/stream-end aborts (err 0x1f/0x1b there).
+	int depth = 0;
+	for (uint32 i = index; i < _code.size(); ++i) {
+		uint16 op = _code[i].opcode;
+		if (op == kOpEnd || op == kOpReturn)
+			return -1;
+		if (op == kOpSwitch) {
+			++depth;
+		} else if (op == kOpEndSwitch) {
+			if (depth == 0)
+				return (int)i;
+			--depth;
+		}
+	}
+	return -1;
+}
+
 int Script::findForNextFrom(uint32 index) const {
 	int depth = 0;
 	for (uint32 i = index; i < _code.size(); ++i) {

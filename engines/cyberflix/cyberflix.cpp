@@ -295,32 +295,79 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 	_set.reset(set.release());
 	_setScene = -1;
 	_setAngle = 0;
-	debug(1, "Cyberflix: set '%s' open (%u scenes)", name.c_str(), _set->sceneCount());
+	debug(1, "Cyberflix: set '%s' open (%u scenes, name '%s', default scene '%s' view '%s')",
+			name.c_str(), _set->sceneCount(), _set->setName().c_str(),
+			_set->defaultScene().c_str(), _set->defaultView().c_str());
 
-	if (!scene.empty()) {
-		// View names ("view14") select the initial camera angle within the
-		// scene's panorama; the name->heading mapping lives in the view
-		// directory (TI.EXE FUN_00442b70 / FUN_00426250) which lands with
-		// panorama navigation. Until then the scene renders at angle 0.
-		if (!view.empty())
-			debug(1, "Cyberflix: opensetfile view '%s' pending view-directory support", view.c_str());
-		sendToScene(scene);
+	// FUN_004307f0: when no scene/view argument is given, the defaults come
+	// from the set's master header (+0xa0e / +0xa1e).
+	Common::String useScene = !scene.empty() ? scene : _set->defaultScene();
+	Common::String useView = !view.empty() ? view : _set->defaultView();
+
+	// The original finishes opensetfile by sending the system messages
+	// (FUN_00430fa0): it compiles+runs "openset()" against the set script
+	// library with the global library as fallback, and then (if the set did
+	// not change) runs '"<scene>", openscene()' through the sendtoscene
+	// executor FUN_004311e0, which switches to the scene, paints it and
+	// dispatches the message. The global bootres2 openset() is what calls
+	// adjustcamera()/setupsound()/setuptour() and starts the room theme. Set
+	// script libraries are not modelled yet, so dispatch over the global chain.
+	Common::Array<Value> noArgs;
+	Common::String openedName = _set->setName();
+	_vm.callFunction("openset", noArgs);
+
+	if (_set && _set->setName() == openedName && !useScene.empty()) {
+		int sceneIdx = _set->findScene(useScene);
+		if (sceneIdx < 0) {
+			warning("Cyberflix: set '%s' has no scene named '%s'",
+					_set->name().c_str(), useScene.c_str());
+			return;
+		}
+		// View select (TI.EXE FUN_00433960 stores the view, FUN_004425e0 aims
+		// the camera at the panorama record tagged with the view's index).
+		int angle = 0;
+		if (!useView.empty()) {
+			int viewIdx = _set->findView((uint32)sceneIdx, useView);
+			int viewAngle = _set->angleForView((uint32)sceneIdx, 0, viewIdx);
+			if (viewAngle >= 0)
+				angle = viewAngle;
+			else
+				warning("Cyberflix: opensetfile view '%s' not found in scene '%s'",
+						useView.c_str(), useScene.c_str());
+		}
+		renderSetScene(sceneIdx, angle);
+		_vm.callFunction("openscene", noArgs);
 	}
 }
 
-// closesetfile(): drop the open set (TI.EXE builtin 0x2f01; releases the
-// set-archive global DAT_00461180).
+// closesetfile(): send the closing system messages, then drop the open set
+// (TI.EXE builtin 0x2f01, core FUN_00430b20: FUN_00431050 first sends
+// '"<scene>", closescene()' through the sendtoscene executor and then runs
+// 'closeset()' in set scope, before FUN_00430ba0 releases the archive). The
+// global closeset() calls putdownsound() which halts the room theme, and it
+// switches on currentset(), so the messages must go out while the set is
+// still current.
 void CyberflixEngine::closeSetFile() {
+	if (_set && _set->isOpen()) {
+		Common::Array<Value> noArgs;
+		Common::String openedName = _set->setName();
+		if (_setScene >= 0)
+			_vm.callFunction("closescene", noArgs);
+		if (_set && _set->setName() == openedName)
+			_vm.callFunction("closeset", noArgs);
+	}
 	_set.reset();
 	_setScene = -1;
 	_setAngle = 0;
 }
 
-// currentset(): the open set's name, or 'none' (TI.EXE builtin 0x4e55; the
-// global changeset() compares it against 'none' to decide on closesetfile()).
+// currentset(): the open set's EMBEDDED name (master header +0x070, e.g.
+// 'bedsit1' -- no '.set'), or 'none' (TI.EXE builtin 0x4e55 returns the set
+// record's name field, copied from the header by FUN_004307f0; setupsound,
+// themetype and changeset all switch/compare on this form).
 Common::String CyberflixEngine::currentSet() {
 	if (_set && _set->isOpen())
-		return _set->name();
+		return _set->setName();
 	return "none";
 }
 
@@ -330,6 +377,222 @@ bool CyberflixEngine::actionFrame(int n) {
 	if (n < 1 || n > 2)
 		return false;
 	return (_actionFrameMask & (1 << (n - 1))) != 0;
+}
+
+CyberflixEngine::ThemeTrack *CyberflixEngine::findTrack(const Common::String &name) {
+	Common::String key = name;
+	key.toLowercase();
+	for (uint i = 0; i < _tracks.size(); ++i)
+		if (_tracks[i]->name == key)
+			return _tracks[i].get();
+	return nullptr;
+}
+
+// opentrackfile('name.trk'): load and parse a track file, appending it to the
+// open-track list (TI.EXE FUN_00411be0 -> parser FUN_00411cc0, list
+// DAT_0046114c). Only the THEME side is parsed here; the SFX cue table
+// (makeloop/soundloop/makecricket) lands with the SFX subsystem.
+//
+// .TRK payload fields are read from the "record+8" base (the info dword is
+// part of the master header there, unlike the MOV record+12 view): res0
+// master header B: theme-table res id u32 @B+0x1c, pascal track name @B+0x24.
+// Theme table T: loop index u32 @T+0, playlist length u16 @T+4, playlist
+// u16[] @T+6 (1-based cue indices in play order), cue count u32 @T+0x10a, cue
+// records @T+0x10e stride 0x1a { u32 ?, u32 resId @+4, pascal name @+0xa }.
+// See files/audio-re-notes.md.
+void CyberflixEngine::openTrackFile(const Common::String &name) {
+	if (name.empty())
+		return;
+
+	Common::SharedPtr<ThemeTrack> track(new ThemeTrack());
+	track->name = name;
+	track->name.toLowercase();
+
+	Common::File file;
+	if (!file.open(Common::Path(name))) {
+		warning("Cyberflix: could not open track file '%s'", name.c_str());
+		return;
+	}
+	uint32 size = (uint32)file.size();
+	track->fileData.resize(size);
+	if (file.read(track->fileData.begin(), size) != size) {
+		warning("Cyberflix: could not read track file '%s'", name.c_str());
+		return;
+	}
+	file.close();
+
+	Archive archive;
+	if (!archive.open(new Common::MemoryReadStream(track->fileData.begin(), size, DisposeAfterUse::NO), name)) {
+		warning("Cyberflix: '%s' is not a valid track container", name.c_str());
+		return;
+	}
+
+	const byte *master = archive.getResourceCount()
+			? engineBase(track->fileData, archive.getResource(0)) : nullptr;
+	if (!master || master + 0x28 > track->fileData.end()) {
+		warning("Cyberflix: track '%s' has no master header", name.c_str());
+		return;
+	}
+	uint32 themeTableId = READ_LE_UINT32(master + 0x1c);
+	const byte *tt = (themeTableId < archive.getResourceCount())
+			? engineBase(track->fileData, archive.getResource(themeTableId)) : nullptr;
+	if (!tt || tt + 0x10e > track->fileData.end()) {
+		warning("Cyberflix: track '%s' has no theme table", name.c_str());
+		return;
+	}
+
+	track->loopIdx = READ_LE_UINT32(tt);
+	uint16 playlistLen = READ_LE_UINT16(tt + 4);
+	for (uint i = 0; i < playlistLen && tt + 6 + 2 * i + 2 <= track->fileData.end(); ++i)
+		track->playlist.push_back(READ_LE_UINT16(tt + 6 + 2 * i));
+	// FUN_00411cc0 clamps the loop target into the playlist.
+	if (!track->playlist.empty() && track->loopIdx >= track->playlist.size())
+		track->loopIdx = track->playlist.size() - 1;
+
+	uint32 cueCount = READ_LE_UINT32(tt + 0x10a);
+	for (uint32 i = 0; i < cueCount; ++i) {
+		const byte *rec = tt + 0x10e + 0x1a * i;
+		if (rec + 0x1a > track->fileData.end())
+			break;
+		ThemeTrack::Cue cue;
+		uint32 resId = READ_LE_UINT32(rec + 4);
+		cue.name = readPascalString(rec + 0xa, track->fileData);
+		if (resId < archive.getResourceCount() && !archive.getResource(resId).empty) {
+			cue.dataOffset = archive.getResource(resId).dataOffset;
+			cue.length = archive.getResource(resId).length;
+		}
+		track->cues.push_back(cue);
+	}
+
+	_tracks.push_back(track);
+	debug(1, "Cyberflix: track '%s' open (%u cues, playlist %u, loop @%u)",
+			name.c_str(), (uint32)track->cues.size(), (uint32)track->playlist.size(),
+			track->loopIdx);
+}
+
+// closetrackfile('name.trk'): remove the named track from the open list
+// (TI.EXE FUN_00412070; it does not stop a theme already streaming, and
+// neither do we -- the PCM was decoded up front).
+void CyberflixEngine::closeTrackFile(const Common::String &name) {
+	Common::String key = name;
+	key.toLowercase();
+	for (uint i = 0; i < _tracks.size(); ++i) {
+		if (_tracks[i]->name == key) {
+			_tracks.remove_at(i);
+			return;
+		}
+	}
+}
+
+// playtheme('name.trk'): start the track's theme playlist on the theme
+// channel, replacing whatever is playing (TI.EXE FUN_00412250 ->
+// FUN_0042f930/FUN_0042f960). The original streams the cue chain via the
+// servicer thread: playlist entries in order, the last one's next-pointer
+// aimed back at playlist[loopIdx], so cues before the loop index play once
+// and the tail loops forever. We decode the same two regions to PCM and play
+// them as intro + looped streams on a queuing stream.
+void CyberflixEngine::playTheme(const Common::String &name) {
+	ThemeTrack *track = findTrack(name);
+	if (!track) {
+		warning("Cyberflix: playtheme('%s'): track not open", name.c_str());
+		return;
+	}
+
+	_mixer->stopHandle(_themeHandle);
+	_themeTrackName.clear();
+	_themeSpans.clear();
+	_themeIntroSamples = _themeLoopSamples = 0;
+	if (track->playlist.empty())
+		return;
+
+	// Decode the intro (playlist[0..loopIdx-1]) and loop (playlist[loopIdx..])
+	// regions, recording each cue's start for currenttheme(1).
+	Common::Array<byte> intro, loop;
+	for (uint i = 0; i < track->playlist.size(); ++i) {
+		bool inLoop = (i >= track->loopIdx);
+		Common::Array<byte> &out = inLoop ? loop : intro;
+		uint16 cueIdx = track->playlist[i]; // 1-based
+		if (cueIdx < 1 || cueIdx > track->cues.size())
+			continue;
+		const ThemeTrack::Cue &cue = track->cues[cueIdx - 1];
+		ThemeCueSpan span;
+		span.startSample = (inLoop ? _themeIntroSamples : 0) + out.size();
+		span.name = cue.name;
+		_themeSpans.push_back(span);
+		if (cue.length && cue.dataOffset + cue.length <= track->fileData.size())
+			decodeCbxAudio(track->fileData.begin() + cue.dataOffset, cue.length, out);
+		if (!inLoop)
+			_themeIntroSamples = intro.size();
+	}
+	_themeLoopSamples = loop.size();
+	if (intro.empty() && loop.empty())
+		return;
+
+	Audio::QueuingAudioStream *queue = Audio::makeQueuingAudioStream(kAudioSampleRate, false);
+	if (!intro.empty()) {
+		byte *buf = (byte *)malloc(intro.size());
+		memcpy(buf, intro.begin(), intro.size());
+		queue->queueBuffer(buf, intro.size(), DisposeAfterUse::YES, Audio::FLAG_UNSIGNED);
+	}
+	if (!loop.empty()) {
+		byte *buf = (byte *)malloc(loop.size());
+		memcpy(buf, loop.begin(), loop.size());
+		Audio::SeekableAudioStream *loopStream = Audio::makeRawStream(
+				buf, loop.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED, DisposeAfterUse::YES);
+		queue->queueAudioStream(new Audio::LoopingAudioStream(loopStream, 0), DisposeAfterUse::YES);
+	}
+	queue->finish();
+
+	_mixer->playStream(Audio::Mixer::kMusicSoundType, &_themeHandle, queue);
+	_mixer->setChannelVolume(_themeHandle, (byte)CLIP(track->volume, 0, 255));
+	_themeTrackName = track->name;
+	debug(1, "Cyberflix: playtheme '%s' (intro %u + loop %u samples, vol %d)",
+			name.c_str(), _themeIntroSamples, _themeLoopSamples, track->volume);
+}
+
+// halttheme(): stop the theme channel (TI.EXE FUN_00412410 -> FUN_0042f690).
+void CyberflixEngine::haltTheme() {
+	_mixer->stopHandle(_themeHandle);
+	_themeTrackName.clear();
+	_themeSpans.clear();
+	_themeIntroSamples = _themeLoopSamples = 0;
+}
+
+// themevol('name.trk', 0-255): set the volume of every cue of the named track
+// and apply it live to a playing cue (TI.EXE FUN_004125c0 -> FUN_004300c0 ->
+// IDirectSoundBuffer::SetVolume). The 0-255 scale matches the mixer's.
+void CyberflixEngine::themeVolume(const Common::String &name, int volume) {
+	ThemeTrack *track = findTrack(name);
+	if (track)
+		track->volume = CLIP(volume, 0, 255);
+	Common::String key = name;
+	key.toLowercase();
+	if (key == _themeTrackName && _mixer->isSoundHandleActive(_themeHandle))
+		_mixer->setChannelVolume(_themeHandle, (byte)CLIP(volume, 0, 255));
+}
+
+// currenttheme(which): which==1 -> the name of the cue now playing on the
+// theme channel, which==2 -> its track file's name; 'none' when silent
+// (TI.EXE FUN_00412f20). We map the channel's elapsed time onto the decoded
+// cue spans, folding positions past the intro into the loop region.
+Common::String CyberflixEngine::currentTheme(int which) {
+	if (_themeTrackName.empty() || !_mixer->isSoundHandleActive(_themeHandle))
+		return "none";
+	if (which == 2)
+		return _themeTrackName;
+	// 8-bit mono at kAudioSampleRate: one sample per byte.
+	uint32 sample = (uint32)((uint64)_mixer->getSoundElapsedTime(_themeHandle) *
+			kAudioSampleRate / 1000);
+	if (sample >= _themeIntroSamples && _themeLoopSamples)
+		sample = _themeIntroSamples + (sample - _themeIntroSamples) % _themeLoopSamples;
+	Common::String cueName = "none";
+	for (uint i = 0; i < _themeSpans.size(); ++i) {
+		if (_themeSpans[i].startSample <= sample)
+			cueName = _themeSpans[i].name;
+		else
+			break;
+	}
+	return cueName;
 }
 
 // Resolve a clut name the way TI.EXE's registry lookup does (FUN_004470b0):

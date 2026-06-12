@@ -138,6 +138,22 @@ bool Set::open(const Common::String &name) {
 	_width = READ_LE_UINT16(hdr + kMasterWidthOffset);
 	_height = READ_LE_UINT16(hdr + kMasterHeightOffset);
 
+	// Embedded names TI.EXE copies out of the master header (FUN_004307f0):
+	// the set's own name (what currentset() returns) and the default scene
+	// and view used when opensetfile gets no scene/view arguments.
+	const byte *end = _fileData.end();
+	auto readPascal = [end](const byte *p) -> Common::String {
+		if (!p || p >= end)
+			return Common::String();
+		uint len = *p;
+		if (p + 1 + len > end)
+			len = (uint)(end - (p + 1));
+		return Common::String((const char *)p + 1, len);
+	};
+	_setName = readPascal(hdr + kMasterNameOffset);
+	_defaultScene = readPascal(hdr + kMasterDefaultSceneOffset);
+	_defaultView = readPascal(hdr + kMasterDefaultViewOffset);
+
 	uint32 sceneTableId = READ_LE_UINT32(hdr + kSceneTableIdOffset);
 	_sceneTable = resourceIndexById(sceneTableId);
 	if (_sceneTable < 0) {
@@ -174,6 +190,52 @@ uint32 Set::angleCount(uint32 scene, uint32 table) const {
 	uint32 count = 0;
 	panoramaTable(scene, table, count);
 	return count;
+}
+
+int Set::findView(uint32 scene, const Common::String &name) const {
+	if (name.empty())
+		return -1;
+	const byte *rec = sceneRecord(scene);
+	if (!rec)
+		return -1;
+	uint32 dirId = READ_LE_UINT32(rec + kSceneViewDirOffset);
+	int idx = resourceIndexById(dirId);
+	if (idx < 0)
+		return -1;
+	const byte *dir = payload((uint32)idx);
+	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
+		return -1;
+	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
+	for (uint32 i = 0; i < count; ++i) {
+		const byte *v = dir + kViewDirRecordsOffset + i * kViewRecordStride;
+		if (v + kViewRecordStride > _fileData.end())
+			break;
+		byte len = v[kViewNameOffset];
+		if (len && len < 16 &&
+				name.equalsIgnoreCase(Common::String((const char *)v + kViewNameOffset + 1, len)))
+			return (int)i;
+	}
+	return -1;
+}
+
+int Set::angleForView(uint32 scene, uint32 table, int viewIdx) const {
+	if (viewIdx < 0)
+		return -1;
+	uint32 count = 0;
+	const byte *pano = panoramaTable(scene, table, count);
+	if (!pano)
+		return -1;
+	// TI's panorama records run from base+0xc with base = payload-4, i.e.
+	// payload+8; the view-index tag sits at record+0x38 (FUN_004425e0 reads
+	// piVar5[0xe]). Records not facing a view directly are tagged -1.
+	for (uint32 i = 0; i < count; ++i) {
+		const byte *r = pano + 8 + i * kPanoramaRecordStride;
+		if (r + kPanoramaRecordStride > _fileData.end())
+			break;
+		if ((int32)READ_LE_UINT32(r + 0x38) == viewIdx)
+			return (int)i;
+	}
+	return -1;
 }
 
 bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameImage &out) {

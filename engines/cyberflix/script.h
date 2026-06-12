@@ -77,6 +77,9 @@ public:
 		kOpIf      = 0x0FA6, ///< Evaluate condition; enter or skip THEN block.
 		kOpEndIf   = 0x0FA7, ///< Close an if/then(/else) block.
 		kOpElse    = 0x0FA8, ///< Else marker; skipped after the THEN ran.
+		kOpSwitch  = 0x0FA9, ///< Switch head: eval selector, jump to matching case body.
+		kOpEndSwitch = 0x0FAA, ///< Switch end marker (executed: just continue).
+		kOpCase    = 0x0FAB, ///< Case label + value expr; executed = break to past kOpEndSwitch.
 		kOpFor     = 0x0FAC, ///< For-loop setup (loop var + start bound).
 		kOpForTo   = 0x0FAD, ///< For-loop bound separator ("to").
 		kOpForNext = 0x0FAF, ///< For-loop iterate/close.
@@ -153,6 +156,13 @@ public:
 	 * scanner at TI.EXE 0x0040c5b0; aborts (-1) on end/return.
 	 */
 	int findEndWhileFrom(uint32 index) const;
+
+	/**
+	 * Scans forward from @p index for the kOpEndSwitch closing the current
+	 * switch, tracking nested kOpSwitch blocks (TI.EXE FUN_0040c610).
+	 * @return instruction index of the kOpEndSwitch, or -1.
+	 */
+	int findEndSwitchFrom(uint32 index) const;
 
 	/**
 	 * Index of the kOpForNext at the current nesting level, scanning forward from
