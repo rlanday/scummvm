@@ -249,8 +249,11 @@ void CyberflixEngine::renderStageNode(int node) {
 
 	byte rgb[256 * 3];
 	memset(rgb, 0, sizeof(rgb));
-	if (_stage->loadStagePalette(rgb))
-		_system->getPaletteManager()->setPalette(rgb, 0, 256);
+	// Apply the stage palette only when the screen palette is live. While it
+	// is black (between clut('black') and the next fade-in) the original
+	// paints invisibly and the palette is brought up later by blacktoscreen.
+	if (_stage->loadStagePalette(rgb) && !paletteIsBlack())
+		programPalette(rgb);
 
 	Graphics::Surface *screen = _system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
@@ -329,6 +332,131 @@ bool CyberflixEngine::actionFrame(int n) {
 	return (_actionFrameMask & (1 << (n - 1))) != 0;
 }
 
+// Resolve a clut name the way TI.EXE's registry lookup does (FUN_004470b0):
+// the built-in names "black"/"current", and "set"/"stage" which alias the
+// palette embedded in the currently open file of that kind ("puppet" lands
+// with the puppet subsystem). Named cluts registered by scripts land later.
+bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 3]) {
+	Common::String key = name;
+	key.toLowercase();
+	memset(rgb, 0, sizeof(rgb));
+	if (key == "black" || key.empty())
+		return true;
+	if (key == "current") {
+		memcpy(rgb, _screenClut, sizeof(rgb));
+		return true;
+	}
+	if (key == "set")
+		return _set && _set->isOpen() && _set->loadSetPalette(rgb);
+	if (key == "stage")
+		return _stage && _stage->isOpen() && _stage->loadStagePalette(rgb);
+	warning("Cyberflix: clut '%s' not resolvable yet", name.c_str());
+	return false;
+}
+
+// Program the hardware palette and mirror it in _screenClut ("current",
+// TI.EXE DAT_0045f3c8 programmed by FUN_004010f0). The original forces
+// entry 0 to black and 255 to white; the game palettes already obey that.
+void CyberflixEngine::programPalette(const byte (&rgb)[256 * 3]) {
+	memcpy(_screenClut, rgb, sizeof(_screenClut));
+	_system->getPaletteManager()->setPalette(_screenClut, 0, 256);
+}
+
+// clut(name): snap the hardware palette to the named clut instantly
+// (FUN_00446500 -> FUN_0041ba80). Pixels are untouched, so clut('black')
+// makes whatever is (or gets) painted invisible until a fade reveals it.
+void CyberflixEngine::setClut(const Common::String &name) {
+	byte rgb[256 * 3];
+	if (!resolveClut(name, rgb))
+		return;
+	programPalette(rgb);
+	_system->updateScreen();
+	debug(1, "Cyberflix: clut('%s')", name.c_str());
+}
+
+// blackscreen() (FUN_00446b80): fill the window with black pixels via a GDI
+// rect fill in the original. The palette is not touched.
+void CyberflixEngine::blackScreen() {
+	Graphics::Surface *screen = _system->lockScreen();
+	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	_system->unlockScreen();
+	_system->updateScreen();
+	debug(1, "Cyberflix: blackscreen()");
+}
+
+// blacktoscreen(target, n) / screentoblack(target, n): palette-only fade
+// between black and the target clut, one interpolation step per 60 Hz tick
+// (FUN_0041b3f0 / FUN_0041b3a0 stepping FUN_0041b200 against the scaled
+// timer). The pixels must already be on screen. In TI.EXE the scene paint
+// that blacktoscreen('set', n) reveals was left in the framebuffer by the
+// stage loop; here renderSetScene paints pixels without touching the palette,
+// so we repaint the current scene before fading in to cover the case where a
+// movie (or blackscreen) overwrote it.
+void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool toBlack) {
+	byte to[256 * 3];
+	if (!resolveClut(target, to))
+		return;
+	if (steps < 1)
+		steps = 1;
+
+	if (!toBlack) {
+		Common::String key = target;
+		key.toLowercase();
+		if (key == "set" && _set && _set->isOpen() && _setScene >= 0)
+			renderSetScene(_setScene, _setAngle);
+	}
+
+	byte from[256 * 3];
+	if (toBlack) {
+		memcpy(from, to, sizeof(from));
+		memset(to, 0, sizeof(to));
+	} else {
+		memset(from, 0, sizeof(from));
+	}
+
+	debug(1, "Cyberflix: %s('%s', %d)", toBlack ? "screentoblack" : "blacktoscreen",
+			target.c_str(), steps);
+	fadePaletteSteps(from, to, steps);
+}
+
+bool CyberflixEngine::paletteIsBlack() const {
+	for (int i = 0; i < 256 * 3; ++i)
+		if (_screenClut[i])
+			return false;
+	return true;
+}
+
+void CyberflixEngine::fadePaletteSteps(const byte (&from)[256 * 3], const byte (&to)[256 * 3], int steps) {
+	if (steps < 1)
+		steps = 1;
+	uint32 startMs = _system->getMillis();
+	for (int s = 1; s <= steps && !shouldQuit(); ++s) {
+		byte cur[256 * 3];
+		for (int i = 0; i < 256 * 3; ++i)
+			cur[i] = (byte)(from[i] + ((int)to[i] - (int)from[i]) * s / steps);
+		programPalette(cur);
+		_system->updateScreen();
+		// One step per 60 Hz tick of the original's scaled timer.
+		uint32 deadline = startMs + (uint32)((uint64)s * 1000 / 60);
+		uint32 now = _system->getMillis();
+		if (now < deadline)
+			_system->delayMillis(deadline - now);
+		Common::Event event;
+		while (_eventMan->pollEvent(event))
+			; // keep the window live; fades are not skippable in the original
+	}
+	programPalette(to);
+	_system->updateScreen();
+}
+
+// visualeffect(effect, dur) (FUN_00446400): set the default transition used
+// by subsequent set/stage redraws (effect codes 0x5dc1..0x5dd5; the boot
+// scripts only ever select 'plain' 0x5dce = immediate blit, which is what the
+// renderer already does). Stored for when other effects are implemented.
+void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
+	debug(1, "Cyberflix: visualeffect(%#x, %d)", effect, duration);
+}
+
 // sendtoscene(name): select a scene of the open set by name and render it.
 // Mirrors TI.EXE FUN_004311e0 -> FUN_00431200 (scene resolved by name via
 // FUN_00432f30). The full path runs the scene's behavior script; for now we
@@ -362,8 +490,10 @@ void CyberflixEngine::renderSetScene(int scene, int angle) {
 
 	byte rgb[256 * 3];
 	memset(rgb, 0, sizeof(rgb));
-	if (_set->loadSetPalette(rgb))
-		_system->getPaletteManager()->setPalette(rgb, 0, 256);
+	// As with stage nodes: while the screen palette is black the room is
+	// painted invisibly and revealed later by blacktoscreen('set', n).
+	if (_set->loadSetPalette(rgb) && !paletteIsBlack())
+		programPalette(rgb);
 
 	Graphics::Surface *screen = _system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
@@ -706,6 +836,11 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// frame (the menu and its pressed-button frames), independent of the audio
 	// timeline that paces linear movies.
 	Common::Array<uint32> pfHoldMs;
+	// Per-frame draw command (event chunk +0xc; TI.EXE FUN_0040eef0 switch).
+	// 0x10 = plain blit; 0x11 = blit + palette fade to black across the hold;
+	// 0x12 = blit (palette black) + palette fade in. These author the menu
+	// fade-out (PLAYMODE 'GAME 2' 0x11) and the movie fade-ins (frame 0 0x12).
+	Common::Array<uint16> pfDrawOp;
 
 	// Whether the movie may be skipped by the user. The original input handler
 	// (TI.EXE FUN_0040e430) only honours the '.'/'Q'/'q' skip keys when the
@@ -798,6 +933,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				pfVideoRes.push_back(READ_LE_UINT32(rec + 0xc));
 				pfNavCmd.push_back((eb && eb + 2 <= fileData.end())
 						? READ_LE_UINT16(eb) : 6 /* default NEXT */);
+				pfDrawOp.push_back((eb && eb + 0xe <= fileData.end())
+						? READ_LE_UINT16(eb + 0xc) : 0x10 /* plain blit */);
 				pfName.push_back(readPascalString(rec + 0x1a, fileData));
 
 				// Interactive buttons: any bytes past the 0x446-byte event-chunk
@@ -879,10 +1016,16 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			pcmLen = 0;
 	}
 
-	byte rgb[256 * 3];
-	memset(rgb, 0, sizeof(rgb));
-	if (loadPalette(fileData.begin(), size, rgb))
-		_system->getPaletteManager()->setPalette(rgb, 0, 256);
+	// The movie palette is NOT programmed up front: the original keeps a
+	// palette-dirty flag (DAT_0045ee90) and the per-frame draw command decides
+	// — op 0x12 fades it in from black, op 0x11 fades out to black, any other
+	// op snaps it on its first presented frame (FUN_0040eef0 preamble). This
+	// keeps the menu's authored fade-out (clut left black) intact across the
+	// movie boundary instead of flashing the palette on at movie start.
+	byte moviePal[256 * 3];
+	memset(moviePal, 0, sizeof(moviePal));
+	bool haveMoviePal = loadPalette(fileData.begin(), size, moviePal);
+	bool moviePalApplied = false;
 
 	// Composite frames in order into a persistent surface (frames are
 	// inter-coded) and present them on the movie's own timeline. Esc skips a
@@ -1011,7 +1154,17 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		int w = seq.width(), h = seq.height();
 		int x0 = (kScreenWidth - w) / 2;
 		int y0 = (kScreenHeight - h) / 2;
+		// This frame's draw command (FUN_0040eef0): 0x11/0x12 are the palette
+		// fade-out/fade-in frames; anything else is a plain blit that snaps
+		// the movie palette on if it is not up yet (the original's
+		// palette-dirty preamble in FUN_0040eef0).
+		uint16 drawOp = (usePF && fi < pfDrawOp.size()) ? pfDrawOp[fi] : 0x10;
+		bool fadedThisFrame = false;
 		if (present) {
+			if (haveMoviePal && !moviePalApplied && drawOp != 0x11 && drawOp != 0x12) {
+				programPalette(moviePal);
+				moviePalApplied = true;
+			}
 			Graphics::Surface *screen = _system->lockScreen();
 			for (int y = 0; y < h; ++y) {
 				int sy = y0 + y;
@@ -1025,6 +1178,26 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			}
 			_system->unlockScreen();
 			_system->updateScreen();
+
+			// Palette fade across this frame's authored hold time, one step per
+			// 60 Hz tick (FUN_00410120 / FUN_004101a0): 0x12 = reveal the frame
+			// from black, 0x11 = fade the frame out, leaving the palette black
+			// for whatever follows (the menu -> room -> movie chain relies on it).
+			if (haveMoviePal && (drawOp == 0x11 || drawOp == 0x12)) {
+				uint32 holdMs = (usePF && fi < pfHoldMs.size()) ? pfHoldMs[fi]
+						: kFallbackFrameDelayMs;
+				int steps = (int)(holdMs * 60 / 1000);
+				byte black[256 * 3];
+				memset(black, 0, sizeof(black));
+				if (drawOp == 0x12) {
+					fadePaletteSteps(black, moviePal, steps);
+					moviePalApplied = true;
+				} else {
+					fadePaletteSteps(moviePal, black, steps);
+					moviePalApplied = false;
+				}
+				fadedThisFrame = true;
+			}
 		}
 
 		if (interactive) {
@@ -1082,7 +1255,10 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		// makes the "squished" pressed-button frame visible for its hold before
 		// the menu returns.
 		if (hasInteractive) {
-			uint32 holdMs = (fi < pfHoldMs.size()) ? pfHoldMs[fi] : kFallbackFrameDelayMs;
+			// A 0x11/0x12 fade already spent this frame's hold on the palette
+			// ramp (the original spreads the fade across the frame duration).
+			uint32 holdMs = fadedThisFrame ? 0
+					: ((fi < pfHoldMs.size()) ? pfHoldMs[fi] : kFallbackFrameDelayMs);
 			uint32 holdStart = _system->getMillis();
 			while (!shouldQuit() && !skip) {
 				while (_eventMan->pollEvent(event))

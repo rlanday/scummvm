@@ -89,6 +89,10 @@ public:
 	Common::String currentSet() override;
 	void sendToScene(const Common::String &scene) override;
 	bool actionFrame(int n) override;
+	void setClut(const Common::String &name) override;
+	void blackScreen() override;
+	void fadePalette(const Common::String &target, int steps, bool toBlack) override;
+	void setVisualEffect(uint16 effect, int duration) override;
 
 private:
 	/**
@@ -176,6 +180,38 @@ private:
 	 * (0x4e73, FUN_004362c0) tests bit n-1. See decomp/movie-playback.md.
 	 */
 	uint16 _actionFrameMask = 0;
+
+	/**
+	 * Resolve the named CLUT to 256 RGB triplets, mirroring TI.EXE's clut
+	 * registry (FUN_004470b0): "black" = all black; "set"/"stage" = the
+	 * palette embedded in the currently open set/stage file; "current" = the
+	 * hardware palette mirror (_screenClut). Returns false if unresolvable.
+	 */
+	bool resolveClut(const Common::String &name, byte (&rgb)[256 * 3]);
+
+	/**
+	 * Program the hardware palette and remember it in _screenClut (the
+	 * "current" clut, TI.EXE DAT_0045f3c8 + FUN_004010f0). All engine palette
+	 * writes funnel through here so fades always start from the true state.
+	 */
+	void programPalette(const byte (&rgb)[256 * 3]);
+
+	/** Linear palette fade @p from -> @p to, one step per 60 Hz tick of the
+	 *  original's scaled timer (TI.EXE FUN_0041b200 step loop). */
+	void fadePaletteSteps(const byte (&from)[256 * 3], const byte (&to)[256 * 3], int steps);
+
+	/** True if the hardware palette is currently all black (post clut('black')
+	 *  or a fade-out): renders must then leave the palette untouched so the
+	 *  paint stays invisible until the next fade-in reveals it. */
+	bool paletteIsBlack() const;
+
+	/**
+	 * Hardware palette mirror — what is on screen right now. Boot starts black,
+	 * matching run()'s initial clear. Fades interpolate from/to this so that a
+	 * set/stage render performed while the palette is black stays invisible
+	 * until blacktoscreen() reveals it (the original's transition model).
+	 */
+	byte _screenClut[256 * 3] = {};
 };
 
 } // End of namespace Cyberflix

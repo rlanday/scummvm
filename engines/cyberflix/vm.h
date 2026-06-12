@@ -111,6 +111,31 @@ public:
 	 * i.e. which menu button the user clicked (TI.EXE 0x4e73 FUN_00435026).
 	 */
 	virtual bool actionFrame(int n) { return false; }
+
+	/**
+	 * clut(name): snap the hardware palette to the named CLUT instantly
+	 * (TI.EXE 0x2f06 FUN_00446500 -> FUN_0041ba80). Built-in names include
+	 * "black", and "set"/"stage"/"puppet" resolve to the palette embedded in
+	 * the currently open file of that kind. Pixels are untouched.
+	 */
+	virtual void setClut(const Common::String &name) {}
+
+	/** blackscreen() (0x2f13 FUN_00446b80): fill the window with black
+	 *  pixels (a GDI rect fill in the original). Palette untouched. */
+	virtual void blackScreen() {}
+
+	/**
+	 * blacktoscreen(target, n) / screentoblack(target, n) (0x2f11/0x2f12,
+	 * FUN_00446b00/FUN_00446a80 -> FUN_0041b3f0/FUN_0041b3a0): fade the
+	 * hardware palette between black and the target CLUT, one interpolation
+	 * step per 60 Hz tick over @p n steps. The pixels are already on screen;
+	 * only the palette moves.
+	 */
+	virtual void fadePalette(const Common::String &target, int steps, bool toBlack) {}
+
+	/** visualeffect(effect, dur) (0x2ee9 FUN_00446400): set the global default
+	 *  transition for subsequent redraws ('plain' = opcode 0x5dce). */
+	virtual void setVisualEffect(uint16 effect, int duration) {}
 };
 
 /**

@@ -415,6 +415,27 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x2f02: // sendtoscene('scenename') -> TI.EXE FUN_004311e0/FUN_00431200
 			_host->sendToScene(args.empty() ? Common::String() : args[0].strValue);
 			break;
+		case 0x2f06: // clut(name): snap the hardware palette (FUN_00446500)
+			_host->setClut(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x2f13: // blackscreen(): fill the window with black pixels (FUN_00446b80)
+			_host->blackScreen();
+			break;
+		case 0x2f11: // blacktoscreen(target, steps): palette fade black -> target
+			_host->fadePalette(args.size() > 0 ? args[0].strValue : Common::String("current"),
+					args.size() > 1 ? args[1].intValue : 1, false);
+			break;
+		case 0x2f12: // screentoblack(target, steps): palette fade target -> black
+			_host->fadePalette(args.size() > 0 ? args[0].strValue : Common::String("current"),
+					args.size() > 1 ? args[1].intValue : 1, true);
+			break;
+		case 0x2ee9: // visualeffect(effect, dur): set default transition (FUN_00446400)
+			// The effect names ('plain', ...) are bare method opcodes 0x5dc1..
+			// 0x5dd5 used as atoms; decodeAtom yields Value() for them, so the
+			// effect code is not currently propagated. Only 'plain' is used by
+			// the boot scripts; forward the duration.
+			_host->setVisualEffect(0x5dce, args.size() > 1 ? args[1].intValue : 0);
+			break;
 		case 0x4e55: // currentset() -> open set name or 'none'
 			return Value::makeString(_host->currentSet());
 		case 0x4e73: // actionframe(n) -> bool, FUN_004362c0 (n must be 1 or 2)
