@@ -101,12 +101,16 @@ static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, u
 // (resourceLen - 0x446) / 0x40); FUN_0040d710 hit-tests the rect against the
 // click point and runs the action. Field offsets within the record:
 //   +0x00 u16 action (1=END, 2=GOTO target, 6=NEXT, 7=PREV),
-//   +0x02 byte flags (bit0 => also require a per-pixel mask hit; our menu
-//         buttons clear it so a rect hit is enough),
-//   +0x08 rect {left, top, right, bottom} as int16 (see FUN_0041ac60),
+//   +0x02 byte flags (bit0 => also require a per-pixel mask hit on click;
+//         bit1 => hover-cursor eligible, see FUN_0040e5b0),
+//   +0x08 QuickDraw rect {top, left, bottom, right} as int16: FUN_0041ac60
+//         tests the packed point's low short (y) against rect[0]/rect[2] and
+//         its high short (x) against rect[1]/rect[3]. (Verified in data:
+//         PLAYMODE's GAME button rect {232,208,277,324} is 116 wide, 45 tall.)
 //   +0x30 Pascal string = GOTO target frame name (for action 2).
 struct MovieButton {
 	uint16 action;
+	byte flags;
 	int16 left, top, right, bottom;
 	Common::String target;
 	bool contains(int x, int y) const {
@@ -1114,6 +1118,11 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// (TI.EXE FUN_0040e430) only honours the '.'/'Q'/'q' skip keys when the
 	// master header flags byte (+0x18) has bit 0 set.
 	bool movieSkippable = false;
+	// Hover cursor: while waiting on an interactive frame the original polls
+	// FUN_0040e5b0 each event-loop pass, which swaps the cursor to "CURS131"
+	// over any button whose flag bit 0x2 is set and back to "CURS.ARROW"
+	// otherwise. Disabled wholesale by master header flag +0x18 bit 0x10.
+	bool movieHoverCursor = true;
 
 	// Action-cue frame indices, resolved from the master header's two cue-name
 	// fields at +0x40/+0x50 (TI.EXE FUN_0040ca80 resolves them via FUN_0040e050
@@ -1143,6 +1152,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		// Guard the per-frame table extent before trusting the header layout.
 		if (hdr && hdr + 0x87c <= fileData.end()) {
 			movieSkippable = (hdr[0x18] & 1) != 0;
+			movieHoverCursor = (hdr[0x18] & 0x10) == 0;
 			// Dest position: rect {t,l} @+0x86c plus origin @+0x24/+0x26.
 			movieX = (int16)READ_LE_UINT16(hdr + 0x86e) + (int16)READ_LE_UINT16(hdr + 0x24);
 			movieY = (int16)READ_LE_UINT16(hdr + 0x86c) + (int16)READ_LE_UINT16(hdr + 0x26);
@@ -1228,10 +1238,12 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 						break;
 					MovieButton mb;
 					mb.action = READ_LE_UINT16(br);
-					mb.left   = (int16)READ_LE_UINT16(br + 8);
-					mb.top    = (int16)READ_LE_UINT16(br + 10);
-					mb.right  = (int16)READ_LE_UINT16(br + 12);
-					mb.bottom = (int16)READ_LE_UINT16(br + 14);
+					mb.flags  = br[2];
+					// QuickDraw rect order {t, l, b, r} (see MovieButton).
+					mb.top    = (int16)READ_LE_UINT16(br + 8);
+					mb.left   = (int16)READ_LE_UINT16(br + 10);
+					mb.bottom = (int16)READ_LE_UINT16(br + 12);
+					mb.right  = (int16)READ_LE_UINT16(br + 14);
 					mb.target = readPascalString(br + 0x30, fileData);
 					buttons.push_back(mb);
 				}
@@ -1489,7 +1501,28 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			// action: GOTO jumps to the named frame, NEXT/PREV step, END (and any
 			// click on an action-1 button) returns from the movie.
 			int32 nextFi = -1;
+			// Hover cursor state: -1 unknown, 0 arrow, 1 hand ("CURS131").
+			int hoverState = -1;
 			while (nextFi < 0 && !shouldQuit() && !skip) {
+				// FUN_0040e5b0: every poll, point-in-rect the mouse against the
+				// frame's hover-eligible buttons (flag bit 0x2; plain rect test,
+				// no pixel mask) and show "CURS131" over one, "CURS.ARROW"
+				// otherwise.
+				if (movieHoverCursor) {
+					Common::Point m = _eventMan->getMousePos();
+					int hover = 0;
+					for (uint b = 0; b < pfButtons[fi].size(); ++b) {
+						const MovieButton &mb = pfButtons[fi][b];
+						if ((mb.flags & 0x2) && mb.contains(m.x - x0, m.y - y0)) {
+							hover = 1;
+							break;
+						}
+					}
+					if (hover != hoverState) {
+						setGameCursor(hover ? "CURS131" : "CURS.ARROW");
+						hoverState = hover;
+					}
+				}
 				while (_eventMan->pollEvent(event)) {
 					handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
 					if (event.type == Common::EVENT_LBUTTONDOWN) {
