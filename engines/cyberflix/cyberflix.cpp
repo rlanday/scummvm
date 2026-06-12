@@ -20,7 +20,6 @@
  */
 
 #include "common/config-manager.h"
-#include "common/math.h"
 #include "common/debug.h"
 #include "common/debug-channels.h"
 #include "common/events.h"
@@ -226,6 +225,13 @@ void CyberflixEngine::openStageFile(const Common::String &name) {
 		return;
 	_stage.reset(stage.release());
 	debug(1, "Cyberflix: stage '%s' open (%u nodes)", name.c_str(), _stage->nodeCount());
+
+	// The original renders the stage's current node immediately on open:
+	// FUN_004090b0 parses the file (FUN_00409150), then calls the frame
+	// renderer FUN_0040b180 on the current node and dispatches openstage().
+	// MAIN.STG node 0 is the persistent UI shell (art-deco frame + inventory
+	// bar) that room viewports later draw on top of.
+	renderStageNode(0);
 }
 
 // sendtostage(message(...)): deliver a message call to the stage's script
@@ -262,13 +268,13 @@ void CyberflixEngine::renderStageNode(int node) {
 
 	Graphics::Surface *screen = _system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
-	int x0 = (kScreenWidth - frame.width) / 2;
-	int y0 = (kScreenHeight - frame.height) / 2;
+	// Stage nodes are full-screen items: the compositor FUN_004436d0 clips
+	// them against the whole screen rect DAT_00460d58, not the set viewport,
+	// so they paint from the top-left corner (MAIN.STG is 512x384).
 	for (int y = 0; y < frame.height; ++y) {
 		for (int x = 0; x < frame.width; ++x) {
-			int sx = x0 + x, sy = y0 + y;
-			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
+			if (x < kScreenWidth && y < kScreenHeight)
+				*((byte *)screen->getBasePtr(x, y)) = frame.pixels[(uint)y * frame.width + x];
 		}
 	}
 	_system->unlockScreen();
@@ -787,12 +793,24 @@ void CyberflixEngine::renderSetScene(int scene, int angle) {
 		programPalette(rgb);
 
 	Graphics::Surface *screen = _system->lockScreen();
-	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	// Base layer: the stage's UI shell (MAIN.STG node 0 — art-deco frame +
+	// inventory bar). The original's compositor keeps it on screen beneath
+	// the room: the redraw pass FUN_00442d90 repaints full-screen stage items
+	// (clipped to screen rect, FUN_004436d0) before world items, which clip
+	// to the set viewport DAT_00486760. Fall back to black with no stage.
+	FrameImage stageBg;
+	if (_stage && _stage->isOpen() && _stage->renderNode(0, stageBg)) {
+		for (int y = 0; y < stageBg.height && y < kScreenHeight; ++y)
+			for (int x = 0; x < stageBg.width && x < kScreenWidth; ++x)
+				*((byte *)screen->getBasePtr(x, y)) = stageBg.pixels[(uint)y * stageBg.width + x];
+	} else {
+		screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	}
 	// The panorama is drawn at the master header's viewport origin (B+0x80/
 	// 0x82, {0, 0} in every set), i.e. at the TOP of the screen: FUN_00441f40
 	// builds the draw rect {top, left, top+h, left+w} from those fields. The
-	// 512x120 strip below (screen height 384 - 0x78, FUN_00449150) is the
-	// inventory bar's, left black until that subsystem is implemented.
+	// 512x120 strip below (screen height 384 - 0x78, FUN_00449150) shows the
+	// stage's inventory bar.
 	int x0 = _set->viewLeft();
 	int y0 = _set->viewTop();
 	for (int y = 0; y < frame.height; ++y) {
