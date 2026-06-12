@@ -98,6 +98,7 @@ bool Set::open(const Common::String &name) {
 	_sceneTable = -1;
 	_sceneCount = 0;
 	_width = _height = 0;
+	_viewLeft = _viewTop = 0;
 	_name = name;
 
 	Common::File file;
@@ -137,6 +138,8 @@ bool Set::open(const Common::String &name) {
 	}
 	_width = READ_LE_UINT16(hdr + kMasterWidthOffset);
 	_height = READ_LE_UINT16(hdr + kMasterHeightOffset);
+	_viewLeft = (int16)READ_LE_UINT16(hdr + kMasterViewLeftOffset);
+	_viewTop = (int16)READ_LE_UINT16(hdr + kMasterViewTopOffset);
 
 	// Embedded names TI.EXE copies out of the master header (FUN_004307f0):
 	// the set's own name (what currentset() returns) and the default scene

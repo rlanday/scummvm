@@ -84,6 +84,14 @@ public:
 	/** Master-header, scene-record and panorama-record field offsets. */
 	enum {
 		kMasterNameOffset = 0x070,
+		// Viewport rect the runtime copies into its set state (FUN_004307f0
+		// param_2[0x11/0x12/0x0f/0x10] <- B+0x80/0x82/0x84/0x86) and turns
+		// into the QuickDraw draw rect {top, left, top+h, left+w} in
+		// FUN_00441f40. Every Titanic .SET has {0, 0, 512, 264}: the panorama
+		// occupies the TOP of the 512x384 screen; the bottom 120 px
+		// (384 - 0x78, see FUN_00449150) belong to the inventory bar.
+		kMasterViewLeftOffset = 0x080,
+		kMasterViewTopOffset = 0x082,
 		kMasterWidthOffset = 0x084,
 		kMasterHeightOffset = 0x086,
 		kSceneTableIdOffset = 0x060,
@@ -140,6 +148,11 @@ public:
 
 	uint16 width() const { return _width; }
 	uint16 height() const { return _height; }
+
+	/** Viewport origin from the master header (B+0x80/0x82); the panorama is
+	 *  drawn at this screen position (FUN_00441f40), {0, 0} in every set. */
+	int16 viewLeft() const { return _viewLeft; }
+	int16 viewTop() const { return _viewTop; }
 	uint32 sceneCount() const { return _sceneCount; }
 
 	/** Scene @p index's name, or empty if out of range. */
@@ -204,6 +217,8 @@ private:
 	uint32 _sceneCount = 0;
 	uint16 _width = 0;
 	uint16 _height = 0;
+	int16 _viewLeft = 0;  ///< Viewport origin x (master header +0x080).
+	int16 _viewTop = 0;   ///< Viewport origin y (master header +0x082).
 };
 
 } // End of namespace Cyberflix

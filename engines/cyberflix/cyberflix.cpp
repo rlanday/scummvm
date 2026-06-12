@@ -760,8 +760,13 @@ void CyberflixEngine::renderSetScene(int scene, int angle) {
 
 	Graphics::Surface *screen = _system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
-	int x0 = (kScreenWidth - frame.width) / 2;
-	int y0 = (kScreenHeight - frame.height) / 2;
+	// The panorama is drawn at the master header's viewport origin (B+0x80/
+	// 0x82, {0, 0} in every set), i.e. at the TOP of the screen: FUN_00441f40
+	// builds the draw rect {top, left, top+h, left+w} from those fields. The
+	// 512x120 strip below (screen height 384 - 0x78, FUN_00449150) is the
+	// inventory bar's, left black until that subsystem is implemented.
+	int x0 = _set->viewLeft();
+	int y0 = _set->viewTop();
 	for (int y = 0; y < frame.height; ++y) {
 		for (int x = 0; x < frame.width; ++x) {
 			int sx = x0 + x, sy = y0 + y;
@@ -1117,6 +1122,13 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	int actionCue1 = -1, actionCue2 = -1;
 	_actionFrameMask = 0; // playmovie clears the mask (TI.EXE FUN_00446f80)
 
+	// Screen position of the movie. The original never centers: each draw op
+	// blits at the master header's QuickDraw rect {top,left,bottom,right}
+	// @+0x86c offset by the s16 origin @+0x24 (x) / +0x26 (y) (FUN_0040eef0 ->
+	// FUN_00410660 -> FUN_0041ad40). LOGO.MOV's rect is {0,0,264,512}: the
+	// logo plays at the TOP of the screen. See files/decomp/movie-playback.md.
+	int movieX = 0, movieY = 0;
+
 	int masterIdx = -1;
 	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
 		if (!archive.getResource(i).empty && archive.getResource(i).info == kMasterHeaderInfoTag) {
@@ -1131,6 +1143,9 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		// Guard the per-frame table extent before trusting the header layout.
 		if (hdr && hdr + 0x87c <= fileData.end()) {
 			movieSkippable = (hdr[0x18] & 1) != 0;
+			// Dest position: rect {t,l} @+0x86c plus origin @+0x24/+0x26.
+			movieX = (int16)READ_LE_UINT16(hdr + 0x86e) + (int16)READ_LE_UINT16(hdr + 0x24);
+			movieY = (int16)READ_LE_UINT16(hdr + 0x86c) + (int16)READ_LE_UINT16(hdr + 0x26);
 			uint32 musicTableIdx = READ_LE_UINT32(hdr + 0x64); // masterHdr[0x19]
 			uint32 sfxTableIdx   = READ_LE_UINT32(hdr + 0x60); // masterHdr[0x18]
 			uint32 pfCount       = READ_LE_UINT32(hdr + 0x878);
@@ -1415,8 +1430,11 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 
 		const byte *pixels = seq.pixels();
 		int w = seq.width(), h = seq.height();
-		int x0 = (kScreenWidth - w) / 2;
-		int y0 = (kScreenHeight - h) / 2;
+		// Movie rect origin from the master header (no centering in the
+		// original; FUN_00410660 + FUN_0041ad40): (0,0) for all known movies,
+		// so 264-high frames play at the top of the screen.
+		int x0 = movieX;
+		int y0 = movieY;
 		// This frame's draw command (FUN_0040eef0): 0x11/0x12 are the palette
 		// fade-out/fade-in frames; anything else is a plain blit that snaps
 		// the movie palette on if it is not up yet (the original's
