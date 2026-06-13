@@ -318,7 +318,10 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 	_setTable = 0;
 	_setAngle = 0;
 	_setView.clear();
-	_setTransitionActive = false;
+	_setTransitionType = kSetTransitionNone;
+	_setTransitionResource = 0;
+	_setTransitionFrame = 0;
+	_setFrameSequence.clear();
 	_setVisible = true;
 	debug(1, "Cyberflix: set '%s' open (%u scenes, name '%s', default scene '%s' view '%s')",
 			name.c_str(), _set->sceneCount(), _set->setName().c_str(),
@@ -389,7 +392,10 @@ void CyberflixEngine::closeSetFile() {
 	_setTable = 0;
 	_setAngle = 0;
 	_setView.clear();
-	_setTransitionActive = false;
+	_setTransitionType = kSetTransitionNone;
+	_setTransitionResource = 0;
+	_setTransitionFrame = 0;
+	_setFrameSequence.clear();
 	_setVisible = false;
 }
 
@@ -406,7 +412,7 @@ Common::String CyberflixEngine::currentSet() {
 // currentview(): DAT_004611dc in TI.EXE (FUN_00431ce0), or "Moving" while a
 // panorama transition resource is active.
 Common::String CyberflixEngine::currentView() {
-	if (_setTransitionActive)
+	if (_setTransitionType != kSetTransitionNone)
 		return "Moving";
 	if (_set && _set->isOpen() && !_setView.empty())
 		return _setView;
@@ -1221,7 +1227,7 @@ void CyberflixEngine::sendToScene(const Common::String &scene,
 void CyberflixEngine::navigateSet(const Common::String &action) {
 	if (!_set || !_set->isOpen() || _setScene < 0)
 		return;
-	if (_setTransitionActive)
+	if (_setTransitionType != kSetTransitionNone)
 		return;
 
 	int viewIdx = _set->findView((uint32)_setScene, _setView);
@@ -1242,8 +1248,17 @@ void CyberflixEngine::navigateSet(const Common::String &action) {
 					action.c_str(), _setView.c_str());
 			return;
 		}
-		renderSetScene(_setScene, table, startAngle, _setView);
-		_setTransitionActive = true;
+		FrameImage frame;
+		if (!_set->applyPanoramaFrame((uint32)_setScene, (uint32)table, (uint32)startAngle,
+				_setFrameSequence, frame)) {
+			warning("Cyberflix: set '%s' failed to start %s turn from view '%s'",
+					_set->name().c_str(), action.c_str(), _setView.c_str());
+			return;
+		}
+		_setTable = table;
+		_setAngle = startAngle;
+		_setTransitionType = kSetTransitionTurn;
+		displaySetFrame(frame);
 		return;
 	}
 
@@ -1251,38 +1266,97 @@ void CyberflixEngine::navigateSet(const Common::String &action) {
 		uint32 transitionId = _set->forwardTransitionForView((uint32)_setScene, viewIdx);
 		if (transitionId == 0)
 			return;
-		uint32 scene = 0;
-		Common::String view;
-		int angle = 0;
-		if (!_set->transitionDestination(transitionId, scene, view, angle)) {
-			warning("Cyberflix: set '%s' transition %u has no resolvable destination",
+		uint32 count = _set->transitionFrameCount(transitionId);
+		if (count < 2) {
+			warning("Cyberflix: set '%s' transition %u has too few frames (%u)",
+					_set->name().c_str(), transitionId, count);
+			return;
+		}
+		FrameImage frame;
+		if (!_set->applyTransitionFrame(transitionId, 0, _setFrameSequence, frame)) {
+			warning("Cyberflix: set '%s' failed to start forward transition %u",
 					_set->name().c_str(), transitionId);
 			return;
 		}
-		renderSetScene((int)scene, 0, angle, view);
+		_setTransitionType = kSetTransitionForward;
+		_setTransitionResource = transitionId;
+		_setTransitionFrame = 0;
+		displaySetFrame(frame);
 	}
 }
 
 void CyberflixEngine::advanceSetTransition() {
-	if (!_setTransitionActive || !_set || !_set->isOpen() || _setScene < 0)
+	if (_setTransitionType == kSetTransitionNone || !_set || !_set->isOpen() || _setScene < 0)
 		return;
 
-	uint32 count = _set->angleCount((uint32)_setScene, (uint32)_setTable);
-	if (count == 0) {
-		_setTransitionActive = false;
+	if (_setTransitionType == kSetTransitionTurn) {
+		uint32 count = _set->angleCount((uint32)_setScene, (uint32)_setTable);
+		if (count == 0) {
+			_setTransitionType = kSetTransitionNone;
+			return;
+		}
+
+		int nextAngle = (_setAngle + 1) % (int)count;
+		FrameImage frame;
+		if (!_set->applyPanoramaFrame((uint32)_setScene, (uint32)_setTable, (uint32)nextAngle,
+				_setFrameSequence, frame)) {
+			_setTransitionType = kSetTransitionNone;
+			warning("Cyberflix: failed to advance SET turn transition");
+			return;
+		}
+		_setAngle = nextAngle;
+		int viewIdx = _set->viewTagAtAngle((uint32)_setScene, (uint32)_setTable, (uint32)nextAngle);
+		if (viewIdx >= 0)
+			_setView = _set->viewName((uint32)_setScene, (uint32)viewIdx);
+		displaySetFrame(frame);
+
+		if (viewIdx >= 0) {
+			_setTransitionType = kSetTransitionNone;
+			Common::Array<Value> noArgs;
+			_vm.callFunction("openscene", noArgs);
+		}
 		return;
 	}
 
-	int nextAngle = (_setAngle + 1) % (int)count;
-	int viewIdx = _set->viewTagAtAngle((uint32)_setScene, (uint32)_setTable, (uint32)nextAngle);
-	Common::String view = viewIdx >= 0 ?
-			_set->viewName((uint32)_setScene, (uint32)viewIdx) : Common::String();
-	renderSetScene(_setScene, _setTable, nextAngle, view);
+	if (_setTransitionType == kSetTransitionForward) {
+		uint32 count = _set->transitionFrameCount(_setTransitionResource);
+		uint32 nextFrame = _setTransitionFrame + 1;
+		if (nextFrame >= count) {
+			_setTransitionType = kSetTransitionNone;
+			_setTransitionResource = 0;
+			_setTransitionFrame = 0;
+			return;
+		}
 
-	if (viewIdx >= 0) {
-		_setTransitionActive = false;
-		Common::Array<Value> noArgs;
-		_vm.callFunction("openscene", noArgs);
+		FrameImage frame;
+		if (!_set->applyTransitionFrame(_setTransitionResource, nextFrame, _setFrameSequence, frame)) {
+			_setTransitionType = kSetTransitionNone;
+			warning("Cyberflix: failed to advance SET forward transition %u", _setTransitionResource);
+			return;
+		}
+		_setTransitionFrame = nextFrame;
+		displaySetFrame(frame);
+
+		if (nextFrame == count - 1) {
+			uint32 scene = 0;
+			Common::String view;
+			int angle = 0;
+			if (!_set->transitionDestination(_setTransitionResource, scene, view, angle)) {
+				warning("Cyberflix: set '%s' transition %u has no resolvable destination",
+						_set->name().c_str(), _setTransitionResource);
+				_setTransitionType = kSetTransitionNone;
+				return;
+			}
+			_setScene = (int)scene;
+			_setTable = 0;
+			_setAngle = angle;
+			_setView = view;
+			_setTransitionType = kSetTransitionNone;
+			_setTransitionResource = 0;
+			_setTransitionFrame = 0;
+			Common::Array<Value> noArgs;
+			_vm.callFunction("openscene", noArgs);
+		}
 	}
 }
 
@@ -1293,7 +1367,7 @@ void CyberflixEngine::renderSetScene(int scene, int table, int angle, const Comm
 	}
 
 	FrameImage frame;
-	if (!_set->renderScene((uint32)scene, (uint32)table, (uint32)angle, frame))
+	if (!_set->renderScene((uint32)scene, (uint32)table, (uint32)angle, _setFrameSequence, frame))
 		return;
 
 	_setScene = scene;
@@ -1313,6 +1387,17 @@ void CyberflixEngine::renderSetScene(int scene, int table, int angle, const Comm
 	// painted invisibly and revealed later by blacktoscreen('set', n).
 	if (_set->loadSetPalette(rgb) && !paletteIsBlack())
 		programPalette(rgb);
+
+	displaySetFrame(frame);
+
+	debug(1, "Cyberflix: rendered set '%s' scene %d '%s' angle %d (%ux%u)",
+			_set->name().c_str(), scene, _set->sceneName((uint32)scene).c_str(),
+			angle, frame.width, frame.height);
+}
+
+void CyberflixEngine::displaySetFrame(const FrameImage &frame) {
+	if (!_set || !_set->isOpen())
+		return;
 
 	Graphics::Surface *screen = _system->lockScreen();
 	// Base layer: the stage's UI shell (MAIN.STG node 0 — art-deco frame +
@@ -1376,10 +1461,6 @@ void CyberflixEngine::renderSetScene(int scene, int table, int angle, const Comm
 	if (setGameCursor("CURS.ARROW"))
 		CursorMan.showMouse(true);
 	_system->updateScreen();
-
-	debug(1, "Cyberflix: rendered set '%s' scene %d '%s' angle %d (%ux%u)",
-			_set->name().c_str(), scene, _set->sceneName((uint32)scene).c_str(),
-			angle, frame.width, frame.height);
 }
 
 Common::Error CyberflixEngine::run() {

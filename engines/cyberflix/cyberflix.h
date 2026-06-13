@@ -33,6 +33,7 @@
 #include "audio/mixer.h"
 
 #include "cyberflix/detection.h"
+#include "cyberflix/image.h"
 #include "cyberflix/shop.h"
 #include "cyberflix/vm.h"
 
@@ -169,9 +170,11 @@ private:
 	void renderSetScene(int scene, int table, int angle,
 			const Common::String &view = Common::String());
 	void renderSetScene(int scene, int angle) { renderSetScene(scene, _setTable, angle); }
+	/** Composite a decoded SET background frame with the stage shell and props. */
+	void displaySetFrame(const FrameImage &frame);
 	/** Run the verified SET navigation actions used by currentscene(). */
 	void navigateSet(const Common::String &action);
-	/** Advance an active left/right panorama transition by one native frame. */
+	/** Advance an active SET transition by one native frame. */
 	void advanceSetTransition();
 
 	/**
@@ -203,11 +206,19 @@ private:
 
 	Common::ScopedPtr<Stage> _stage; ///< Currently open stage (DATA/*.STG), or null.
 	Common::ScopedPtr<Set> _set;     ///< Currently open set (DATA/*.SET), or null.
+	enum SetTransitionType {
+		kSetTransitionNone,
+		kSetTransitionTurn,
+		kSetTransitionForward
+	};
 	int _setScene = -1;              ///< Active scene index within _set, or -1.
 	int _setTable = 0;               ///< Active panorama table: 0 = +0x0a/right, 1 = +0x0e/left.
 	int _setAngle = 0;               ///< Active panorama angle within _setScene.
 	Common::String _setView;         ///< Active view name in _setScene (DAT_004611dc).
-	bool _setTransitionActive = false; ///< A left/right SET panorama table is advancing.
+	SetTransitionType _setTransitionType = kSetTransitionNone;
+	uint32 _setTransitionResource = 0; ///< Active forward transition resource id.
+	uint32 _setTransitionFrame = 0;    ///< Active forward transition frame index.
+	FrameSequence _setFrameSequence; ///< Retained SET background buffer (TI.EXE 0x486770).
 	bool _setVisible = false;        ///< TI.EXE DAT_00461182, read by setvisible().
 	int _stageNode = 0;              ///< Current stage node (TI.EXE DAT_00461160).
 

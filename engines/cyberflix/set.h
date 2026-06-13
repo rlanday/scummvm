@@ -209,6 +209,16 @@ public:
 	 * state); see the class doc. Returns false on a bad index or malformed frame.
 	 */
 	bool renderScene(uint32 scene, uint32 table, uint32 angle, FrameImage &out);
+	bool renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq, FrameImage &out);
+
+	/** Apply one panorama record's frame to an existing retained SET buffer. */
+	bool applyPanoramaFrame(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq, FrameImage &out);
+
+	/** Number of frames in a forward transition resource, or 0 if malformed. */
+	uint32 transitionFrameCount(uint32 transitionId) const;
+
+	/** Apply one forward transition record's frame to an existing retained SET buffer. */
+	bool applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence &seq, FrameImage &out);
 
 	/** Expand the set's embedded palette into @p rgb (256*3, R,G,B). */
 	bool loadSetPalette(byte *rgb) const;
@@ -224,6 +234,10 @@ private:
 	const byte *sceneRecord(uint32 scene) const;
 	/** Panorama table payload for scene @p scene / table @p table, or nullptr. */
 	const byte *panoramaTable(uint32 scene, uint32 table, uint32 &count) const;
+	/** Forward-transition table engine-base for resource id @p transitionId. */
+	const byte *transitionTable(uint32 transitionId, uint32 &count) const;
+	/** Apply a frame resource to @p seq and copy the retained buffer to @p out. */
+	bool applyFrameResource(uint32 frameId, FrameSequence &seq, FrameImage &out) const;
 	/** Index of the scene whose view-directory resource id is @p viewDirId. */
 	int findSceneByViewDirId(uint32 viewDirId) const;
 	/** View index in @p scene closest to @p heading on the 256-unit circle. */

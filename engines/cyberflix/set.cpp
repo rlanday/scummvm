@@ -93,6 +93,40 @@ const byte *Set::panoramaTable(uint32 scene, uint32 table, uint32 &count) const 
 	return pano;
 }
 
+const byte *Set::transitionTable(uint32 transitionId, uint32 &count) const {
+	count = 0;
+	int idx = resourceIndexById(transitionId);
+	if (idx < 0)
+		return nullptr;
+	const byte *transition = engineBase((uint32)idx);
+	if (!transition || transition + 0x0c > _fileData.end())
+		return nullptr;
+	uint32 c = READ_LE_UINT32(transition + 0x04);
+	const Archive::Resource &res = _archive.getResource((uint32)idx);
+	if ((uint64)c * kPanoramaRecordStride + 0x0c > res.length + 4)
+		return nullptr;
+	count = c;
+	return transition;
+}
+
+bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq, FrameImage &out) const {
+	int idx = resourceIndexById(frameId);
+	if (idx < 0) {
+		warning("Cyberflix: set '%s' references missing frame res %u", _name.c_str(), frameId);
+		return false;
+	}
+	const byte *frame = engineBase((uint32)idx);
+	if (!frame)
+		return false;
+	uint32 frameLen = _archive.getResource((uint32)idx).length + 4; // payload + info word
+	if (seq.applyFrame(frame, frameLen) == 0) {
+		warning("Cyberflix: set '%s' frame %u decode failed", _name.c_str(), frameId);
+		return false;
+	}
+	seq.copyTo(out);
+	return true;
+}
+
 int Set::findSceneByViewDirId(uint32 viewDirId) const {
 	for (uint32 i = 0; i < _sceneCount; ++i) {
 		const byte *rec = sceneRecord(i);
@@ -348,17 +382,9 @@ uint32 Set::forwardTransitionForView(uint32 scene, int viewIdx) const {
 
 bool Set::transitionDestination(uint32 transitionId, uint32 &scene,
 		Common::String &view, int &angle) const {
-	int idx = resourceIndexById(transitionId);
-	if (idx < 0)
-		return false;
-	const byte *transition = engineBase((uint32)idx);
-	if (!transition || transition + 0x0c > _fileData.end())
-		return false;
-	uint32 count = READ_LE_UINT32(transition + 0x04);
+	uint32 count = 0;
+	const byte *transition = transitionTable(transitionId, count);
 	if (count == 0)
-		return false;
-	const Archive::Resource &res = _archive.getResource((uint32)idx);
-	if ((uint64)count * kPanoramaRecordStride + 0x0c > res.length + 4)
 		return false;
 	int sceneIdx = findSceneByViewDirId(READ_LE_UINT32(transition + 0x08));
 	if (sceneIdx < 0)
@@ -377,6 +403,11 @@ bool Set::transitionDestination(uint32 transitionId, uint32 &scene,
 }
 
 bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameImage &out) {
+	FrameSequence seq;
+	return renderScene(scene, table, angle, seq, out);
+}
+
+bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq, FrameImage &out) {
 	uint32 count = 0;
 	const byte *pano = panoramaTable(scene, table, count);
 	if (!pano) {
@@ -396,27 +427,44 @@ bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameImage &out)
 	// arbitrary angle from cold we replay frames 0..angle, exactly the buffer
 	// state the engine would have built up. Decoding a delta angle standalone
 	// would leave its "copy from previous" regions unwritten (visible garbage).
-	FrameSequence seq;
+	seq.clear();
 	for (uint32 a = 0; a <= angle; ++a) {
-		uint32 frameId = READ_LE_UINT32(pano + 4 + a * kPanoramaRecordStride + kPanoramaFrameIdOffset);
-		int idx = resourceIndexById(frameId);
-		if (idx < 0) {
-			warning("Cyberflix: set '%s' scene %u angle %u references missing frame res %u",
-					_name.c_str(), scene, a, frameId);
+		const byte *r = pano + 8 + a * kPanoramaRecordStride;
+		if (r + kPanoramaRecordStride > _fileData.end())
 			return false;
-		}
-		const byte *frame = engineBase((uint32)idx);
-		if (!frame)
+		if (!applyFrameResource(READ_LE_UINT32(r + 0x2c), seq, out))
 			return false;
-		uint32 frameLen = _archive.getResource((uint32)idx).length + 4; // payload + info word
-		if (seq.applyFrame(frame, frameLen) == 0) {
-			warning("Cyberflix: set '%s' scene %u angle %u frame decode failed", _name.c_str(), scene, a);
-			return false;
-		}
 	}
 
-	seq.copyTo(out);
 	return true;
+}
+
+bool Set::applyPanoramaFrame(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq, FrameImage &out) {
+	uint32 count = 0;
+	const byte *pano = panoramaTable(scene, table, count);
+	if (!pano || angle >= count)
+		return false;
+	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
+	if (r + kPanoramaRecordStride > _fileData.end())
+		return false;
+	return applyFrameResource(READ_LE_UINT32(r + 0x2c), seq, out);
+}
+
+uint32 Set::transitionFrameCount(uint32 transitionId) const {
+	uint32 count = 0;
+	transitionTable(transitionId, count);
+	return count;
+}
+
+bool Set::applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence &seq, FrameImage &out) {
+	uint32 count = 0;
+	const byte *transition = transitionTable(transitionId, count);
+	if (!transition || frame >= count)
+		return false;
+	const byte *r = transition + 0x0c + frame * kPanoramaRecordStride;
+	if (r + kPanoramaRecordStride > _fileData.end())
+		return false;
+	return applyFrameResource(READ_LE_UINT32(r + 0x2c), seq, out);
 }
 
 bool Set::loadSetPalette(byte *rgb) const {

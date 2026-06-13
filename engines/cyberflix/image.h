@@ -182,6 +182,11 @@ public:
 	uint16 width() const { return _width; }
 	uint16 height() const { return _height; }
 	bool empty() const { return _width == 0 || _height == 0; }
+	void clear() {
+		_work.clear();
+		_pitch = 0;
+		_width = _height = 0;
+	}
 
 	/** Tightly packed @c width*height palette indices of the current frame. */
 	const byte *pixels() const;
