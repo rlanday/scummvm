@@ -1073,6 +1073,12 @@ Common::String CyberflixEngine::currentTheme(int which) {
 	return cueName;
 }
 
+// currentsound(which): query the active SFX sound slots. Until SFX playback is
+// implemented, return the verified native silent string from DAT_00457568.
+Common::String CyberflixEngine::currentSound(int) {
+	return "None";
+}
+
 // Resolve a clut name the way TI.EXE's registry lookup does (FUN_004470b0):
 // the built-in names "black"/"current", and "set"/"stage" which alias the
 // palette embedded in the currently open file of that kind ("puppet" lands

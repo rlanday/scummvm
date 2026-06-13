@@ -198,6 +198,12 @@ public:
 	 */
 	virtual Common::String currentTheme(int which) { return "none"; }
 
+	/**
+	 * currentsound(which): which==1/2/3 query active SFX sound slots; "None"
+	 * when silent (TI.EXE FUN_00412e60).
+	 */
+	virtual Common::String currentSound(int) { return "None"; }
+
 	/** openshopfile('name.shp'): load a .SHP prop container and dispatch its
 	 *  openshop()/openprop() messages (TI.EXE 0x2f18 FUN_00428450). */
 	virtual void openShopFile(const Common::String &name) {}

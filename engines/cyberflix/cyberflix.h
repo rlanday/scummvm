@@ -112,6 +112,7 @@ public:
 	void haltTheme() override;
 	void themeVolume(const Common::String &name, int volume) override;
 	Common::String currentTheme(int which) override;
+	Common::String currentSound(int which) override;
 	void openShopFile(const Common::String &name) override;
 	void sendToShop(const Common::String &shop, const Common::String &message,
 			const Common::Array<Value> &args) override;

@@ -151,6 +151,8 @@ Value ScriptVM::applyBinary(uint16 opcode, const Value &lhs, const Value &rhs) {
 	// files/opcode-map.md for the verified opcode->operation mapping.
 	int32 a = lhs.intValue;
 	int32 b = rhs.intValue;
+	const bool lhsString = lhs.type == Value::kString || lhs.type == Value::kSymbol;
+	const bool rhsString = rhs.type == Value::kString || rhs.type == Value::kSymbol;
 
 	switch (opcode) {
 	case Script::kOpAdd: return Value::makeInt(a + b);
@@ -163,14 +165,14 @@ Value ScriptVM::applyBinary(uint16 opcode, const Value &lhs, const Value &rhs) {
 	case Script::kOpOr:  return Value::makeBool(a || b);
 	case Script::kOpConcat: return Value::makeString(lhs.strValue + rhs.strValue);
 	case Script::kOpEq:
-		if (lhs.type == Value::kString || lhs.type == Value::kSymbol)
-			return Value::makeBool(rhs.type == Value::kString || rhs.type == Value::kSymbol ?
-					lhs.strValue.equalsIgnoreCase(rhs.strValue) : false);
+		if (lhsString || rhsString)
+			return Value::makeBool(lhsString && rhsString &&
+					lhs.strValue.equalsIgnoreCase(rhs.strValue));
 		return Value::makeBool(a == b);
 	case Script::kOpNe:
-		if (lhs.type == Value::kString || lhs.type == Value::kSymbol)
-			return Value::makeBool(rhs.type == Value::kString || rhs.type == Value::kSymbol ?
-					!lhs.strValue.equalsIgnoreCase(rhs.strValue) : true);
+		if (lhsString || rhsString)
+			return Value::makeBool(!(lhsString && rhsString &&
+					lhs.strValue.equalsIgnoreCase(rhs.strValue)));
 		return Value::makeBool(a != b);
 	case Script::kOpGt: return Value::makeBool(a > b);
 	case Script::kOpLt: return Value::makeBool(a < b);
@@ -536,6 +538,8 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x4e6f: // currenttheme(1|2) -> FUN_00412f20: 1 = playing cue name,
 		             // 2 = its track file name; 'none' if silent
 			return Value::makeString(_host->currentTheme(args.empty() ? 1 : args[0].intValue));
+		case 0x4e6d: // currentsound(1|2|3) -> FUN_00412e60: active SFX cue or 'None'
+			return Value::makeString(_host->currentSound(args.empty() ? 1 : args[0].intValue));
 		case 0x4e2c: // countactors(): cast subsystem pending -> 0, so the
 		             // initall()/advanceday() actor loops run dry.
 			return Value::makeInt(0);
