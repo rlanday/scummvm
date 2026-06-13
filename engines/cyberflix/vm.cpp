@@ -373,6 +373,13 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	             // chain [button script, node script, stage script, res2]
 	             // from the open stage archive (DAT_0046115c).
 	case 0x2f25: // sendtoflat(name, message) -> FUN_0040a940/FUN_0040a960
+		// These chains all end in BOOTFILE res2. While their target-specific
+		// scripts are pending, preserve the res2 hover fallback for idle():
+		// res2 setcursor(point) is cursor("arrow"). Do not do this for
+		// mousedown(), which would recurse through the boot handler if routed
+		// over the normal library chain.
+		if (message.equalsIgnoreCase("setcursor") && _host)
+			_host->setCursorResource("CURS.ARROW");
 		if (_trace)
 			debug(0, "    (scene/painting/button/flat message '%s' ignored: subsystem pending)",
 					message.c_str());
