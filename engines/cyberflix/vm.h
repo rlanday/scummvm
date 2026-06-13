@@ -200,10 +200,16 @@ public:
 	virtual void sendToProp(const Common::String &prop, const Common::String &message,
 			const Common::Array<Value> &args) {}
 
-	/** propvisible(name, flag) (0x3e8f FUN_00429d00). */
+	/** propvisible(name) getter (0x3e8f FUN_00429dc0). */
+	virtual bool propVisible(const Common::String &name) { return false; }
+
+	/** propvisible(name, flag) setter (0x3e8f FUN_00429d00). */
 	virtual void propVisible(const Common::String &name, bool visible) {}
 
-	/** propview(name, shape) (0x3e99 FUN_004293a0): select the named shape. */
+	/** propview(name) getter (0x3e99 FUN_004294a0). */
+	virtual Common::String propView(const Common::String &name) { return Common::String(); }
+
+	/** propview(name, shape) setter (0x3e99 FUN_004293a0): select the named shape. */
 	virtual void propView(const Common::String &name, const Common::String &shape) {}
 
 	/** propxy(name, x, y) (0x3e92 FUN_0042a370): screen-space placement —

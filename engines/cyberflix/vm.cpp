@@ -526,10 +526,14 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x3e8f: // propvisible(name, flag) -> FUN_00429d00
 			if (args.size() >= 2)
 				_host->propVisible(args[0].strValue, args[1].intValue != 0);
+			if (args.size() == 1)
+				return Value::makeBool(_host->propVisible(args[0].strValue));
 			break;
 		case 0x3e99: // propview(name, shape) -> FUN_004293a0
 			if (args.size() >= 2)
 				_host->propView(args[0].strValue, args[1].strValue);
+			if (args.size() == 1)
+				return Value::makeString(_host->propView(args[0].strValue));
 			break;
 		case 0x3e92: // propxy(name, x, y) -> FUN_0042a370 (mode=0, depth=-1)
 			if (args.size() >= 3)

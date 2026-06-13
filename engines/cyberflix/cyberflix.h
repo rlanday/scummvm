@@ -110,7 +110,9 @@ public:
 			const Common::Array<Value> &args) override;
 	void sendToProp(const Common::String &prop, const Common::String &message,
 			const Common::Array<Value> &args) override;
+	bool propVisible(const Common::String &name) override;
 	void propVisible(const Common::String &name, bool visible) override;
+	Common::String propView(const Common::String &name) override;
 	void propView(const Common::String &name, const Common::String &shape) override;
 	void propXY(const Common::String &name, int x, int y) override;
 	void propDist(const Common::String &name, int dist) override;

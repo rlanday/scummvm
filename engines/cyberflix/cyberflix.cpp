@@ -646,6 +646,15 @@ void CyberflixEngine::sendToProp(const Common::String &propName, const Common::S
 	refreshPropsIfDirty();
 }
 
+bool CyberflixEngine::propVisible(const Common::String &name) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
+		return false;
+	}
+	return prop->visible;
+}
+
 void CyberflixEngine::propVisible(const Common::String &name, bool visible) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
@@ -656,6 +665,15 @@ void CyberflixEngine::propVisible(const Common::String &name, bool visible) {
 		prop->visible = visible;
 		_propsDirty = true;
 	}
+}
+
+Common::String CyberflixEngine::propView(const Common::String &name) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propview('%s'): no such prop", name.c_str());
+		return Common::String();
+	}
+	return prop->shapeName;
 }
 
 void CyberflixEngine::propView(const Common::String &name, const Common::String &shape) {
