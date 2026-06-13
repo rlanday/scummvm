@@ -199,6 +199,7 @@ private:
 	int _stageNode = 0;              ///< Current stage node (TI.EXE DAT_00461160).
 	Common::Array<byte> _setScreenSnapshot;
 	bool _hasSetScreenSnapshot = false;
+	bool _suppressSetScreenCapture = false;
 
 	/** Kind recorded by the last hittest, read back by result() — mirrors the
 	 *  TI.EXE global DAT_00461298. */

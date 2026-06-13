@@ -1061,8 +1061,12 @@ void CyberflixEngine::blackScreen() {
 }
 
 void CyberflixEngine::forceUpdate() {
+	// forceupdate() presents transient prop changes (e.g. HELP pressed) without
+	// replacing the saved SET screen later revealed by blacktoscreen('set').
+	bool oldSuppress = _suppressSetScreenCapture;
+	_suppressSetScreenCapture = true;
 	refreshPropsIfDirty();
-	captureSetScreen();
+	_suppressSetScreenCapture = oldSuppress;
 	_system->updateScreen();
 	debug(1, "Cyberflix: forceupdate()");
 }
@@ -1235,7 +1239,8 @@ void CyberflixEngine::renderSetScene(int scene, int angle) {
 	}
 	_propsDirty = false;
 	_system->unlockScreen();
-	captureSetScreen();
+	if (!_suppressSetScreenCapture)
+		captureSetScreen();
 
 	// Default arrow until per-view hotspot hit-testing (directional cursors) is
 	// implemented. Views (the scene's hotspot lists) are documented in
