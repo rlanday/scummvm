@@ -333,16 +333,13 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 	Common::String useView = !view.empty() ? view : _set->defaultView();
 
 	// The original finishes opensetfile by sending the system messages
-	// (FUN_00430fa0): it compiles+runs "openset()" against the set script
-	// library with the global library as fallback, and then (if the set did
-	// not change) runs '"<scene>", openscene()' through the sendtoscene
-	// executor FUN_004311e0, which switches to the scene, paints it and
-	// dispatches the message. The global bootres2 openset() is what calls
-	// adjustcamera()/setupsound()/setuptour() and starts the room theme. Set
-	// script libraries are not modelled yet, so dispatch over the global chain.
+	// (FUN_00430fa0): it runs openset() against [set script, BOOTFILE res2],
+	// then (if the set did not change) runs "<scene>", openscene() through the
+	// sendtoscene executor FUN_004311e0, which paints and dispatches against
+	// [scene script, set script, BOOTFILE res2].
 	Common::Array<Value> noArgs;
 	Common::String openedName = _set->setName();
-	_vm.callFunction("openset", noArgs);
+	dispatchSetMessage("openset", noArgs);
 
 	if (_set && _set->setName() == openedName && !useScene.empty()) {
 		int sceneIdx = _set->findScene(useScene);
@@ -367,7 +364,7 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 			}
 		}
 		renderSetScene(sceneIdx, 0, angle, activeView);
-		_vm.callFunction("openscene", noArgs);
+		dispatchSceneMessage((uint32)sceneIdx, "openscene", noArgs);
 	}
 }
 
@@ -383,9 +380,9 @@ void CyberflixEngine::closeSetFile() {
 		Common::Array<Value> noArgs;
 		Common::String openedName = _set->setName();
 		if (_setScene >= 0)
-			_vm.callFunction("closescene", noArgs);
+			dispatchSceneMessage((uint32)_setScene, "closescene", noArgs);
 		if (_set && _set->setName() == openedName)
-			_vm.callFunction("closeset", noArgs);
+			dispatchSetMessage("closeset", noArgs);
 	}
 	_set.reset();
 	_setScene = -1;
@@ -558,8 +555,13 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 	if (_set && _set->isOpen() && _setScene >= 0) {
 		const int16 vl = _set->viewLeft(), vt = _set->viewTop();
 		if (x >= vl && x < vl + (int)_set->width() && y >= vt && y < vt + (int)_set->height()) {
-			// Painting hit-test (FUN_004329f0) pending; everything inside the
-			// viewport is the scene.
+			if (_setTransitionType == kSetTransitionNone) {
+				Common::String painting = _set->hitTestPainting((uint32)_setScene, _setView, x, y);
+				if (!painting.empty()) {
+					_hitKind = "painting";
+					return painting;
+				}
+			}
 			_hitKind = "scene";
 			return _set->sceneName((uint32)_setScene);
 		}
@@ -609,25 +611,54 @@ void CyberflixEngine::setCursorResource(const Common::String &resourceName) {
 void CyberflixEngine::dispatchWithScopes(const Script *scope1, const Script *scope2,
 		const Common::String &self, const Common::String &targetProp,
 		const Common::String &message, const Common::Array<Value> &args) {
+	Common::Array<const Script *> scopes;
+	if (scope1)
+		scopes.push_back(scope1);
+	if (scope2)
+		scopes.push_back(scope2);
+	dispatchWithScopeChain(scopes, self, targetProp, message, args, "shop/prop");
+}
+
+void CyberflixEngine::dispatchWithScopeChain(const Common::Array<const Script *> &scopes,
+		const Common::String &self, const Common::String &targetProp,
+		const Common::String &message, const Common::Array<Value> &args,
+		const char *debugContext) {
 	Common::String prevSelf = _vm.contextSelf();
 	Common::String prevProp = _vm.contextProp();
 	Common::Array<const Script *> chain;
 	if (_globalLib)
 		chain.push_back(_globalLib.get()); // "System: " tail, searched last
-	if (scope2)
-		chain.push_back(scope2); // searched after scope1
-	if (scope1)
-		chain.push_back(scope1); // searched first
+	for (int i = (int)scopes.size() - 1; i >= 0; --i)
+		if (scopes[(uint32)i])
+			chain.push_back(scopes[(uint32)i]);
 	Common::Array<const Script *> prevChain = _vm.swapLibraries(chain);
 	_vm.setDispatchContext(self, targetProp);
 
 	bool handled = false;
 	_vm.callFunction(message, args, &handled);
 	if (!handled)
-		debug(1, "Cyberflix: shop/prop message '%s' unhandled", message.c_str());
+		debug(1, "Cyberflix: %s message '%s' unhandled", debugContext, message.c_str());
 
 	_vm.setDispatchContext(prevSelf, prevProp);
 	_vm.swapLibraries(prevChain);
+}
+
+void CyberflixEngine::dispatchSetMessage(const Common::String &message, const Common::Array<Value> &args) {
+	if (!_set || !_set->isOpen() || message.empty())
+		return;
+	Common::Array<const Script *> scopes;
+	scopes.push_back(_set->setScript());
+	dispatchWithScopeChain(scopes, _set->setName(), Common::String(), message, args, "set");
+}
+
+void CyberflixEngine::dispatchSceneMessage(uint32 scene, const Common::String &message,
+		const Common::Array<Value> &args) {
+	if (!_set || !_set->isOpen() || message.empty())
+		return;
+	Common::Array<const Script *> scopes;
+	scopes.push_back(_set->sceneScript(scene));
+	scopes.push_back(_set->setScript());
+	dispatchWithScopeChain(scopes, _set->sceneName(scene), Common::String(), message, args, "scene");
 }
 
 void CyberflixEngine::openShopFile(const Common::String &name) {
@@ -1205,9 +1236,8 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 }
 
 // sendtoscene(name[, message]): select a scene of the open set by name, render
-// it if needed, then dispatch the message against the scene chain. Scene-local
-// scripts are pending, so the chain is currently BOOTFILE res2 only; this is
-// still the native fallback path BOOTFILE res1's keydown() uses.
+// it if needed, then dispatch the message against [scene script, set script,
+// BOOTFILE res2] (TI.EXE FUN_004311e0/FUN_00431200).
 void CyberflixEngine::sendToScene(const Common::String &scene,
 		const Common::String &message, const Common::Array<Value> &args) {
 	if (!_set || !_set->isOpen()) {
@@ -1223,7 +1253,38 @@ void CyberflixEngine::sendToScene(const Common::String &scene,
 	if (_setScene != index)
 		renderSetScene(index, 0, 0);
 	if (!message.empty())
-		dispatchWithScopes(nullptr, nullptr, scene, Common::String(), message, args);
+		dispatchSceneMessage((uint32)index, message, args);
+}
+
+// sendtopainting(scene, view, painting, message): dispatch the message over the
+// current SET's painting chain. BEDSIT1's poster records have no own script, so
+// the set script handles mousedown/setcursor via 0xfbb (target painting name).
+void CyberflixEngine::sendToPainting(const Common::String &sceneName, const Common::String &viewName,
+		const Common::String &painting, const Common::String &message,
+		const Common::Array<Value> &args) {
+	if (!_set || !_set->isOpen()) {
+		warning("Cyberflix: sendtopainting('%s') with no set open", painting.c_str());
+		return;
+	}
+	int scene = sceneName.empty() ? _setScene : _set->findScene(sceneName);
+	if (scene < 0) {
+		warning("Cyberflix: sendtopainting('%s'): no scene '%s'",
+				painting.c_str(), sceneName.c_str());
+		return;
+	}
+	Common::String view = !viewName.empty() ? viewName : _setView;
+	if (_set->findView((uint32)scene, view) < 0) {
+		warning("Cyberflix: sendtopainting('%s'): no view '%s'",
+				painting.c_str(), view.c_str());
+		return;
+	}
+
+	Common::Array<const Script *> scopes;
+	scopes.push_back(_set->paintingScript((uint32)scene, view, painting));
+	scopes.push_back(_set->sceneScript((uint32)scene));
+	scopes.push_back(_set->setScript());
+	dispatchWithScopeChain(scopes, painting, painting, message, args, "painting");
+	refreshPropsIfDirty();
 }
 
 void CyberflixEngine::navigateSet(const Common::String &action) {
@@ -1315,7 +1376,7 @@ void CyberflixEngine::advanceSetTransition() {
 		if (viewIdx >= 0) {
 			_setTransitionType = kSetTransitionNone;
 			Common::Array<Value> noArgs;
-			_vm.callFunction("openscene", noArgs);
+			dispatchSceneMessage((uint32)_setScene, "openscene", noArgs);
 		}
 		return;
 	}
@@ -1357,7 +1418,7 @@ void CyberflixEngine::advanceSetTransition() {
 			_setTransitionResource = 0;
 			_setTransitionFrame = 0;
 			Common::Array<Value> noArgs;
-			_vm.callFunction("openscene", noArgs);
+			dispatchSceneMessage((uint32)_setScene, "openscene", noArgs);
 		}
 	}
 }

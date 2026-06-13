@@ -129,6 +129,14 @@ public:
 			const Common::Array<Value> &args = Common::Array<Value>()) {}
 
 	/**
+	 * sendtopainting(scene, view, painting, message(args)) (0x2f22): dispatch
+	 * against [painting script, scene script, set script, BOOTFILE res2].
+	 */
+	virtual void sendToPainting(const Common::String &scene, const Common::String &view,
+			const Common::String &painting, const Common::String &message,
+			const Common::Array<Value> &args) {}
+
+	/**
 	 * actionframe(n): true if the last movie ended on action frame @p n —
 	 * i.e. which menu button the user clicked (TI.EXE 0x4e73 FUN_00435026).
 	 */

@@ -60,6 +60,22 @@ int Set::resourceIndexById(uint32 id) const {
 	return -1;
 }
 
+Common::String Set::pascalString(const byte *p) const {
+	if (!p || p < _fileData.begin() || p >= _fileData.end())
+		return Common::String();
+	uint len = *p;
+	if (p + 1 + len > _fileData.end())
+		return Common::String();
+	return Common::String((const char *)p + 1, len);
+}
+
+const Script *Set::scriptById(uint32 id) const {
+	int idx = resourceIndexById(id);
+	if (idx < 0 || (uint32)idx >= _scripts.size())
+		return nullptr;
+	return _scripts[(uint32)idx].get();
+}
+
 const byte *Set::sceneRecord(uint32 scene) const {
 	if (scene >= _sceneCount || _sceneTable < 0)
 		return nullptr;
@@ -70,6 +86,51 @@ const byte *Set::sceneRecord(uint32 scene) const {
 	if (rec + kSceneRecordStride > _fileData.end())
 		return nullptr;
 	return rec;
+}
+
+const byte *Set::viewRecord(uint32 scene, const Common::String &view) const {
+	int viewIdx = findView(scene, view);
+	if (viewIdx < 0)
+		return nullptr;
+	const byte *rec = sceneRecord(scene);
+	if (!rec)
+		return nullptr;
+	int dirIdx = resourceIndexById(READ_LE_UINT32(rec + kSceneViewDirOffset));
+	if (dirIdx < 0)
+		return nullptr;
+	const byte *dir = payload((uint32)dirIdx);
+	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
+		return nullptr;
+	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
+	if ((uint32)viewIdx >= count)
+		return nullptr;
+	const byte *v = dir + kViewDirRecordsOffset + (uint32)viewIdx * kViewRecordStride;
+	if (v + kViewRecordStride > _fileData.end())
+		return nullptr;
+	return v;
+}
+
+const byte *Set::paintingTable(const byte *viewRec, uint32 &count, uint32 &length) const {
+	count = 0;
+	length = 0;
+	if (!viewRec || viewRec + kViewPaintingTableOffset + 4 > _fileData.end())
+		return nullptr;
+	uint32 tableId = READ_LE_UINT32(viewRec + kViewPaintingTableOffset);
+	if (tableId == 0)
+		return nullptr;
+	int idx = resourceIndexById(tableId);
+	if (idx < 0)
+		return nullptr;
+	const byte *table = engineBase((uint32)idx);
+	if (!table || table + 8 > _fileData.end())
+		return nullptr;
+	const Archive::Resource &res = _archive.getResource((uint32)idx);
+	length = res.length + 4; // engine-base frame includes the info dword
+	uint32 c = READ_LE_UINT32(table);
+	if ((uint64)c * 0x24 + 8 > length)
+		return nullptr;
+	count = c;
+	return table;
 }
 
 const byte *Set::panoramaTable(uint32 scene, uint32 table, uint32 &count) const {
@@ -169,6 +230,8 @@ bool Set::open(const Common::String &name) {
 	_master = -1;
 	_sceneTable = -1;
 	_sceneCount = 0;
+	_setScriptId = 0;
+	_scripts.clear();
 	_width = _height = 0;
 	_viewLeft = _viewTop = 0;
 	_name = name;
@@ -228,6 +291,7 @@ bool Set::open(const Common::String &name) {
 	_setName = readPascal(hdr + kMasterNameOffset);
 	_defaultScene = readPascal(hdr + kMasterDefaultSceneOffset);
 	_defaultView = readPascal(hdr + kMasterDefaultViewOffset);
+	_setScriptId = READ_LE_UINT32(hdr + kSetScriptIdOffset);
 
 	uint32 sceneTableId = READ_LE_UINT32(hdr + kSceneTableIdOffset);
 	_sceneTable = resourceIndexById(sceneTableId);
@@ -238,6 +302,20 @@ bool Set::open(const Common::String &name) {
 	}
 	// The scene table is a tight array of fixed-size records, no count header.
 	_sceneCount = _archive.getResource((uint32)_sceneTable).length / kSceneRecordStride;
+
+	_scripts.resize(_archive.getResourceCount());
+	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
+		const Archive::Resource &res = _archive.getResource(i);
+		if (res.empty || res.info != Script::kScriptInfoTag)
+			continue;
+		Common::SeekableReadStream *stream = _archive.createReadStreamForResource(i);
+		Common::SharedPtr<Script> script(new Script());
+		if (stream && script->parse(stream))
+			_scripts[i] = script;
+		else
+			warning("Cyberflix: failed to parse set '%s' script resource %u", name.c_str(), res.id);
+		delete stream;
+	}
 
 	debug(1, "Cyberflix: opened set '%s': %ux%u, %u scene(s)",
 			name.c_str(), _width, _height, _sceneCount);
@@ -378,6 +456,54 @@ uint32 Set::forwardTransitionForView(uint32 scene, int viewIdx) const {
 			return transitionId;
 	}
 	return 0;
+}
+
+const Script *Set::setScript() const {
+	return scriptById(_setScriptId);
+}
+
+const Script *Set::sceneScript(uint32 scene) const {
+	const byte *rec = sceneRecord(scene);
+	if (!rec)
+		return nullptr;
+	return scriptById(READ_LE_UINT32(rec + kSceneScriptOffset));
+}
+
+Common::String Set::hitTestPainting(uint32 scene, const Common::String &view, int16 x, int16 y) const {
+	const byte *v = viewRecord(scene, view);
+	uint32 count = 0, length = 0;
+	const byte *table = paintingTable(v, count, length);
+	if (!table)
+		return Common::String();
+	for (int i = (int)count - 1; i >= 0; --i) {
+		const byte *rec = table + 8 + (uint32)i * 0x24;
+		if ((uint32)(rec - table) + 0x24 > length)
+			break;
+		int16 top = (int16)READ_LE_UINT16(rec + 0x08);
+		int16 left = (int16)READ_LE_UINT16(rec + 0x0a);
+		int16 bottom = (int16)READ_LE_UINT16(rec + 0x0c);
+		int16 right = (int16)READ_LE_UINT16(rec + 0x0e);
+		if (x >= left && x < right && y >= top && y < bottom)
+			return pascalString(rec + 0x14);
+	}
+	return Common::String();
+}
+
+const Script *Set::paintingScript(uint32 scene, const Common::String &view,
+		const Common::String &painting) const {
+	const byte *v = viewRecord(scene, view);
+	uint32 count = 0, length = 0;
+	const byte *table = paintingTable(v, count, length);
+	if (!table)
+		return nullptr;
+	for (uint32 i = 0; i < count; ++i) {
+		const byte *rec = table + 8 + i * 0x24;
+		if (8 + i * 0x24 + 0x24 > length)
+			break;
+		if (painting.equalsIgnoreCase(pascalString(rec + 0x14)))
+			return scriptById(READ_LE_UINT32(rec + 0x10));
+	}
+	return nullptr;
 }
 
 bool Set::transitionDestination(uint32 transitionId, uint32 &scene,

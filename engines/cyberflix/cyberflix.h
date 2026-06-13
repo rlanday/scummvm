@@ -97,6 +97,9 @@ public:
 	Common::String currentPuppet() override;
 	void sendToScene(const Common::String &scene, const Common::String &message = Common::String(),
 			const Common::Array<Value> &args = Common::Array<Value>()) override;
+	void sendToPainting(const Common::String &scene, const Common::String &view,
+			const Common::String &painting, const Common::String &message,
+			const Common::Array<Value> &args) override;
 	bool actionFrame(int n) override;
 	void setClut(const Common::String &name) override;
 	void blackScreen() override;
@@ -257,6 +260,13 @@ private:
 	void dispatchWithScopes(const Script *scope1, const Script *scope2,
 			const Common::String &self, const Common::String &targetProp,
 			const Common::String &message, const Common::Array<Value> &args);
+	void dispatchWithScopeChain(const Common::Array<const Script *> &scopes,
+			const Common::String &self, const Common::String &targetProp,
+			const Common::String &message, const Common::Array<Value> &args,
+			const char *debugContext);
+	void dispatchSetMessage(const Common::String &message, const Common::Array<Value> &args);
+	void dispatchSceneMessage(uint32 scene, const Common::String &message,
+			const Common::Array<Value> &args);
 	/** Repaint the current set scene if prop state changed (post-dispatch). */
 	void refreshPropsIfDirty();
 

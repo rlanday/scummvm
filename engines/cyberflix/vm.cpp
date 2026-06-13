@@ -369,7 +369,13 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 			_host->sendToScene(targets.empty() ? Common::String() : targets[0].strValue,
 					message, msgArgs);
 		break;
-	case 0x2f22: // sendtopainting(name, message) -> FUN_00432550/FUN_00432570
+	case 0x2f22: // sendtopainting(scene, view, painting, message) -> FUN_00432550/FUN_00432570
+		if (_host)
+			_host->sendToPainting(targets.size() > 0 ? targets[0].strValue : Common::String(),
+					targets.size() > 1 ? targets[1].strValue : Common::String(),
+					targets.size() > 2 ? targets[2].strValue : Common::String(),
+					message, msgArgs);
+		break;
 	case 0x2f24: // sendtobutton(name, message) -> FUN_0040a410/FUN_0040a430:
 	             // chain [button script, node script, stage script, res2]
 	             // from the open stage archive (DAT_0046115c).

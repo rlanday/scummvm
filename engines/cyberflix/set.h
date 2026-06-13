@@ -23,10 +23,12 @@
 #define CYBERFLIX_SET_H
 
 #include "common/array.h"
+#include "common/ptr.h"
 #include "common/str.h"
 
 #include "cyberflix/archive.h"
 #include "cyberflix/image.h"
+#include "cyberflix/script.h"
 
 namespace Cyberflix {
 
@@ -94,6 +96,7 @@ public:
 		kMasterViewTopOffset = 0x082,
 		kMasterWidthOffset = 0x084,
 		kMasterHeightOffset = 0x086,
+		kSetScriptIdOffset = 0x05c,
 		kSceneTableIdOffset = 0x060,
 		kMasterDefaultSceneOffset = 0xa0e,
 		kMasterDefaultViewOffset = 0xa1e,
@@ -117,6 +120,7 @@ public:
 		kViewDirRecordsOffset = 0x30,
 		kViewRecordStride = 0x2e,
 		kViewHeadingOffset = 0x08,
+		kViewPaintingTableOffset = 0x1a,
 		kViewNameOffset = 0x1e
 	};
 
@@ -193,6 +197,22 @@ public:
 	/** Forward transition resource id for @p viewIdx in @p scene, or 0. */
 	uint32 forwardTransitionForView(uint32 scene, int viewIdx) const;
 
+	/** The set-wide behavior script resource, or null if this set has none. */
+	const Script *setScript() const;
+
+	/** Scene @p scene's behavior script resource, or null if unavailable. */
+	const Script *sceneScript(uint32 scene) const;
+
+	/**
+	 * Back-to-front painting hit-test for the named view of @p scene. Returns
+	 * the painting name under the screen-space point, or empty on no hit.
+	 */
+	Common::String hitTestPainting(uint32 scene, const Common::String &view, int16 x, int16 y) const;
+
+	/** Painting @p painting's behavior script in @p scene/@p view, or null. */
+	const Script *paintingScript(uint32 scene, const Common::String &view,
+			const Common::String &painting) const;
+
 	/**
 	 * Resolve a forward transition resource to the destination scene/view and
 	 * stable panorama angle. Mirrors TI.EXE FUN_00442b70's final step: take the
@@ -232,6 +252,10 @@ private:
 	int resourceIndexById(uint32 id) const;
 	/** Scene record pointer for @p scene, or nullptr if out of range. */
 	const byte *sceneRecord(uint32 scene) const;
+	/** View record pointer for @p view in @p scene, or nullptr. */
+	const byte *viewRecord(uint32 scene, const Common::String &view) const;
+	/** Painting table engine-base pointer for @p viewRec, or nullptr. */
+	const byte *paintingTable(const byte *viewRec, uint32 &count, uint32 &length) const;
 	/** Panorama table payload for scene @p scene / table @p table, or nullptr. */
 	const byte *panoramaTable(uint32 scene, uint32 table, uint32 &count) const;
 	/** Forward-transition table engine-base for resource id @p transitionId. */
@@ -242,6 +266,10 @@ private:
 	int findSceneByViewDirId(uint32 viewDirId) const;
 	/** View index in @p scene closest to @p heading on the 256-unit circle. */
 	int nearestViewForHeading(uint32 scene, int heading) const;
+	/** Read the Pascal string at @p p (bounded by the file buffer). */
+	Common::String pascalString(const byte *p) const;
+	/** Parsed script resource @p id, or null if missing/not a script. */
+	const Script *scriptById(uint32 id) const;
 
 	Common::String _name;
 	Common::String _setName;      ///< Embedded master-header name (+0x070).
@@ -253,6 +281,8 @@ private:
 	Archive _archive;
 	int _master = -1;       ///< Archive index of the master-header resource.
 	int _sceneTable = -1;   ///< Archive index of the scene-table resource.
+	uint32 _setScriptId = 0;
+	Common::Array<Common::SharedPtr<Script> > _scripts;
 	uint32 _sceneCount = 0;
 	uint16 _width = 0;
 	uint16 _height = 0;
