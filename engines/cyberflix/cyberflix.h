@@ -33,6 +33,7 @@
 #include "audio/mixer.h"
 
 #include "cyberflix/detection.h"
+#include "cyberflix/shop.h"
 #include "cyberflix/vm.h"
 
 namespace Cyberflix {
@@ -101,6 +102,23 @@ public:
 	void haltTheme() override;
 	void themeVolume(const Common::String &name, int volume) override;
 	Common::String currentTheme(int which) override;
+	void openShopFile(const Common::String &name) override;
+	void sendToShop(const Common::String &shop, const Common::String &message,
+			const Common::Array<Value> &args) override;
+	void sendToProp(const Common::String &prop, const Common::String &message,
+			const Common::Array<Value> &args) override;
+	void propVisible(const Common::String &name, bool visible) override;
+	void propView(const Common::String &name, const Common::String &shape) override;
+	void propXY(const Common::String &name, int x, int y) override;
+	void propDist(const Common::String &name, int dist) override;
+	void propDeg(const Common::String &name, int deg) override;
+	Common::String propOwner(const Common::String &name, const Common::String *newOwner) override;
+	int countProps() override;
+	Common::String indexToProp(int index) override;
+	Common::String hitTest(int32 packedPoint) override;
+	Common::String hitTestResult() override;
+	int32 mousePoint() override;
+	void setCursorResource(const Common::String &resourceName) override;
 
 private:
 	/**
@@ -170,6 +188,45 @@ private:
 	Common::ScopedPtr<Set> _set;     ///< Currently open set (DATA/*.SET), or null.
 	int _setScene = -1;              ///< Active scene index within _set, or -1.
 	int _setAngle = 0;               ///< Active panorama angle within _setScene.
+	int _stageNode = 0;              ///< Current stage node (TI.EXE DAT_00461160).
+
+	/** Kind recorded by the last hittest, read back by result() — mirrors the
+	 *  TI.EXE global DAT_00461298. */
+	Common::String _hitKind;
+
+	/**
+	 * Open shops (DATA/ .SHP files), in openshopfile order. The original keeps
+	 * ONE global prop array across all shops (DAT_0046113c/DAT_00461140), so
+	 * countprops/indextoprop and the by-name prop lookups span every open
+	 * shop here, in open order.
+	 */
+	Common::Array<Common::SharedPtr<Shop> > _shops;
+	bool _propsDirty = false; ///< Prop state changed; re-render before idling.
+
+	/** Find an open shop by (case-insensitive) file name, or nullptr. */
+	Shop *findShop(const Common::String &name);
+	/** Find a prop by name across all open shops (global array semantics).
+	 *  Optionally returns the owning shop. */
+	Shop::Prop *findProp(const Common::String &name, Shop **shopOut = nullptr);
+	/**
+	 * Collect the visible screen-space props in paint order (most negative
+	 * depth first, stable) — the same display-item list the compositor builds
+	 * (FUN_0042bb90 / FUN_004434f0). Shared by renderSetScene (paints in list
+	 * order, deepest first) and hitTest (probes it backwards, topmost first,
+	 * like FUN_004430f0).
+	 */
+	void collectScreenProps(Common::Array<const Shop::Prop *> &draw,
+			Common::Array<const Shop *> &drawShop);
+	/**
+	 * Dispatch `message(args)` with temporary scope-chain entries pushed on
+	 * the VM (newest searched first), mirroring the original's per-dispatch
+	 * chains. @p self / @p targetProp set the 0xfba/0xfbb context atoms.
+	 */
+	void dispatchWithScopes(const Script *scope1, const Script *scope2,
+			const Common::String &self, const Common::String &targetProp,
+			const Common::String &message, const Common::Array<Value> &args);
+	/** Repaint the current set scene if prop state changed (post-dispatch). */
+	void refreshPropsIfDirty();
 
 	/**
 	 * The script VM driving the boot/stage scripts, with BOOTFILE res2

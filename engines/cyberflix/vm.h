@@ -161,6 +161,84 @@ public:
 	 * file name; 'none' when silent (TI.EXE FUN_00412f20).
 	 */
 	virtual Common::String currentTheme(int which) { return "none"; }
+
+	/** openshopfile('name.shp'): load a .SHP prop container and dispatch its
+	 *  openshop()/openprop() messages (TI.EXE 0x2f18 FUN_00428450). */
+	virtual void openShopFile(const Common::String &name) {}
+
+	/**
+	 * sendtoshop('file.shp', message(args)): dispatch @p message against the
+	 * shop's script with the global library as fallback (TI.EXE 0x2f1b
+	 * FUN_0042b2b0; chain [shop script, BOOTFILE res2]). The message arrives
+	 * with its arguments already evaluated in the caller's scope.
+	 */
+	virtual void sendToShop(const Common::String &shop, const Common::String &message,
+			const Common::Array<Value> &args) {}
+
+	/**
+	 * sendtoprop('propname', message(args)): dispatch against the prop's own
+	 * script, then its shop's script, then the global library (TI.EXE 0x2f17
+	 * FUN_0042ae80; 3-entry chain with "Prop Script: "/"Shop Script: "/
+	 * "System: " labels).
+	 */
+	virtual void sendToProp(const Common::String &prop, const Common::String &message,
+			const Common::Array<Value> &args) {}
+
+	/** propvisible(name, flag) (0x3e8f FUN_00429d00). */
+	virtual void propVisible(const Common::String &name, bool visible) {}
+
+	/** propview(name, shape) (0x3e99 FUN_004293a0): select the named shape. */
+	virtual void propView(const Common::String &name, const Common::String &shape) {}
+
+	/** propxy(name, x, y) (0x3e92 FUN_0042a370): screen-space placement —
+	 *  sets mode=0 and depth=-1 alongside the anchor point. */
+	virtual void propXY(const Common::String &name, int x, int y) {}
+
+	/** propdist(name, d) (0x3e8d FUN_004295c0): screen-space stacking depth
+	 *  (only applied when d < 0 and the prop is in screen mode). */
+	virtual void propDist(const Common::String &name, int dist) {}
+
+	/** propdeg(name, deg) (0x3e90): set the prop's view angle. */
+	virtual void propDeg(const Common::String &name, int deg) {}
+
+	/** propowner(name[, owner]) (0x3ea0 FUN_00428d40): set (2 args) or get
+	 *  (1 arg) the prop's owner string; the player is "frank". */
+	virtual Common::String propOwner(const Common::String &name, const Common::String *newOwner) { return Common::String(); }
+
+	/** countprops() (0x4e3f FUN_0042b4f0): total props across ALL open shops. */
+	virtual int countProps() { return 0; }
+
+	/** indextoprop(i) (0x4e40 FUN_0042b550): 1-based global index -> name. */
+	virtual Common::String indexToProp(int index) { return Common::String(); }
+
+	/**
+	 * hittest(point) (0x4e66 FUN_00435e70). @p packedPoint packs the screen
+	 * point as (x << 16) | (y & 0xffff) (the in-rect test FUN_0041ac60 checks
+	 * the high word against left/right and the low word against top/bottom of
+	 * {t,l,b,r} rects). Returns the name of the topmost hit and records its
+	 * kind for result(): sprite items first (per-pixel through the cel mask,
+	 * top-down — FUN_004430f0 walks the compositor item list backwards) ->
+	 * "actor"/"prop"; then the open set's viewport -> "painting"/"scene";
+	 * then the open stage -> "button"/"flat"; else "None" with empty name.
+	 */
+	virtual Common::String hitTest(int32 packedPoint) { return Common::String(); }
+
+	/** result() (0x3e8a FUN_004366a0): kind recorded by the last hittest
+	 *  (global DAT_00461298). */
+	virtual Common::String hitTestResult() { return Common::String(); }
+
+	/** mouse() (0x4e26 FUN_004368b0): current mouse point, packed as
+	 *  (x << 16) | (y & 0xffff). */
+	virtual int32 mousePoint() { return 0; }
+
+	/**
+	 * cursor(arg) (0x2f07 FUN_00446920), with the name already resolved to a
+	 * TI.EXE PE resource name: int arg n -> "CURS<n>" (FUN_0041b700, format
+	 * "%s%d"), "arrow" -> "CURS.ARROW" (FUN_004051b0), "watch" -> "CURS2002"
+	 * (the wait cursor preloaded into DAT_00461280 by FUN_0043b610), any other
+	 * name -> "CURS.<NAME>" (FUN_0041b580, format "%s.%s" + strupr).
+	 */
+	virtual void setCursorResource(const Common::String &resourceName) {}
 };
 
 /**
@@ -205,6 +283,44 @@ public:
 	 */
 	void addLibrary(const Script *script) { _libraries.push_back(script); }
 	void clearLibraries() { _libraries.clear(); }
+
+	/**
+	 * Replace the whole dispatch scope chain, returning the previous one so a
+	 * caller can restore it. Each TI.EXE dispatch passes a complete, freshly
+	 * built chain to the call executor FUN_0040b690 — e.g. sendtoprop
+	 * (FUN_0042ae80) builds exactly [prop script, shop script, BOOTFILE res2]
+	 * and boot messages (FUN_004390a0) exactly [BOOTFILE res1, BOOTFILE res2]
+	 * — so inner dispatches REPLACE the outer chain rather than stack on it.
+	 */
+	Common::Array<const Script *> swapLibraries(const Common::Array<const Script *> &libs) {
+		Common::Array<const Script *> prev = _libraries;
+		_libraries = libs;
+		return prev;
+	}
+
+	/** Remove the most recent registration of @p script from the scope chain
+	 *  (used to pop temporary shop/prop dispatch scopes). */
+	void removeLibrary(const Script *script) {
+		for (int i = (int)_libraries.size() - 1; i >= 0; --i)
+			if (_libraries[i] == script) {
+				_libraries.remove_at(i);
+				return;
+			}
+	}
+
+	/**
+	 * Set the dispatch context strings read by the atom opcodes 0xfba ("self":
+	 * the name of the prop/shop/stage whose script is running, chain entry
+	 * +0x1e) and 0xfbb (the target prop's name, chain entry +0x3e). TI.EXE
+	 * builds these per scope-chain entry in FUN_0042ae80/FUN_0040ad80; prop
+	 * scripts use 0xfba as the name argument to propvisible/propxy/propview.
+	 */
+	void setDispatchContext(const Common::String &self, const Common::String &targetProp) {
+		_ctxSelf = self;
+		_ctxProp = targetProp;
+	}
+	const Common::String &contextSelf() const { return _ctxSelf; }
+	const Common::String &contextProp() const { return _ctxProp; }
 
 	/**
 	 * Dispatch the message `name(args)` against the library chain: find a
@@ -329,6 +445,10 @@ private:
 	uint32 _executed; ///< Statements executed by the last runProgram (for the console).
 	bool _trace;
 	VMHost *_host; ///< Engine host for effectful builtins; null = no-op. Not owned.
+
+	/// Dispatch context for the atoms 0xfba/0xfbb (see setDispatchContext).
+	Common::String _ctxSelf;
+	Common::String _ctxProp;
 };
 
 } // End of namespace Cyberflix

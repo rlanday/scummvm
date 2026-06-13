@@ -68,6 +68,7 @@ public:
 		kNodeRecordStride = 0x2e,
 		kNodeFlagsOffset = 0x00,
 		kNodeImageResOffset = 0x0a,
+		kNodeNameOffset = 0x1e,
 		kNodeFlagKeyframe = 0x1
 	};
 
@@ -90,6 +91,14 @@ public:
 	 * node index or a malformed frame. Mirrors TI.EXE FUN_0040b180.
 	 */
 	bool renderNode(uint32 node, FrameImage &out);
+
+	/**
+	 * Node @p node's name: the Pascal string at +0x1e of its node record.
+	 * This is what hittest (TI.EXE FUN_00435e70) returns as the "flat" name
+	 * when the click lands on the stage background — it copies the current
+	 * node's 0x2e-byte record and reads the string at +0x1e.
+	 */
+	Common::String nodeName(uint32 node) const;
 
 	/** Expand the stage's embedded palette into @p rgb (256*3, R,G,B). */
 	bool loadStagePalette(byte *rgb) const;

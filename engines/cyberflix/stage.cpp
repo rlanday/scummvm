@@ -62,6 +62,17 @@ const byte *Stage::nodeRecord(uint32 node) const {
 	return rec;
 }
 
+Common::String Stage::nodeName(uint32 node) const {
+	const byte *rec = nodeRecord(node);
+	if (!rec)
+		return Common::String();
+	const byte *p = rec + kNodeNameOffset;
+	uint len = *p;
+	if (len > kNodeRecordStride - kNodeNameOffset - 1)
+		len = kNodeRecordStride - kNodeNameOffset - 1;
+	return Common::String((const char *)p + 1, len);
+}
+
 bool Stage::open(const Common::String &name) {
 	_master = -1;
 	_nodeCount = 0;

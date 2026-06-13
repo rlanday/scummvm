@@ -197,6 +197,19 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 		pc++;
 		return Value::makeBool(false);
 
+	case 0x0fba:
+		// Push the dispatch context's "self" name (chain entry +0x1e: the
+		// prop/shop/stage whose script is running; atom decoder 0x0041a550).
+		// Prop scripts use this as the name argument to propvisible/propxy/
+		// propview (e.g. HOUSE.SHP res 940 setupprop).
+		pc++;
+		return Value::makeString(_ctxSelf);
+
+	case 0x0fbb:
+		// Push the dispatch context's target-prop name (chain entry +0x3e).
+		pc++;
+		return Value::makeString(_ctxProp);
+
 	case Script::kOpNot: {
 		// 0x0fb7: prefix logical NOT — decode the following atom and invert
 		// (TI.EXE recurses then XORs the bool with 1).
@@ -262,13 +275,19 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 		pc++;
 		if (pc < count && script.getInstruction(pc).opcode == Script::kOpOpenParen) {
 			// The message-carrying builtins sendtoactor (0x2ef0), sendtoscene
-			// (0x2f02), sendtocast (0x2f10), sendtoshop (0x2f1b) and
-			// sendtostage (0x2f26) pass their final argument UNevaluated: it is
-			// a message `name(args)` matched against script definitions
-			// (TI.EXE FUN_0040ad80 hands the raw code span to the dispatcher
-			// FUN_0040b690). Leading arguments (e.g. the cast-file target) are
-			// evaluated normally.
-			if (headOp == 0x2ef0 || headOp == 0x2f10 || headOp == 0x2f1b || headOp == 0x2f26)
+			// (0x2f02), sendtocast (0x2f10), sendtoprop (0x2f17), sendtoshop
+			// (0x2f1b), sendtopainting (0x2f22), sendtobutton (0x2f24),
+			// sendtoflat (0x2f25) and sendtostage (0x2f26) pass their final
+			// argument UNevaluated: it is a message `name(args)` matched
+			// against script definitions (TI.EXE FUN_0040ad80/FUN_0042ae80
+			// hand the raw code span to the dispatcher FUN_0040b690). Leading
+			// arguments (e.g. the shop-file or prop-name target) are
+			// evaluated normally. Evaluating the message instead recurses:
+			// boot res1's mousedown sends mousedown(thepoint) to the hit
+			// scene/flat/button, which would re-enter itself.
+			if (headOp == 0x2ef0 || headOp == 0x2f02 || headOp == 0x2f10 ||
+					headOp == 0x2f17 || headOp == 0x2f1b || headOp == 0x2f22 ||
+					headOp == 0x2f24 || headOp == 0x2f25 || headOp == 0x2f26)
 				return dispatchMessageBuiltin(script, pc, headOp);
 			Common::Array<Value> args;
 			parseCallArgs(script, pc, args);
@@ -326,13 +345,38 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 		if (_host)
 			_host->sendToStage(message, msgArgs);
 		break;
+	case 0x2f1b: // sendtoshop('file.shp', message) -> TI.EXE FUN_0042b2b0:
+	             // dispatch against [shop script, BOOTFILE res2].
+		if (_host)
+			_host->sendToShop(targets.empty() ? Common::String() : targets[0].strValue,
+					message, msgArgs);
+		break;
+	case 0x2f17: // sendtoprop('propname', message) -> TI.EXE FUN_0042ae80:
+	             // dispatch against [prop script, shop script, BOOTFILE res2].
+		if (_host)
+			_host->sendToProp(targets.empty() ? Common::String() : targets[0].strValue,
+					message, msgArgs);
+		break;
 	case 0x2ef0: // sendtoactor(actor, message) -> dispatch against the actor's
 	             // cast script (TI.EXE 0x2ef0 handler). Cast subsystem not yet
 	             // implemented; no-op so initactors()-style loops run dry.
 	case 0x2f10: // sendtocast('file.cst', message) -> per-cast script dispatch.
-	case 0x2f1b: // sendtoshop('file.shp', message) -> per-shop script dispatch.
 		if (_trace)
-			debug(0, "    (cast/shop message '%s' ignored: subsystem pending)", message.c_str());
+			debug(0, "    (cast message '%s' ignored: subsystem pending)", message.c_str());
+		break;
+	case 0x2f02: // sendtoscene(scene, message) -> TI.EXE FUN_004311e0/
+	             // FUN_00431200: dispatch against the scene's script chain.
+	             // Scene scripts are pending; boot res1's mousedown sends
+	             // mousedown(thepoint) here, which must NOT be evaluated
+	             // (recursion) or repaint the room (angle reset).
+	case 0x2f22: // sendtopainting(name, message) -> FUN_00432550/FUN_00432570
+	case 0x2f24: // sendtobutton(name, message) -> FUN_0040a410/FUN_0040a430:
+	             // chain [button script, node script, stage script, res2]
+	             // from the open stage archive (DAT_0046115c).
+	case 0x2f25: // sendtoflat(name, message) -> FUN_0040a940/FUN_0040a960
+		if (_trace)
+			debug(0, "    (scene/painting/button/flat message '%s' ignored: subsystem pending)",
+					message.c_str());
 		break;
 	default:
 		break;
@@ -412,9 +456,8 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x2f01: // closesetfile() -> TI.EXE set-archive close
 			_host->closeSetFile();
 			break;
-		case 0x2f02: // sendtoscene('scenename') -> TI.EXE FUN_004311e0/FUN_00431200
-			_host->sendToScene(args.empty() ? Common::String() : args[0].strValue);
-			break;
+		// (sendtoscene 0x2f02 never reaches here: it always appears with a
+		// parenthesised message and routes through dispatchMessageBuiltin.)
 		case 0x2f06: // clut(name): snap the hardware palette (FUN_00446500)
 			_host->setClut(args.empty() ? Common::String() : args[0].strValue);
 			break;
@@ -466,8 +509,68 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return Value::makeString(_host->currentTheme(args.empty() ? 1 : args[0].intValue));
 		case 0x4e2c: // countactors(): cast subsystem pending -> 0, so the
 		             // initall()/advanceday() actor loops run dry.
-		case 0x4e3f: // countprops(): shop subsystem pending -> 0.
 			return Value::makeInt(0);
+		case 0x2f18: // openshopfile('name.shp') -> FUN_00428450: parse the .SHP,
+		             // then dispatch openshop() and per-prop openprop().
+			_host->openShopFile(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x3e8f: // propvisible(name, flag) -> FUN_00429d00
+			if (args.size() >= 2)
+				_host->propVisible(args[0].strValue, args[1].intValue != 0);
+			break;
+		case 0x3e99: // propview(name, shape) -> FUN_004293a0
+			if (args.size() >= 2)
+				_host->propView(args[0].strValue, args[1].strValue);
+			break;
+		case 0x3e92: // propxy(name, x, y) -> FUN_0042a370 (mode=0, depth=-1)
+			if (args.size() >= 3)
+				_host->propXY(args[0].strValue, args[1].intValue, args[2].intValue);
+			break;
+		case 0x3e8d: // propdist(name, d) -> FUN_004295c0
+			if (args.size() >= 2)
+				_host->propDist(args[0].strValue, args[1].intValue);
+			break;
+		case 0x3e90: // propdeg(name, deg)
+			if (args.size() >= 2)
+				_host->propDeg(args[0].strValue, args[1].intValue);
+			break;
+		case 0x3ea0: // propowner(name[, owner]) -> FUN_00428d40: get or set
+			if (args.size() >= 2)
+				return Value::makeString(_host->propOwner(args[0].strValue, &args[1].strValue));
+			if (args.size() == 1)
+				return Value::makeString(_host->propOwner(args[0].strValue, nullptr));
+			break;
+		case 0x4e3f: // countprops() -> FUN_0042b4f0: global count, all shops
+			return Value::makeInt(_host->countProps());
+		case 0x4e40: // indextoprop(i) -> FUN_0042b550: 1-based global index
+			return Value::makeString(_host->indexToProp(args.empty() ? 0 : args[0].intValue));
+		case 0x4e66: // hittest(point) -> FUN_00435e70: name of the topmost item
+		             // under the packed point; kind stored for result()
+			if (!args.empty())
+				return Value::makeString(_host->hitTest(args[0].intValue));
+			break;
+		case 0x3e8a: // result() -> FUN_004366a0: last hittest kind (DAT_00461298)
+			return Value::makeString(_host->hitTestResult());
+		case 0x4e26: // mouse() -> FUN_004368b0: current mouse point, packed
+			return Value::makeInt(_host->mousePoint());
+		case 0x2f07: // cursor(id|name) -> FUN_00446920. Resource-name mapping
+		             // verified against TI.EXE (see VMHost::setCursorResource):
+		             // int -> CURS<n>; "arrow" -> CURS.ARROW; "watch" ->
+		             // CURS2002; other names -> CURS.<NAME>.
+			if (!args.empty()) {
+				Common::String res;
+				if (args[0].type == Value::kInt)
+					res = Common::String::format("CURS%d", args[0].intValue);
+				else if (args[0].strValue.equalsIgnoreCase("arrow"))
+					res = "CURS.ARROW";
+				else if (args[0].strValue.equalsIgnoreCase("watch"))
+					res = "CURS2002";
+				else
+					res = Common::String("CURS.") + args[0].strValue;
+				res.toUppercase();
+				_host->setCursorResource(res);
+			}
+			break;
 		default:
 			break;
 		}
@@ -813,7 +916,19 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 			Value end = evaluateExpression(script, p);
 			uint32 bodyStart = p;
 
-			setVar(loopVar, Value::makeInt(start.intValue));
+			// The for-header BINDS the loop variable into the current local
+			// scope (TI.EXE 0x0040bda9 via FUN_00413710/FUN_00413610), it does
+			// not assign through the lookup chain: an undeclared loop var is
+			// local to the running body, so loops in dispatched callees (prop
+			// initprop() handlers also use `count`) cannot clobber it.
+			{
+				Common::String key = loopVar;
+				key.toLowercase();
+				if (!_locals.empty())
+					_locals.back()[key] = Value::makeInt(start.intValue);
+				else
+					setVar(loopVar, Value::makeInt(start.intValue));
+			}
 			if (start.intValue <= end.intValue) {
 				ForFrame frame;
 				frame.var = loopVar;

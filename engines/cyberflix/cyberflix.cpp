@@ -206,11 +206,14 @@ bool CyberflixEngine::setGameCursor(const Common::String &name) {
 				Graphics::WinCursorGroup::createCursorGroup(exe, Common::WinResourceID(name)));
 		_cursorCache[name] = group; // cache even null to avoid re-parsing
 	}
-	if (!group || group->cursors.empty())
+	if (!group || group->cursors.empty()) {
+		debug(1, "Cyberflix: cursor '%s' missing/empty in TI.EXE", name.c_str());
 		return false;
+	}
 
 	CursorMan.replaceCursor(group->cursors[0].cursor);
 	_activeCursor = name;
+	debug(1, "Cyberflix: cursor -> %s", name.c_str());
 	return true;
 }
 
@@ -253,6 +256,7 @@ void CyberflixEngine::renderStageNode(int node) {
 		warning("Cyberflix: sendtostage(%d) with no stage open", node);
 		return;
 	}
+	_stageNode = node;
 
 	FrameImage frame;
 	if (!_stage->renderNode((uint32)node, frame))
@@ -380,6 +384,340 @@ Common::String CyberflixEngine::currentSet() {
 	if (_set && _set->isOpen())
 		return _set->setName();
 	return "none";
+}
+
+// ---- Shop/prop subsystem (TI.EXE FUN_00428450 and friends) ----------------
+// RE notes: files/renderer-notes.md "Shop/prop subsystem". The original keeps
+// one global prop array across all open shops; here the by-name lookups and
+// countprops/indextoprop span _shops in open order, which preserves the
+// global-index semantics (shops are only ever appended).
+
+Shop *CyberflixEngine::findShop(const Common::String &name) {
+	Common::String key = name;
+	key.toLowercase();
+	for (uint32 i = 0; i < _shops.size(); ++i)
+		if (_shops[i]->name() == key)
+			return _shops[i].get();
+	return nullptr;
+}
+
+Shop::Prop *CyberflixEngine::findProp(const Common::String &name, Shop **shopOut) {
+	for (uint32 i = 0; i < _shops.size(); ++i) {
+		Shop::Prop *prop = _shops[i]->findProp(name);
+		if (prop) {
+			if (shopOut)
+				*shopOut = _shops[i].get();
+			return prop;
+		}
+	}
+	return nullptr;
+}
+
+void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw,
+		Common::Array<const Shop *> &drawShop) {
+	for (uint32 s = 0; s < _shops.size(); ++s) {
+		for (uint32 i = 0; i < _shops[s]->propCount(); ++i) {
+			const Shop::Prop &p = _shops[s]->prop(i);
+			if (p.visible && p.mode == 0) {
+				draw.push_back(&p);
+				drawShop.push_back(_shops[s].get());
+			}
+		}
+	}
+	// Stable insertion sort, most-negative depth first.
+	for (uint32 i = 1; i < draw.size(); ++i) {
+		const Shop::Prop *p = draw[i];
+		const Shop *sh = drawShop[i];
+		uint32 j = i;
+		for (; j > 0 && draw[j - 1]->depth > p->depth; --j) {
+			draw[j] = draw[j - 1];
+			drawShop[j] = drawShop[j - 1];
+		}
+		draw[j] = p;
+		drawShop[j] = sh;
+	}
+}
+
+// hittest(point) -> TI.EXE FUN_00435e70. The point packs (x << 16) | y; the
+// in-rect helper FUN_0041ac60 checks the high word against the {t,l,b,r}
+// rect's left/right and the low word against top/bottom. Probe order:
+//  1. Sprite items, topmost first: FUN_004430f0 walks the compositor display
+//     list backwards, rect test then a per-pixel test through the cel's
+//     transparency mask (screen items via FUN_0043bb90). A hit is classified
+//     actor (FUN_00422ff0) -> "actor" or prop (FUN_0042c150) -> "prop"; the
+//     cast subsystem is pending, so only props can match here yet.
+//  2. Open set, point inside its viewport rect (FUN_00443290): painting hit
+//     FUN_004329f0 -> "painting" (paintings pending), else "scene" with the
+//     current scene name (DAT_004611cc).
+//  3. Open stage, point inside the stage rect (FUN_00443250; the full screen
+//     — FUN_0043b610 sets DAT_00460d58 = {0,0,screenH,screenW}): button hit
+//     FUN_0040af40 -> "button" (stage buttons pending), else "flat" with the
+//     current node's name (node record +0x1e).
+//  4. Fallback: kind "None" (DAT_00457568 — capitalised in the EXE; script
+//     compares are case-insensitive), empty name (DAT_00459c98).
+Common::String CyberflixEngine::hitTest(int32 packedPoint) {
+	const int16 x = (int16)(packedPoint >> 16);
+	const int16 y = (int16)(packedPoint & 0xffff);
+
+	Common::Array<const Shop::Prop *> draw;
+	Common::Array<const Shop *> drawShop;
+	collectScreenProps(draw, drawShop);
+	for (int i = (int)draw.size() - 1; i >= 0; --i) {
+		CelImage cel;
+		Common::Rect r;
+		if (!drawShop[i]->renderProp(*draw[i], cel, r))
+			continue;
+		if (x < r.left || x >= r.right || y < r.top || y >= r.bottom)
+			continue;
+		if (!cel.isOpaque(x - r.left, y - r.top))
+			continue;
+		_hitKind = "prop";
+		return draw[i]->name;
+	}
+
+	if (_set && _set->isOpen() && _setScene >= 0) {
+		const int16 vl = _set->viewLeft(), vt = _set->viewTop();
+		if (x >= vl && x < vl + (int)_set->width() && y >= vt && y < vt + (int)_set->height()) {
+			// Painting hit-test (FUN_004329f0) pending; everything inside the
+			// viewport is the scene.
+			_hitKind = "scene";
+			return _set->sceneName((uint32)_setScene);
+		}
+	}
+
+	if (_stage && _stage->isOpen()) {
+		// Stage button hit-test (FUN_0040af40) pending; the whole screen is
+		// the current flat.
+		_hitKind = "flat";
+		return _stage->nodeName((uint32)_stageNode);
+	}
+
+	_hitKind = "None";
+	return Common::String();
+}
+
+// result() -> TI.EXE FUN_004366a0: the kind recorded by the last hittest.
+Common::String CyberflixEngine::hitTestResult() {
+	return _hitKind;
+}
+
+// mouse() -> TI.EXE FUN_004368b0: the current mouse point, packed like every
+// other point value ((x << 16) | y).
+int32 CyberflixEngine::mousePoint() {
+	const Common::Point m = _eventMan->getMousePos();
+	return ((int32)(int16)m.x << 16) | ((int32)m.y & 0xffff);
+}
+
+// cursor(...) -> TI.EXE FUN_00446920, with the script name already resolved
+// to a PE resource name by the VM (see VMHost::setCursorResource).
+void CyberflixEngine::setCursorResource(const Common::String &resourceName) {
+	if (setGameCursor(resourceName))
+		CursorMan.showMouse(true);
+	else
+		warning("Cyberflix: cursor resource '%s' not found in TI.EXE", resourceName.c_str());
+}
+
+// Dispatch a message with a freshly built scope chain, mirroring the
+// original's per-dispatch chains (FUN_0042ae80 builds [prop script, shop
+// script, BOOTFILE res2]; FUN_0042b2b0 [shop script, BOOTFILE res2]). The
+// chain REPLACES the active one for the duration of the call — TI.EXE passes
+// each dispatch's complete chain to the call executor FUN_0040b690, and
+// notably BOOTFILE res1 (the boot mousedown/idle handlers) is NOT part of a
+// prop/shop dispatch, so a prop without its own handler leaves the message
+// unhandled instead of recursing into the boot handler of the same name.
+// The 0xfba/0xfbb context atoms are saved and restored around the call.
+void CyberflixEngine::dispatchWithScopes(const Script *scope1, const Script *scope2,
+		const Common::String &self, const Common::String &targetProp,
+		const Common::String &message, const Common::Array<Value> &args) {
+	Common::String prevSelf = _vm.contextSelf();
+	Common::String prevProp = _vm.contextProp();
+	Common::Array<const Script *> chain;
+	if (_globalLib)
+		chain.push_back(_globalLib.get()); // "System: " tail, searched last
+	if (scope2)
+		chain.push_back(scope2); // searched after scope1
+	if (scope1)
+		chain.push_back(scope1); // searched first
+	Common::Array<const Script *> prevChain = _vm.swapLibraries(chain);
+	_vm.setDispatchContext(self, targetProp);
+
+	bool handled = false;
+	_vm.callFunction(message, args, &handled);
+	if (!handled)
+		debug(1, "Cyberflix: shop/prop message '%s' unhandled", message.c_str());
+
+	_vm.setDispatchContext(prevSelf, prevProp);
+	_vm.swapLibraries(prevChain);
+}
+
+void CyberflixEngine::openShopFile(const Common::String &name) {
+	Common::String key = name;
+	key.toLowercase();
+	if (findShop(key)) {
+		debug(1, "Cyberflix: shop '%s' already open", key.c_str());
+		return;
+	}
+
+	Common::SharedPtr<Shop> shop(new Shop());
+	if (!shop->open(key))
+		return;
+	_shops.push_back(shop);
+
+	// Post-parse dispatch (FUN_0042a680): sendtoshop("<shop>", openshop())
+	// then, for each prop of THIS shop, sendtoprop("<prop>", openprop())
+	// (dispatch strings 0x457ec8 / 0x457eb8).
+	dispatchWithScopes(shop->shopScript(), nullptr, key, Common::String(),
+			"openshop", Common::Array<Value>());
+	for (uint32 i = 0; i < shop->propCount(); ++i) {
+		Shop::Prop &prop = shop->prop(i);
+		dispatchWithScopes(prop.script.get(), shop->shopScript(), prop.name, prop.name,
+				"openprop", Common::Array<Value>());
+	}
+	refreshPropsIfDirty();
+}
+
+void CyberflixEngine::sendToShop(const Common::String &shopName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	debug(1, "Cyberflix: sendtoshop('%s') -> %s(%u args)", shopName.c_str(),
+			message.c_str(), args.size());
+	Shop *shop = findShop(shopName);
+	if (!shop) {
+		warning("Cyberflix: sendtoshop('%s'): shop not open", shopName.c_str());
+		return;
+	}
+	dispatchWithScopes(shop->shopScript(), nullptr, shop->name(), Common::String(),
+			message, args);
+	refreshPropsIfDirty();
+}
+
+void CyberflixEngine::sendToProp(const Common::String &propName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	debug(1, "Cyberflix: sendtoprop('%s') -> %s(%u args)", propName.c_str(),
+			message.c_str(), args.size());
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(propName, &shop);
+	if (!prop) {
+		warning("Cyberflix: sendtoprop('%s'): no such prop", propName.c_str());
+		return;
+	}
+	dispatchWithScopes(prop->script.get(), shop->shopScript(), prop->name, prop->name,
+			message, args);
+	refreshPropsIfDirty();
+}
+
+void CyberflixEngine::propVisible(const Common::String &name, bool visible) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
+		return;
+	}
+	if (prop->visible != visible) {
+		prop->visible = visible;
+		_propsDirty = true;
+	}
+}
+
+void CyberflixEngine::propView(const Common::String &name, const Common::String &shape) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propview('%s'): no such prop", name.c_str());
+		return;
+	}
+	// FUN_004293a0 validates the shape against the prop master (FUN_0042c0c0)
+	// and leaves the prop on the shape's LAST pose (+0x20 = poseCount - 1).
+	uint16 poseCount = 0;
+	if (!shop->shapePoseCount(*prop, shape, poseCount)) {
+		warning("Cyberflix: propview('%s'): no shape '%s'", name.c_str(), shape.c_str());
+		return;
+	}
+	Common::String key = shape;
+	key.toLowercase();
+	if (prop->shapeName != key) {
+		prop->shapeName = key;
+		_propsDirty = true;
+	}
+}
+
+void CyberflixEngine::propXY(const Common::String &name, int x, int y) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propxy('%s'): no such prop", name.c_str());
+		return;
+	}
+	// FUN_0042a370: screen-space placement — mode = 0, depth = -1 when the
+	// prop was world-space (>= 0), anchor = (x, y) (record +0x16/+0x14).
+	prop->mode = 0;
+	if (prop->depth >= 0)
+		prop->depth = -1;
+	prop->x = (int16)x;
+	prop->y = (int16)y;
+	_propsDirty = true;
+}
+
+void CyberflixEngine::propDist(const Common::String &name, int dist) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propdist('%s'): no such prop", name.c_str());
+		return;
+	}
+	// FUN_004295c0: only applied to screen-space props with a negative value.
+	if (prop->mode == 0 && dist < 0) {
+		prop->depth = (int16)dist;
+		_propsDirty = true;
+	}
+}
+
+void CyberflixEngine::propDeg(const Common::String &name, int deg) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
+		return;
+	}
+	if (prop->angle != (int16)deg) {
+		prop->angle = (int16)deg;
+		_propsDirty = true;
+	}
+}
+
+Common::String CyberflixEngine::propOwner(const Common::String &name, const Common::String *newOwner) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propowner('%s'): no such prop", name.c_str());
+		return Common::String();
+	}
+	if (newOwner)
+		prop->owner = *newOwner; // FUN_00428d40: copy into record +0x8c
+	return prop->owner;
+}
+
+int CyberflixEngine::countProps() {
+	int total = 0;
+	for (uint32 i = 0; i < _shops.size(); ++i)
+		total += (int)_shops[i]->propCount();
+	return total;
+}
+
+Common::String CyberflixEngine::indexToProp(int index) {
+	// 1-based index into the global prop array (FUN_0042b550).
+	int i = index - 1;
+	for (uint32 s = 0; s < _shops.size(); ++s) {
+		if (i >= 0 && i < (int)_shops[s]->propCount())
+			return _shops[s]->prop((uint32)i).name;
+		i -= (int)_shops[s]->propCount();
+	}
+	return Common::String();
+}
+
+void CyberflixEngine::refreshPropsIfDirty() {
+	// The original recomposites the display list every tick; this engine
+	// renders on demand, so repaint the current room after a dispatch that
+	// changed prop state. While no scene is up yet (boot-time initprops) the
+	// props are picked up by the next renderSetScene.
+	if (!_propsDirty)
+		return;
+	if (_set && _set->isOpen() && _setScene >= 0)
+		renderSetScene(_setScene, _setAngle);
 }
 
 // actionframe(n): did the last movie display its n'th action-cue frame?
@@ -820,6 +1158,32 @@ void CyberflixEngine::renderSetScene(int scene, int angle) {
 				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
 		}
 	}
+	// Screen-space props (HELP button, life preserver, owned items...) on top
+	// of the bar/room. The original's compositor draws screen items (negative
+	// depth, clipped to the screen rect FUN_00443250) ordered by depth — more
+	// negative paints FIRST so shallower items overdraw (display-item builder
+	// FUN_0042bb90, depth from prop record +0x26). World-mode props (angle/
+	// scale path) land with set-prop rendering.
+	{
+		Common::Array<const Shop::Prop *> draw;
+		Common::Array<const Shop *> drawShop;
+		collectScreenProps(draw, drawShop);
+		for (uint32 i = 0; i < draw.size(); ++i) {
+			CelImage cel;
+			Common::Rect r;
+			if (!drawShop[i]->renderProp(*draw[i], cel, r))
+				continue;
+			for (int y = 0; y < cel.height; ++y) {
+				for (int x = 0; x < cel.width; ++x) {
+					int sx = r.left + x, sy = r.top + y;
+					if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight &&
+							cel.isOpaque(x, y))
+						*((byte *)screen->getBasePtr(sx, sy)) = cel.pixels[(uint)y * cel.width + x];
+				}
+			}
+		}
+	}
+	_propsDirty = false;
 	_system->unlockScreen();
 
 	// Default arrow until per-view hotspot hit-testing (directional cursors) is
@@ -911,13 +1275,30 @@ Common::Error CyberflixEngine::run() {
 	_vm.addLibrary(_bootScript.get());
 	_vm.runProgram(*_bootScript);
 
-	// Minimal event loop so the window stays responsive after the boot script
-	// returns, until the main interactive loop lands.
+	// Main interactive loop, mirroring TI.EXE FUN_0043b040 + the system-target
+	// event handler FUN_00438680: every pass delivers an idle tick (case 9
+	// dispatches the "idle()" message to the boot script — its handler polls
+	// mouse()/hittest() and sends setcursor to whatever is under the cursor),
+	// and each WM_LBUTTONDOWN becomes a "mousedown(<packed point>)" boot
+	// message (case 0 via FUN_00438e90, which formats the point as one int).
+	// The boot handlers route the hits onward (sendtoprop(name, mousedown)...).
 	Common::Event event;
 	while (!shouldQuit()) {
 		while (_eventMan->pollEvent(event)) {
-			// Input handling will be wired into the script VM in a later phase.
+			if (event.type == Common::EVENT_LBUTTONDOWN) {
+				const int32 packed = ((int32)(int16)event.mouse.x << 16) |
+						((int32)event.mouse.y & 0xffff);
+				Common::Array<Value> args;
+				args.push_back(Value::makeInt(packed));
+				bool handled = false;
+				_vm.callFunction("mousedown", args, &handled);
+				if (!handled)
+					warning("Cyberflix: boot script has no mousedown handler");
+			}
 		}
+		bool handled = false;
+		_vm.callFunction("idle", Common::Array<Value>(), &handled);
+		refreshPropsIfDirty();
 		_system->updateScreen();
 		_system->delayMillis(10);
 	}
