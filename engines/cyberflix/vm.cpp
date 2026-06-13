@@ -528,8 +528,24 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		             // theme playlist on the theme channel (replaces current)
 			_host->playTheme(args.empty() ? Common::String() : args[0].strValue);
 			break;
+		case 0x2ef6: // singlesound(name) -> FUN_004122d0/FUN_0042fa80
+		case 0x2ef7: // multiplesound(name) -> FUN_00412310/FUN_0042fb20
+		case 0x2ef8: // dualsound(name) -> FUN_00412350/FUN_0042fbc0
+		case 0x2ef9: // bothsound(name) -> FUN_00412390/FUN_0042fc30
+			_host->playSound(args.empty() ? Common::String() : args[0].strValue,
+					opcode - 0x2ef6);
+			break;
+		case 0x2efa: // voicesound(name) -> FUN_004123d0/FUN_0042fc70
+			_host->playVoice(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x2efc: // haltsound(1|2|3) -> FUN_00412430/FUN_0042f690
+			_host->haltSound(args.empty() ? 3 : args[0].intValue);
+			break;
 		case 0x2efd: // halttheme() -> FUN_00412410: stop the theme channel
 			_host->haltTheme();
+			break;
+		case 0x2efe: // haltvoice() -> FUN_004124d0/FUN_0042f690
+			_host->haltVoice();
 			break;
 		case 0x3ea9: // themevol('name.trk', vol 0-255) -> FUN_004125c0
 			_host->themeVolume(args.size() > 0 ? args[0].strValue : Common::String(),
@@ -540,6 +556,8 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return Value::makeString(_host->currentTheme(args.empty() ? 1 : args[0].intValue));
 		case 0x4e6d: // currentsound(1|2|3) -> FUN_00412e60: active SFX cue or 'None'
 			return Value::makeString(_host->currentSound(args.empty() ? 1 : args[0].intValue));
+		case 0x4e6e: // currentvoice() -> FUN_00412ff0: active voice cue or 'None'
+			return Value::makeString(_host->currentVoice());
 		case 0x4e2c: // countactors(): cast subsystem pending -> 0, so the
 		             // initall()/advanceday() actor loops run dry.
 			return Value::makeInt(0);

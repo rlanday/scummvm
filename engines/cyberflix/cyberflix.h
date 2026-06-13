@@ -110,9 +110,14 @@ public:
 	void closeTrackFile(const Common::String &name) override;
 	void playTheme(const Common::String &name) override;
 	void haltTheme() override;
+	void playSound(const Common::String &name, int mode) override;
+	void playVoice(const Common::String &name) override;
+	void haltSound(int which) override;
+	void haltVoice() override;
 	void themeVolume(const Common::String &name, int volume) override;
 	Common::String currentTheme(int which) override;
 	Common::String currentSound(int which) override;
+	Common::String currentVoice() override;
 	void openShopFile(const Common::String &name) override;
 	void sendToShop(const Common::String &shop, const Common::String &message,
 			const Common::Array<Value> &args) override;
@@ -291,21 +296,24 @@ private:
 
 	/**
 	 * A loaded .TRK track file (TI.EXE track record, FUN_00411cc0). Holds the
-	 * raw container plus the parsed THEME side: the cue directory, the playlist
+	 * raw container plus parsed theme/SFX cue directories: the theme playlist
 	 * (play order, 1-based cue indices) and the loop index (playlist position
 	 * the chain loops back to after the last entry, so the leading cues play
-	 * once and the tail repeats forever). The SFX-cue side (makeloop/soundloop)
-	 * lands with the SFX subsystem. See files/audio-re-notes.md.
+	 * once and the tail repeats forever), plus named SFX cues for sound/voice
+	 * builtins. See files/audio-re-notes.md.
 	 */
 	struct ThemeTrack {
 		Common::String name;          ///< Lowercased file name ('bedrad1.trk').
 		Common::Array<byte> fileData; ///< Whole container; cue payloads point in.
 		struct Cue {
 			Common::String name;      ///< Cue label ('prelude.01').
+			uint32 resId = 0;         ///< Archive resource id (native cue priority key).
+			byte flags = 0;           ///< SFX flags byte; theme cues leave this zero.
 			uint32 dataOffset = 0;    ///< Absolute payload offset in fileData.
 			uint32 length = 0;        ///< Payload length.
 		};
 		Common::Array<Cue> cues;        ///< Theme cue directory.
+		Common::Array<Cue> sfxCues;     ///< SFX cue directory.
 		Common::Array<uint16> playlist; ///< Play order, 1-based indices into cues.
 		uint32 loopIdx = 0;             ///< Playlist index of the loop target.
 		int volume = 255;               ///< themevol() setting (0-255).
@@ -316,6 +324,9 @@ private:
 
 	/** Find an open track by (case-insensitive) file name, or nullptr. */
 	ThemeTrack *findTrack(const Common::String &name);
+	const ThemeTrack::Cue *findSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr);
+	bool playSoundCue(const Common::String &name, Audio::SoundHandle &handle,
+			Common::String &currentCue, uint32 &currentResId);
 
 	Audio::SoundHandle _themeHandle;   ///< Theme channel (TI.EXE DAT_00460a88).
 	Common::String _themeTrackName;    ///< Track of the playing theme, or empty.
@@ -328,6 +339,14 @@ private:
 	Common::Array<ThemeCueSpan> _themeSpans;
 	uint32 _themeIntroSamples = 0; ///< Samples before the loop region.
 	uint32 _themeLoopSamples = 0;  ///< Length of the looping region.
+
+	struct SoundSlot {
+		Audio::SoundHandle handle;
+		Common::String cueName;
+		uint32 resId = 0;
+	};
+	SoundSlot _soundSlots[2]; ///< Normal sound slots (TI.EXE DAT_00460a58/70).
+	SoundSlot _voiceSlot;     ///< Voice slot (TI.EXE DAT_00460aa0).
 
 	/**
 	 * Resolve the named CLUT to 256 RGB triplets, mirroring TI.EXE's clut

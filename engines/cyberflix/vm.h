@@ -189,6 +189,21 @@ public:
 	/** halttheme(): stop the theme channel (TI.EXE FUN_00412410). */
 	virtual void haltTheme() {}
 
+	/**
+	 * singlesound/multiplesound/dualsound/bothsound(name): play a named SFX cue
+	 * on the two normal sound channels (TI.EXE FUN_004122d0..00412390).
+	 */
+	virtual void playSound(const Common::String &name, int mode) {}
+
+	/** voicesound(name): play a named SFX cue on the voice channel (FUN_004123d0). */
+	virtual void playVoice(const Common::String &name) {}
+
+	/** haltsound(which): which 1/2 stop normal sound slot, 3 stops both. */
+	virtual void haltSound(int which) {}
+
+	/** haltvoice(): stop the voice channel. */
+	virtual void haltVoice() {}
+
 	/** themevol('name.trk', 0-255): set the track's theme volume (FUN_004125c0). */
 	virtual void themeVolume(const Common::String &name, int volume) {}
 
@@ -203,6 +218,9 @@ public:
 	 * when silent (TI.EXE FUN_00412e60).
 	 */
 	virtual Common::String currentSound(int) { return "None"; }
+
+	/** currentvoice(): active voice cue name, or "None" when silent. */
+	virtual Common::String currentVoice() { return "None"; }
 
 	/** openshopfile('name.shp'): load a .SHP prop container and dispatch its
 	 *  openshop()/openprop() messages (TI.EXE 0x2f18 FUN_00428450). */
