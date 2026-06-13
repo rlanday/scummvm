@@ -463,6 +463,9 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x2f13: // blackscreen(): fill the window with black pixels (FUN_00446b80)
 			_host->blackScreen();
 			break;
+		case 0x2f14: // forceupdate() -> FUN_00446910 -> FUN_00423a60
+			_host->forceUpdate();
+			break;
 		case 0x2f11: // blacktoscreen(target, steps): palette fade black -> target
 			_host->fadePalette(args.size() > 0 ? args[0].strValue : Common::String("current"),
 					args.size() > 1 ? args[1].intValue : 1, false);

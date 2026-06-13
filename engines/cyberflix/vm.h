@@ -135,6 +135,12 @@ public:
 	virtual void blackScreen() {}
 
 	/**
+	 * forceupdate() (0x2f14 -> FUN_00446910 -> FUN_00423a60): process the
+	 * display queues and present the current compositor state immediately.
+	 */
+	virtual void forceUpdate() {}
+
+	/**
 	 * blacktoscreen(target, n) / screentoblack(target, n) (0x2f11/0x2f12,
 	 * FUN_00446b00/FUN_00446a80 -> FUN_0041b3f0/FUN_0041b3a0): fade the
 	 * hardware palette between black and the target CLUT, one interpolation

@@ -96,6 +96,7 @@ public:
 	bool actionFrame(int n) override;
 	void setClut(const Common::String &name) override;
 	void blackScreen() override;
+	void forceUpdate() override;
 	void fadePalette(const Common::String &target, int steps, bool toBlack) override;
 	void setVisualEffect(uint16 effect, int duration) override;
 	void openTrackFile(const Common::String &name) override;
@@ -140,6 +141,10 @@ private:
 	 * decoded cursor groups are cached for reuse. Returns true on success.
 	 */
 	bool setGameCursor(const Common::String &name);
+
+	/** Capture/restore the last composited SET screen buffer for palette fades. */
+	void captureSetScreen();
+	bool restoreSetScreen();
 
 	/** Lazily open the game's TI.EXE for resource access. Returns nullptr if
 	 *  it cannot be found (the game can still run without a custom cursor). */
@@ -192,6 +197,8 @@ private:
 	int _setAngle = 0;               ///< Active panorama angle within _setScene.
 	bool _setVisible = false;        ///< TI.EXE DAT_00461182, read by setvisible().
 	int _stageNode = 0;              ///< Current stage node (TI.EXE DAT_00461160).
+	Common::Array<byte> _setScreenSnapshot;
+	bool _hasSetScreenSnapshot = false;
 
 	/** Kind recorded by the last hittest, read back by result() — mirrors the
 	 *  TI.EXE global DAT_00461298. */
