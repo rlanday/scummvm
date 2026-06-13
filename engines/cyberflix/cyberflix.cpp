@@ -97,9 +97,9 @@ static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, u
 }
 
 // A clickable region on an interactive movie frame. The original player reads
-// these as 0x40-byte records starting at event chunk +0x446 (the count is
-// (resourceLen - 0x446) / 0x40); FUN_0040d710 hit-tests the rect against the
-// click point and runs the action. Field offsets within the record:
+// the count at event chunk +0x442 and 0x40-byte records at +0x446;
+// FUN_0040d710 hit-tests the rect against the click point and runs the action.
+// Field offsets within the record:
 //   +0x00 u16 action (1=END, 2=GOTO target, 6=NEXT, 7=PREV),
 //   +0x02 byte flags (bit0 => also require a per-pixel mask hit on click;
 //         bit1 => hover-cursor eligible, see FUN_0040e5b0),
@@ -1722,13 +1722,15 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 						? READ_LE_UINT16(eb + 0xc) : 0x10 /* plain blit */);
 				pfName.push_back(readPascalString(rec + 0x1a, fileData));
 
-				// Interactive buttons: any bytes past the 0x446-byte event-chunk
-				// base are 0x40-byte button records (the original reads the count
-				// from the parser's allocated struct at +0x221; the raw resource
-				// only stores as many records as fit past the base, so the size
-				// delta is the reliable count).
+				// Interactive buttons: raw event chunks store a u32 count at
+				// +0x442 and 0x40-byte button records at +0x446. Ghidra's
+				// FUN_0040d710 decompile reports +0x221 because of a widened
+				// pointer type; FUN_0040e5b0 and HELP*.MOV raw dumps verify the
+				// byte offsets.
 				Common::Array<MovieButton> buttons;
-				uint32 btnCount = (eb && ebLen > 0x446) ? (ebLen - 0x446) / 0x40 : 0;
+				uint32 btnCount = (eb && ebLen >= 0x446) ? READ_LE_UINT32(eb + 0x442) : 0;
+				if (eb && ebLen > 0x446)
+					btnCount = MIN<uint32>(btnCount, (ebLen - 0x446) / 0x40);
 				for (uint32 b = 0; b < btnCount; ++b) {
 					const byte *br = eb + 0x446 + b * 0x40;
 					if (br + 0x40 > fileData.end())
