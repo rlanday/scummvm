@@ -100,6 +100,10 @@ public:
 	void sendToPainting(const Common::String &scene, const Common::String &view,
 			const Common::String &painting, const Common::String &message,
 			const Common::Array<Value> &args) override;
+	int countPaintings(const Common::String &scene, const Common::String &view) override;
+	Common::String indexToPainting(const Common::String &scene,
+			const Common::String &view, int index) override;
+	bool roadAhead(const Common::String &scene, const Common::String &view) override;
 	bool actionFrame(int n) override;
 	void setClut(const Common::String &name) override;
 	void blackScreen() override;

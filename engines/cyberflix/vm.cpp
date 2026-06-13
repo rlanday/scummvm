@@ -558,6 +558,19 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return Value::makeString(_host->currentSound(args.empty() ? 1 : args[0].intValue));
 		case 0x4e6e: // currentvoice() -> FUN_00412ff0: active voice cue or 'None'
 			return Value::makeString(_host->currentVoice());
+		case 0x4e32: // countpaintings(scene, view) -> FUN_00431fe0
+			if (args.size() >= 2)
+				return Value::makeInt(_host->countPaintings(args[0].strValue, args[1].strValue));
+			return Value::makeInt(0);
+		case 0x4e36: // indextopainting(scene, view, index) -> FUN_00432120, 1-based
+			if (args.size() >= 3)
+				return Value::makeString(_host->indexToPainting(args[0].strValue,
+						args[1].strValue, args[2].intValue));
+			break;
+		case 0x4e94: // roadahead(scene, view) -> FUN_00431bd0/FUN_004337b0
+			if (args.size() >= 2)
+				return Value::makeBool(_host->roadAhead(args[0].strValue, args[1].strValue));
+			return Value::makeBool(false);
 		case 0x4e2c: // countactors(): cast subsystem pending -> 0, so the
 		             // initall()/advanceday() actor loops run dry.
 			return Value::makeInt(0);

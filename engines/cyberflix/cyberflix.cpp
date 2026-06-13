@@ -449,6 +449,32 @@ Common::String CyberflixEngine::currentScene(const Common::String *target) {
 			_set->sceneName((uint32)_setScene) : Common::String("none");
 }
 
+int CyberflixEngine::countPaintings(const Common::String &scene, const Common::String &view) {
+	if (!_set || !_set->isOpen())
+		return 0;
+	int sceneIdx = _set->findScene(scene);
+	return sceneIdx >= 0 ? (int)_set->paintingCount((uint32)sceneIdx, view) : 0;
+}
+
+Common::String CyberflixEngine::indexToPainting(const Common::String &scene,
+		const Common::String &view, int index) {
+	if (!_set || !_set->isOpen() || index < 1)
+		return Common::String();
+	int sceneIdx = _set->findScene(scene);
+	return sceneIdx >= 0 ? _set->indexToPainting((uint32)sceneIdx, view, (uint32)index) :
+			Common::String();
+}
+
+bool CyberflixEngine::roadAhead(const Common::String &scene, const Common::String &view) {
+	if (!_set || !_set->isOpen())
+		return false;
+	int sceneIdx = _set->findScene(scene);
+	if (sceneIdx < 0)
+		return false;
+	int viewIdx = _set->findView((uint32)sceneIdx, view);
+	return _set->forwardTransitionForView((uint32)sceneIdx, viewIdx) != 0;
+}
+
 bool CyberflixEngine::setVisible(const bool *newVisible) {
 	if (!_set || !_set->isOpen())
 		return false;

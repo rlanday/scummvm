@@ -440,22 +440,17 @@ int Set::nextTaggedAngle(uint32 scene, uint32 table, int startAngle) const {
 uint32 Set::forwardTransitionForView(uint32 scene, int viewIdx) const {
 	if (viewIdx < 0)
 		return 0;
-	for (uint32 table = 0; table < 2; ++table) {
-		int angle = angleForView(scene, table, viewIdx);
-		if (angle < 0)
-			continue;
-		uint32 count = 0;
-		const byte *pano = panoramaTable(scene, table, count);
-		if (!pano || (uint32)angle >= count)
-			continue;
-		const byte *r = pano + 8 + (uint32)angle * kPanoramaRecordStride;
-		if (r + kPanoramaRecordStride > _fileData.end())
-			continue;
-		uint32 transitionId = READ_LE_UINT32(r + 0x34);
-		if (transitionId != 0)
-			return transitionId;
-	}
-	return 0;
+	int angle = angleForView(scene, 0, viewIdx);
+	if (angle < 0)
+		return 0;
+	uint32 count = 0;
+	const byte *pano = panoramaTable(scene, 0, count);
+	if (!pano || (uint32)angle >= count)
+		return 0;
+	const byte *r = pano + 8 + (uint32)angle * kPanoramaRecordStride;
+	if (r + kPanoramaRecordStride > _fileData.end())
+		return 0;
+	return READ_LE_UINT32(r + 0x34);
 }
 
 const Script *Set::setScript() const {
@@ -504,6 +499,26 @@ const Script *Set::paintingScript(uint32 scene, const Common::String &view,
 			return scriptById(READ_LE_UINT32(rec + 0x10));
 	}
 	return nullptr;
+}
+
+uint32 Set::paintingCount(uint32 scene, const Common::String &view) const {
+	const byte *v = viewRecord(scene, view);
+	uint32 count = 0, length = 0;
+	return paintingTable(v, count, length) ? count : 0;
+}
+
+Common::String Set::indexToPainting(uint32 scene, const Common::String &view, uint32 index) const {
+	if (index == 0)
+		return Common::String();
+	const byte *v = viewRecord(scene, view);
+	uint32 count = 0, length = 0;
+	const byte *table = paintingTable(v, count, length);
+	if (!table || index > count)
+		return Common::String();
+	const byte *rec = table + 8 + (index - 1) * 0x24;
+	if ((uint32)(rec - table) + 0x24 > length)
+		return Common::String();
+	return pascalString(rec + 0x14);
 }
 
 bool Set::transitionDestination(uint32 transitionId, uint32 &scene,

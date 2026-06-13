@@ -213,6 +213,12 @@ public:
 	const Script *paintingScript(uint32 scene, const Common::String &view,
 			const Common::String &painting) const;
 
+	/** Number of painting records in @p scene/@p view, or 0 if none. */
+	uint32 paintingCount(uint32 scene, const Common::String &view) const;
+
+	/** Painting name at native 1-based @p index in @p scene/@p view, or empty. */
+	Common::String indexToPainting(uint32 scene, const Common::String &view, uint32 index) const;
+
 	/**
 	 * Resolve a forward transition resource to the destination scene/view and
 	 * stable panorama angle. Mirrors TI.EXE FUN_00442b70's final step: take the

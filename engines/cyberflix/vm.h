@@ -136,6 +136,16 @@ public:
 			const Common::String &painting, const Common::String &message,
 			const Common::Array<Value> &args) {}
 
+	/** countpaintings(scene, view) (0x4e32): SET painting records in the view. */
+	virtual int countPaintings(const Common::String &scene, const Common::String &view) { return 0; }
+
+	/** indextopainting(scene, view, index) (0x4e36): native 1-based painting lookup. */
+	virtual Common::String indexToPainting(const Common::String &scene,
+			const Common::String &view, int index) { return Common::String(); }
+
+	/** roadahead(scene, view) (0x4e94): whether the view has a forward transition. */
+	virtual bool roadAhead(const Common::String &scene, const Common::String &view) { return false; }
+
 	/**
 	 * actionframe(n): true if the last movie ended on action frame @p n —
 	 * i.e. which menu button the user clicked (TI.EXE 0x4e73 FUN_00435026).
