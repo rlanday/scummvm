@@ -1120,8 +1120,10 @@ void CyberflixEngine::blackScreen() {
 
 void CyberflixEngine::forceUpdate() {
 	// forceupdate() (TI.EXE 0x2f14 -> FUN_00446910 -> FUN_00423a60): rebuild the
-	// display list from LIVE prop visibility, composite, and present.
+	// display list from LIVE prop visibility, step active SET transitions through
+	// FUN_004420b0, composite, and present.
 	refreshPropsIfDirty();
+	advanceSetTransition();
 	_system->updateScreen();
 	debug(1, "Cyberflix: forceupdate()");
 }
@@ -1597,12 +1599,12 @@ Common::Error CyberflixEngine::run() {
 				}
 			}
 		}
-		advanceSetTransition();
 		bool handled = false;
 		_vm.callFunction("idle", Common::Array<Value>(), &handled);
 		refreshPropsIfDirty();
 		_system->updateScreen();
-		_system->delayMillis(10);
+		if (_setTransitionType == kSetTransitionNone)
+			_system->delayMillis(10);
 	}
 
 	return Common::kNoError;
