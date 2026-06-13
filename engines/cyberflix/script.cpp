@@ -51,6 +51,12 @@ bool Script::parse(Common::SeekableReadStream *stream) {
 
 	// Fixed 8-byte instructions: [u32 operandB][u16 opcode][u16 operandA] (LE),
 	// terminated by opcode 0x0000. The pool follows immediately afterwards.
+	//
+	// The original evaluator is passed a pointer to the opcode field (record+4),
+	// so a self-relative string reference is read as a 32-bit dword at opcode+2:
+	// operandA supplies the low word and the following record's operandB supplies
+	// the high word. Most scripts fit under 64 KiB and have a zero high word, but
+	// BOOTFILE res2 needs this for definitions such as spotmovie.
 	uint32 pos = 0;
 	while (pos + 8 <= size) {
 		Instruction inst;
@@ -89,13 +95,23 @@ Common::String Script::getPoolString(uint32 offset) const {
 	return result;
 }
 
+uint32 Script::getSplitOperand(uint32 index) const {
+	if (index >= _code.size())
+		return 0;
+	uint32 rel = _code[index].operandA;
+	if (index + 1 < _code.size())
+		rel |= (_code[index + 1].operandB & 0xffff) << 16;
+	return rel;
+}
+
 Common::String Script::getSelfRelString(uint32 index) const {
 	if (index >= _code.size())
 		return Common::String();
 	// The operand is relative to the instruction's opcode field, which sits 4
 	// bytes into the 8-byte record (after the leading operandB dword).
 	uint32 opcodeFieldOffset = index * 8 + 4;
-	return getPoolString(opcodeFieldOffset + _code[index].operandA);
+	uint32 rel = getSplitOperand(index);
+	return getPoolString(opcodeFieldOffset + rel);
 }
 
 void Script::neutralizeRange(uint32 first, uint32 last) {

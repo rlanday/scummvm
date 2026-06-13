@@ -90,6 +90,8 @@ public:
 			const Common::String &view = Common::String()) override;
 	void closeSetFile() override;
 	Common::String currentSet() override;
+	bool setVisible(const bool *newVisible) override;
+	Common::String currentPuppet() override;
 	void sendToScene(const Common::String &scene) override;
 	bool actionFrame(int n) override;
 	void setClut(const Common::String &name) override;
@@ -188,6 +190,7 @@ private:
 	Common::ScopedPtr<Set> _set;     ///< Currently open set (DATA/*.SET), or null.
 	int _setScene = -1;              ///< Active scene index within _set, or -1.
 	int _setAngle = 0;               ///< Active panorama angle within _setScene.
+	bool _setVisible = false;        ///< TI.EXE DAT_00461182, read by setvisible().
 	int _stageNode = 0;              ///< Current stage node (TI.EXE DAT_00461160).
 
 	/** Kind recorded by the last hittest, read back by result() — mirrors the

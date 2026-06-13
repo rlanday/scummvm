@@ -164,11 +164,13 @@ Value ScriptVM::applyBinary(uint16 opcode, const Value &lhs, const Value &rhs) {
 	case Script::kOpConcat: return Value::makeString(lhs.strValue + rhs.strValue);
 	case Script::kOpEq:
 		if (lhs.type == Value::kString || lhs.type == Value::kSymbol)
-			return Value::makeBool(lhs.strValue == rhs.strValue);
+			return Value::makeBool(rhs.type == Value::kString || rhs.type == Value::kSymbol ?
+					lhs.strValue.equalsIgnoreCase(rhs.strValue) : false);
 		return Value::makeBool(a == b);
 	case Script::kOpNe:
 		if (lhs.type == Value::kString || lhs.type == Value::kSymbol)
-			return Value::makeBool(lhs.strValue != rhs.strValue);
+			return Value::makeBool(rhs.type == Value::kString || rhs.type == Value::kSymbol ?
+					!lhs.strValue.equalsIgnoreCase(rhs.strValue) : true);
 		return Value::makeBool(a != b);
 	case Script::kOpGt: return Value::makeBool(a > b);
 	case Script::kOpLt: return Value::makeBool(a < b);
@@ -240,15 +242,12 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 	case Script::kOpPush4: {
 		Common::String sym = script.getSelfRelString(pc);
 		uint16 headOp = inst.opcode;
-		uint16 lowWord = inst.operandA;
 		pc++;
 		// push4 (0x0004) is a 32-bit INTEGER literal, not a name: the value's
-		// low 16 bits live in operandA (atom decoder 0x0041a550 case 4 reads a
-		// dword from the instruction record; e.g. actionframe(1) and for-loop
-		// bounds use push4). Small literals confirmed; revisit the high word if
-		// a >16-bit literal ever shows up in game scripts.
+		// bits are the same split dword used for self-relative symbol operands
+		// (atom decoder 0x0041a550 case 4 reads a dword from opcode+2).
 		if (headOp == Script::kOpPush4)
-			return Value::makeInt((int16)lowWord);
+			return Value::makeInt((int32)script.getSplitOperand(pc - 1));
 		// A name immediately followed by '(' is a call atom: parse and evaluate
 		// the balanced argument list, then dispatch (TI.EXE 0x0041a609 checks
 		// the next opcode for kOpOpenParen and sizes the span via 0x0040b690).
@@ -481,6 +480,13 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			break;
 		case 0x4e55: // currentset() -> open set name or 'none'
 			return Value::makeString(_host->currentSet());
+		case 0x4e51: // currentpuppet() -> current puppet name or 'none'
+			return Value::makeString(_host->currentPuppet());
+		case 0x3e87: { // setvisible([flag]) -> current SET visibility flag
+			bool visible = args.empty() ? false : (args[0].intValue != 0);
+			const bool *newVisible = args.empty() ? nullptr : &visible;
+			return Value::makeBool(_host->setVisible(newVisible));
+		}
 		case 0x4e73: // actionframe(n) -> bool, FUN_004362c0 (n must be 1 or 2)
 			return Value::makeBool(_host->actionFrame(args.empty() ? 0 : args[0].intValue));
 		case 0x3e96: // framerate(n): sets the global frame pacing (TI.EXE

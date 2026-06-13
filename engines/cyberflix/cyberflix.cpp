@@ -310,6 +310,7 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 	_set.reset(set.release());
 	_setScene = -1;
 	_setAngle = 0;
+	_setVisible = true;
 	debug(1, "Cyberflix: set '%s' open (%u scenes, name '%s', default scene '%s' view '%s')",
 			name.c_str(), _set->sceneCount(), _set->setName().c_str(),
 			_set->defaultScene().c_str(), _set->defaultView().c_str());
@@ -374,6 +375,7 @@ void CyberflixEngine::closeSetFile() {
 	_set.reset();
 	_setScene = -1;
 	_setAngle = 0;
+	_setVisible = false;
 }
 
 // currentset(): the open set's EMBEDDED name (master header +0x070, e.g.
@@ -383,6 +385,20 @@ void CyberflixEngine::closeSetFile() {
 Common::String CyberflixEngine::currentSet() {
 	if (_set && _set->isOpen())
 		return _set->setName();
+	return "none";
+}
+
+bool CyberflixEngine::setVisible(const bool *newVisible) {
+	if (!_set || !_set->isOpen())
+		return false;
+	if (newVisible) {
+		_setVisible = *newVisible;
+		_propsDirty = true;
+	}
+	return _setVisible;
+}
+
+Common::String CyberflixEngine::currentPuppet() {
 	return "none";
 }
 

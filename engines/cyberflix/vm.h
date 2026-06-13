@@ -103,6 +103,16 @@ public:
 	/** Name of the open set (currentset, 0x4e55), or "none". */
 	virtual Common::String currentSet() { return "none"; }
 
+	/**
+	 * setvisible([flag]) (0x3e87): with no args, read the open-set visibility
+	 * flag (TI.EXE FUN_00431ca0 / DAT_00461182); with an arg, set it
+	 * (FUN_004318d0) and invalidate/redraw the set.
+	 */
+	virtual bool setVisible(const bool *newVisible) { return false; }
+
+	/** currentpuppet() (0x4e51), or "none" while the puppet subsystem is absent. */
+	virtual Common::String currentPuppet() { return "none"; }
+
 	/** Navigate to (and render) the scene named @p scene of the open set. */
 	virtual void sendToScene(const Common::String &scene) {}
 

@@ -240,13 +240,24 @@ public:
 	Common::String getPoolString(uint32 offset) const;
 
 	/**
+	 * Return the 32-bit operand dword read by TI.EXE from opcode+2.
+	 *
+	 * In the on-disk 8-byte record [u32 operandB][u16 opcode][u16 operandA],
+	 * the dword starts at operandA and continues into the low half of the next
+	 * record's operandB. This split operand is used both for self-relative
+	 * string references and 32-bit integer literals.
+	 */
+	uint32 getSplitOperand(uint32 index) const;
+
+	/**
 	 * Resolve the self-relative symbol name referenced by instruction @p index.
 	 *
 	 * pushSym (0x0005) and related operand atoms encode the symbol name as a
-	 * Pascal string located at (opcodeFieldOffset + operandA), i.e. the operand
-	 * is a byte offset relative to the instruction's own opcode field. This was
-	 * recovered from the TI.EXE evaluator (vaddr 0x00419cc0:
-	 * "mov ecx,[eax+2]; add ecx,eax") and verified against the boot script.
+	 * Pascal string located at (opcodeFieldOffset + getSplitOperand(index)),
+	 * i.e. the operand is a byte offset relative to the instruction's own opcode
+	 * field. This was recovered from the TI.EXE evaluator (vaddr 0x00419cc0:
+	 * "mov ecx,[eax+2]; add ecx,eax") and verified against BOOTFILE res2
+	 * definitions whose pool lies beyond 64 KiB (spotmovie, premovie, ...).
 	 */
 	Common::String getSelfRelString(uint32 index) const;
 
