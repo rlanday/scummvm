@@ -27,17 +27,21 @@ namespace Cyberflix {
 
 // Per-scanline RLE control opcodes (low two bits of each control byte).
 enum {
-	kCelCopyRef = 0,    ///< Copy from the reference frame; transparent when absent.
+	kCelCopyPrevRow = 0, ///< Copy from the previous scanline (vertical delta).
 	kCelTransparent = 1, ///< Skip (leave transparent).
-	kCelFill = 2,       ///< Run-length fill with the next stream byte.
-	kCelLiteral = 3     ///< Copy literal pixel bytes from the stream.
+	kCelFill = 2,        ///< Run-length fill with the next stream byte.
+	kCelLiteral = 3      ///< Copy literal pixel bytes from the stream.
 };
 
 // Decode one scanline of @p width pixels into @p row / @p rowOpaque starting at
-// stream offset @p p, consuming @p byteLen control bytes. Returns false on a
-// malformed line (over/underrun). Mirrors TI.EXE FUN_00419210.
+// stream offset @p p, consuming @p byteLen control bytes. @p prevRow /
+// @p prevOpaque are the previously decoded scanline (null on the first row).
+// Returns false on a malformed line (over/underrun). Mirrors TI.EXE
+// FUN_004194e0 as driven by the screen-space cel blitter FUN_0043b940, which
+// feeds each scanline the just-written previous destination row as the op-0
+// reference.
 static bool decodeScanline(const byte *data, uint32 p, uint32 byteLen, uint16 width,
-		byte *row, byte *rowOpaque) {
+		byte *row, byte *rowOpaque, const byte *prevRow, const byte *prevOpaque) {
 	const uint32 end = p + byteLen;
 	uint16 x = 0;
 	while (p < end && x < width) {
@@ -64,11 +68,21 @@ static bool decodeScanline(const byte *data, uint32 p, uint32 byteLen, uint16 wi
 				rowOpaque[x] = 1;
 			}
 			break;
-		case kCelCopyRef:
+		case kCelCopyPrevRow:
+			// The runtime copies these pixels from the previous destination
+			// scanline. Where the previous cel row was opaque this duplicates
+			// it; where it was transparent the original would copy whatever
+			// background lay beneath, which we model as transparency.
+			for (uint16 i = 0; i < n; ++i, ++x) {
+				if (prevRow && prevOpaque[x]) {
+					row[x] = prevRow[x];
+					rowOpaque[x] = 1;
+				}
+			}
+			break;
 		case kCelTransparent:
 		default:
-			// No reference frame for a standalone cel: advance, leaving the
-			// pixels transparent (the runtime would copy the previous frame).
+			// Skip: leave the pixels transparent.
 			x = (uint16)(x + n);
 			break;
 		}
@@ -112,7 +126,9 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
 			return false;
 		byte *row = &out.pixels[(uint)y * width];
 		byte *rowOpaque = &out.opaque[(uint)y * width];
-		if (!decodeScanline(data.begin(), p, byteLen, width, row, rowOpaque))
+		const byte *prevRow = y ? row - width : nullptr;
+		const byte *prevOpaque = y ? rowOpaque - width : nullptr;
+		if (!decodeScanline(data.begin(), p, byteLen, width, row, rowOpaque, prevRow, prevOpaque))
 			return false;
 		p += byteLen;
 	}

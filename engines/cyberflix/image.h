@@ -34,8 +34,10 @@ namespace Cyberflix {
 /**
  * A decoded CyberFlix "cel": an 8-bit palettised image with per-pixel
  * transparency. SHP shapes and SET background frames share the same cel
- * encoding, reversed from the runtime blitter (TI.EXE FUN_0043bd60) and the
- * per-scanline RLE decoders (FUN_00419210 forward / FUN_00419310 mirrored).
+ * encoding, reversed from the runtime blitters (TI.EXE FUN_0043b940 for
+ * screen-space items, FUN_0043bd60 for scaled world items) and the
+ * per-scanline RLE decoders (FUN_004194e0 forward / FUN_00419620 mirrored,
+ * compose-buffer variants FUN_00419210/FUN_00419310).
  *
  * On disk a cel is:
  *   uint16 height, uint16 width   (packed into the resource @c info field for
@@ -45,7 +47,10 @@ namespace Cyberflix {
  *
  * Each scanline is @c {uint16 byteLength; controlStream}. The control stream is
  * a run of command bytes @c C with @c n = C >> 2 and @c op = C & 3:
- *   op 0  copy @c n pixels from the reference frame (transparent when none)
+ *   op 0  copy @c n pixels from the previous scanline (vertical delta; the
+ *         blitter passes the just-written previous destination row as the
+ *         reference, so where the cel itself is transparent above this run
+ *         the copy resolves to the underlying background = transparency)
  *   op 1  skip  @c n pixels (transparent)
  *   op 2  fill  @c n pixels with the next stream byte (RLE)
  *   op 3  copy  @c n literal pixel bytes from the stream

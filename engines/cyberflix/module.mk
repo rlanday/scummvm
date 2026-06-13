@@ -8,6 +8,7 @@ MODULE_OBJS = \
 	metaengine.o \
 	script.o \
 	set.o \
+	shop.o \
 	sound.o \
 	stage.o \
 	vm.o
