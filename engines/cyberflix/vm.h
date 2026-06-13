@@ -103,6 +103,16 @@ public:
 	/** Name of the open set (currentset, 0x4e55), or "none". */
 	virtual Common::String currentSet() { return "none"; }
 
+	/** currentview() (0x3e8b): current SET view name, "Moving", or "none". */
+	virtual Common::String currentView() { return "none"; }
+
+	/**
+	 * currentscene([name|left|right|strait]) (0x3e9d): no arg reads the current
+	 * SET scene name; an arg switches scene or starts the native navigation
+	 * action named by BOOTFILE's keydown fallback.
+	 */
+	virtual Common::String currentScene(const Common::String *target) { return "none"; }
+
 	/**
 	 * setvisible([flag]) (0x3e87): with no args, read the open-set visibility
 	 * flag (TI.EXE FUN_00431ca0 / DAT_00461182); with an arg, set it
@@ -113,8 +123,10 @@ public:
 	/** currentpuppet() (0x4e51), or "none" while the puppet subsystem is absent. */
 	virtual Common::String currentPuppet() { return "none"; }
 
-	/** Navigate to (and render) the scene named @p scene of the open set. */
-	virtual void sendToScene(const Common::String &scene) {}
+	/** Navigate to @p scene and optionally dispatch a scene message. */
+	virtual void sendToScene(const Common::String &scene,
+			const Common::String &message = Common::String(),
+			const Common::Array<Value> &args = Common::Array<Value>()) {}
 
 	/**
 	 * actionframe(n): true if the last movie ended on action frame @p n —

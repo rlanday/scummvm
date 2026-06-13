@@ -365,9 +365,10 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 		break;
 	case 0x2f02: // sendtoscene(scene, message) -> TI.EXE FUN_004311e0/
 	             // FUN_00431200: dispatch against the scene's script chain.
-	             // Scene scripts are pending; boot res1's mousedown sends
-	             // mousedown(thepoint) here, which must NOT be evaluated
-	             // (recursion) or repaint the room (angle reset).
+		if (_host)
+			_host->sendToScene(targets.empty() ? Common::String() : targets[0].strValue,
+					message, msgArgs);
+		break;
 	case 0x2f22: // sendtopainting(name, message) -> FUN_00432550/FUN_00432570
 	case 0x2f24: // sendtobutton(name, message) -> FUN_0040a410/FUN_0040a430:
 	             // chain [button script, node script, stage script, res2]
@@ -490,6 +491,12 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			break;
 		case 0x4e55: // currentset() -> open set name or 'none'
 			return Value::makeString(_host->currentSet());
+		case 0x3e8b: // currentview() -> current SET view name
+			return Value::makeString(_host->currentView());
+		case 0x3e9d: { // currentscene([name|left|right|strait])
+			const Common::String *target = args.empty() ? nullptr : &args[0].strValue;
+			return Value::makeString(_host->currentScene(target));
+		}
 		case 0x4e51: // currentpuppet() -> current puppet name or 'none'
 			return Value::makeString(_host->currentPuppet());
 		case 0x3e87: { // setvisible([flag]) -> current SET visibility flag

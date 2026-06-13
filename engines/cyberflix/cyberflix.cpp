@@ -309,7 +309,11 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 	}
 	_set.reset(set.release());
 	_setScene = -1;
+	_setTable = 0;
 	_setAngle = 0;
+	_setView.clear();
+	_setTransitionActive = false;
+	_setTransitionLastMs = 0;
 	_setVisible = true;
 	debug(1, "Cyberflix: set '%s' open (%u scenes, name '%s', default scene '%s' view '%s')",
 			name.c_str(), _set->sceneCount(), _set->setName().c_str(),
@@ -342,16 +346,19 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 		// View select (TI.EXE FUN_00433960 stores the view, FUN_004425e0 aims
 		// the camera at the panorama record tagged with the view's index).
 		int angle = 0;
+		Common::String activeView;
 		if (!useView.empty()) {
 			int viewIdx = _set->findView((uint32)sceneIdx, useView);
 			int viewAngle = _set->angleForView((uint32)sceneIdx, 0, viewIdx);
-			if (viewAngle >= 0)
+			if (viewAngle >= 0) {
 				angle = viewAngle;
-			else
+				activeView = _set->viewName((uint32)sceneIdx, (uint32)viewIdx);
+			} else {
 				warning("Cyberflix: opensetfile view '%s' not found in scene '%s'",
 						useView.c_str(), useScene.c_str());
+			}
 		}
-		renderSetScene(sceneIdx, angle);
+		renderSetScene(sceneIdx, 0, angle, activeView);
 		_vm.callFunction("openscene", noArgs);
 	}
 }
@@ -374,7 +381,11 @@ void CyberflixEngine::closeSetFile() {
 	}
 	_set.reset();
 	_setScene = -1;
+	_setTable = 0;
 	_setAngle = 0;
+	_setView.clear();
+	_setTransitionActive = false;
+	_setTransitionLastMs = 0;
 	_setVisible = false;
 }
 
@@ -386,6 +397,49 @@ Common::String CyberflixEngine::currentSet() {
 	if (_set && _set->isOpen())
 		return _set->setName();
 	return "none";
+}
+
+// currentview(): DAT_004611dc in TI.EXE (FUN_00431ce0), or "Moving" while a
+// panorama transition resource is active.
+Common::String CyberflixEngine::currentView() {
+	if (_setTransitionActive)
+		return "Moving";
+	if (_set && _set->isOpen() && !_setView.empty())
+		return _setView;
+	return "none";
+}
+
+// currentscene([arg]): no-arg reads DAT_004611cc. With "left"/"right"/"strait",
+// BOOTFILE res2's keydown fallback reaches TI.EXE FUN_00430c70/FUN_00442140 to
+// navigate the current set; other strings are scene names to switch to.
+Common::String CyberflixEngine::currentScene(const Common::String *target) {
+	if (!_set || !_set->isOpen() || _setScene < 0)
+		return "none";
+
+	if (target && !target->empty()) {
+		if (target->equalsIgnoreCase("left") || target->equalsIgnoreCase("right") ||
+				target->equalsIgnoreCase("strait")) {
+			navigateSet(*target);
+		} else {
+			int scene = _set->findScene(*target);
+			if (scene >= 0) {
+				int angle = 0;
+				Common::String view = _set->defaultView();
+				int viewIdx = _set->findView((uint32)scene, view);
+				int viewAngle = _set->angleForView((uint32)scene, 0, viewIdx);
+				if (viewAngle >= 0)
+					angle = viewAngle;
+				else
+					view.clear();
+				renderSetScene(scene, 0, angle, view);
+			} else {
+				warning("Cyberflix: currentscene('%s'): no such scene", target->c_str());
+			}
+		}
+	}
+
+	return (_set && _set->isOpen() && _setScene >= 0) ?
+			_set->sceneName((uint32)_setScene) : Common::String("none");
 }
 
 bool CyberflixEngine::setVisible(const bool *newVisible) {
@@ -1137,11 +1191,12 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 	debug(1, "Cyberflix: visualeffect(%#x, %d)", effect, duration);
 }
 
-// sendtoscene(name): select a scene of the open set by name and render it.
-// Mirrors TI.EXE FUN_004311e0 -> FUN_00431200 (scene resolved by name via
-// FUN_00432f30). The full path runs the scene's behavior script; for now we
-// paint its panorama background so the room is visible.
-void CyberflixEngine::sendToScene(const Common::String &scene) {
+// sendtoscene(name[, message]): select a scene of the open set by name, render
+// it if needed, then dispatch the message against the scene chain. Scene-local
+// scripts are pending, so the chain is currently BOOTFILE res2 only; this is
+// still the native fallback path BOOTFILE res1's keydown() uses.
+void CyberflixEngine::sendToScene(const Common::String &scene,
+		const Common::String &message, const Common::Array<Value> &args) {
 	if (!_set || !_set->isOpen()) {
 		warning("Cyberflix: sendtoscene('%s') with no set open", scene.c_str());
 		return;
@@ -1152,21 +1207,106 @@ void CyberflixEngine::sendToScene(const Common::String &scene) {
 				_set->name().c_str(), scene.c_str());
 		return;
 	}
-	renderSetScene(index, 0);
+	if (_setScene != index)
+		renderSetScene(index, 0, 0);
+	if (!message.empty())
+		dispatchWithScopes(nullptr, nullptr, scene, Common::String(), message, args);
 }
 
-void CyberflixEngine::renderSetScene(int scene, int angle) {
+void CyberflixEngine::navigateSet(const Common::String &action) {
+	if (!_set || !_set->isOpen() || _setScene < 0)
+		return;
+	if (_setTransitionActive)
+		return;
+
+	int viewIdx = _set->findView((uint32)_setScene, _setView);
+	if (viewIdx < 0)
+		viewIdx = _set->viewTagAtAngle((uint32)_setScene, (uint32)_setTable, (uint32)_setAngle);
+	if (viewIdx < 0) {
+		warning("Cyberflix: cannot navigate set '%s' scene '%s': current view '%s' not found",
+				_set->name().c_str(), _set->sceneName((uint32)_setScene).c_str(), _setView.c_str());
+		return;
+	}
+
+	if (action.equalsIgnoreCase("left") || action.equalsIgnoreCase("right")) {
+		const int table = action.equalsIgnoreCase("left") ? 1 : 0;
+		int startAngle = _set->angleForView((uint32)_setScene, (uint32)table, viewIdx);
+		if (startAngle < 0 || _set->nextTaggedAngle((uint32)_setScene, (uint32)table, startAngle) < 0) {
+			warning("Cyberflix: set '%s' scene '%s' has no %s turn from view '%s'",
+					_set->name().c_str(), _set->sceneName((uint32)_setScene).c_str(),
+					action.c_str(), _setView.c_str());
+			return;
+		}
+		renderSetScene(_setScene, table, startAngle, _setView);
+		_setTransitionActive = true;
+		_setTransitionLastMs = _system->getMillis();
+		return;
+	}
+
+	if (action.equalsIgnoreCase("strait")) {
+		uint32 transitionId = _set->forwardTransitionForView((uint32)_setScene, viewIdx);
+		if (transitionId == 0)
+			return;
+		uint32 scene = 0;
+		Common::String view;
+		int angle = 0;
+		if (!_set->transitionDestination(transitionId, scene, view, angle)) {
+			warning("Cyberflix: set '%s' transition %u has no resolvable destination",
+					_set->name().c_str(), transitionId);
+			return;
+		}
+		renderSetScene((int)scene, 0, angle, view);
+	}
+}
+
+void CyberflixEngine::advanceSetTransition() {
+	if (!_setTransitionActive || !_set || !_set->isOpen() || _setScene < 0)
+		return;
+
+	const uint32 now = _system->getMillis();
+	if (now - _setTransitionLastMs < 1000 / 60)
+		return;
+	_setTransitionLastMs = now;
+
+	uint32 count = _set->angleCount((uint32)_setScene, (uint32)_setTable);
+	if (count == 0) {
+		_setTransitionActive = false;
+		return;
+	}
+
+	int nextAngle = (_setAngle + 1) % (int)count;
+	int viewIdx = _set->viewTagAtAngle((uint32)_setScene, (uint32)_setTable, (uint32)nextAngle);
+	Common::String view = viewIdx >= 0 ?
+			_set->viewName((uint32)_setScene, (uint32)viewIdx) : Common::String();
+	renderSetScene(_setScene, _setTable, nextAngle, view);
+
+	if (viewIdx >= 0) {
+		_setTransitionActive = false;
+		Common::Array<Value> noArgs;
+		_vm.callFunction("openscene", noArgs);
+	}
+}
+
+void CyberflixEngine::renderSetScene(int scene, int table, int angle, const Common::String &view) {
 	if (!_set || !_set->isOpen()) {
 		warning("Cyberflix: renderSetScene with no set open");
 		return;
 	}
 
 	FrameImage frame;
-	if (!_set->renderScene((uint32)scene, 0, (uint32)angle, frame))
+	if (!_set->renderScene((uint32)scene, (uint32)table, (uint32)angle, frame))
 		return;
 
 	_setScene = scene;
+	_setTable = table;
 	_setAngle = angle;
+	if (!view.empty()) {
+		_setView = view;
+	} else {
+		int viewIdx = _set->viewTagAtAngle((uint32)scene, (uint32)table, (uint32)angle);
+		if (viewIdx >= 0)
+			_setView = _set->viewName((uint32)scene, (uint32)viewIdx);
+	}
 
 	byte rgb[256 * 3];
 	memset(rgb, 0, sizeof(rgb));
@@ -1339,8 +1479,36 @@ Common::Error CyberflixEngine::run() {
 				_vm.callFunction("mousedown", args, &handled);
 				if (!handled)
 					warning("Cyberflix: boot script has no mousedown handler");
+			} else if (event.type == Common::EVENT_KEYDOWN) {
+				const char *direction = nullptr;
+				switch (event.kbd.keycode) {
+				case Common::KEYCODE_LEFT:
+					direction = "leftarrow";
+					break;
+				case Common::KEYCODE_UP:
+					direction = "uparrow";
+					break;
+				case Common::KEYCODE_RIGHT:
+					direction = "rightarrow";
+					break;
+				case Common::KEYCODE_DOWN:
+					direction = "downarrow";
+					break;
+				default:
+					break;
+				}
+				if (direction) {
+					Common::Array<Value> args;
+					args.push_back(Value::makeString(direction));
+					bool handled = false;
+					_vm.callFunction("keydown", args, &handled);
+					if (!handled)
+						warning("Cyberflix: boot script has no keydown handler");
+					refreshPropsIfDirty();
+				}
 			}
 		}
+		advanceSetTransition();
 		bool handled = false;
 		_vm.callFunction("idle", Common::Array<Value>(), &handled);
 		refreshPropsIfDirty();

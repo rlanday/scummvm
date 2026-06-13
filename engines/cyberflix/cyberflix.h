@@ -90,9 +90,12 @@ public:
 			const Common::String &view = Common::String()) override;
 	void closeSetFile() override;
 	Common::String currentSet() override;
+	Common::String currentView() override;
+	Common::String currentScene(const Common::String *target) override;
 	bool setVisible(const bool *newVisible) override;
 	Common::String currentPuppet() override;
-	void sendToScene(const Common::String &scene) override;
+	void sendToScene(const Common::String &scene, const Common::String &message = Common::String(),
+			const Common::Array<Value> &args = Common::Array<Value>()) override;
 	bool actionFrame(int n) override;
 	void setClut(const Common::String &name) override;
 	void blackScreen() override;
@@ -163,7 +166,13 @@ private:
 	 * panorama index; the heading-to-view selection (FUN_00442b70 / FUN_00426250)
 	 * lands with panorama navigation.
 	 */
-	void renderSetScene(int scene, int angle);
+	void renderSetScene(int scene, int table, int angle,
+			const Common::String &view = Common::String());
+	void renderSetScene(int scene, int angle) { renderSetScene(scene, _setTable, angle); }
+	/** Run the verified SET navigation actions used by currentscene(). */
+	void navigateSet(const Common::String &action);
+	/** Advance an active left/right panorama transition by one native frame. */
+	void advanceSetTransition();
 
 	/**
 	 * Process the global/movie keyboard shortcuts that the original handles
@@ -192,7 +201,11 @@ private:
 	Common::ScopedPtr<Stage> _stage; ///< Currently open stage (DATA/*.STG), or null.
 	Common::ScopedPtr<Set> _set;     ///< Currently open set (DATA/*.SET), or null.
 	int _setScene = -1;              ///< Active scene index within _set, or -1.
+	int _setTable = 0;               ///< Active panorama table: 0 = +0x0a/right, 1 = +0x0e/left.
 	int _setAngle = 0;               ///< Active panorama angle within _setScene.
+	Common::String _setView;         ///< Active view name in _setScene (DAT_004611dc).
+	bool _setTransitionActive = false; ///< A left/right SET panorama table is advancing.
+	uint32 _setTransitionLastMs = 0;
 	bool _setVisible = false;        ///< TI.EXE DAT_00461182, read by setvisible().
 	int _stageNode = 0;              ///< Current stage node (TI.EXE DAT_00461160).
 

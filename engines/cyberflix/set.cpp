@@ -93,6 +93,44 @@ const byte *Set::panoramaTable(uint32 scene, uint32 table, uint32 &count) const 
 	return pano;
 }
 
+int Set::findSceneByViewDirId(uint32 viewDirId) const {
+	for (uint32 i = 0; i < _sceneCount; ++i) {
+		const byte *rec = sceneRecord(i);
+		if (rec && READ_LE_UINT32(rec + kSceneViewDirOffset) == viewDirId)
+			return (int)i;
+	}
+	return -1;
+}
+
+int Set::nearestViewForHeading(uint32 scene, int heading) const {
+	const byte *rec = sceneRecord(scene);
+	if (!rec)
+		return -1;
+	int idx = resourceIndexById(READ_LE_UINT32(rec + kSceneViewDirOffset));
+	if (idx < 0)
+		return -1;
+	const byte *dir = payload((uint32)idx);
+	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
+		return -1;
+	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
+	int best = -1;
+	int bestDist = 1000;
+	for (uint32 i = 0; i < count; ++i) {
+		const byte *v = dir + kViewDirRecordsOffset + i * kViewRecordStride;
+		if (v + kViewRecordStride > _fileData.end())
+			break;
+		int delta = READ_LE_INT16(v + kViewHeadingOffset) - heading;
+		if (delta < 0)
+			delta = -delta;
+		int dist = MIN(delta, 256 - delta);
+		if (dist < bestDist) {
+			bestDist = dist;
+			best = (int)i;
+		}
+	}
+	return best;
+}
+
 bool Set::open(const Common::String &name) {
 	_master = -1;
 	_sceneTable = -1;
@@ -221,6 +259,28 @@ int Set::findView(uint32 scene, const Common::String &name) const {
 	return -1;
 }
 
+Common::String Set::viewName(uint32 scene, uint32 index) const {
+	const byte *rec = sceneRecord(scene);
+	if (!rec)
+		return Common::String();
+	int idx = resourceIndexById(READ_LE_UINT32(rec + kSceneViewDirOffset));
+	if (idx < 0)
+		return Common::String();
+	const byte *dir = payload((uint32)idx);
+	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
+		return Common::String();
+	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
+	if (index >= count)
+		return Common::String();
+	const byte *v = dir + kViewDirRecordsOffset + index * kViewRecordStride;
+	if (v + kViewRecordStride > _fileData.end())
+		return Common::String();
+	byte len = v[kViewNameOffset];
+	if (len == 0 || len >= 16 || v + kViewNameOffset + 1 + len > _fileData.end())
+		return Common::String();
+	return Common::String((const char *)v + kViewNameOffset + 1, len);
+}
+
 int Set::angleForView(uint32 scene, uint32 table, int viewIdx) const {
 	if (viewIdx < 0)
 		return -1;
@@ -239,6 +299,81 @@ int Set::angleForView(uint32 scene, uint32 table, int viewIdx) const {
 			return (int)i;
 	}
 	return -1;
+}
+
+int Set::viewTagAtAngle(uint32 scene, uint32 table, uint32 angle) const {
+	uint32 count = 0;
+	const byte *pano = panoramaTable(scene, table, count);
+	if (!pano || angle >= count)
+		return -1;
+	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
+	if (r + kPanoramaRecordStride > _fileData.end())
+		return -1;
+	int32 tag = (int32)READ_LE_UINT32(r + 0x38);
+	return tag >= 0 ? (int)tag : -1;
+}
+
+int Set::nextTaggedAngle(uint32 scene, uint32 table, int startAngle) const {
+	uint32 count = angleCount(scene, table);
+	if (startAngle < 0 || count == 0)
+		return -1;
+	for (uint32 i = 1; i <= count; ++i) {
+		uint32 angle = ((uint32)startAngle + i) % count;
+		if (viewTagAtAngle(scene, table, angle) >= 0)
+			return (int)angle;
+	}
+	return -1;
+}
+
+uint32 Set::forwardTransitionForView(uint32 scene, int viewIdx) const {
+	if (viewIdx < 0)
+		return 0;
+	for (uint32 table = 0; table < 2; ++table) {
+		int angle = angleForView(scene, table, viewIdx);
+		if (angle < 0)
+			continue;
+		uint32 count = 0;
+		const byte *pano = panoramaTable(scene, table, count);
+		if (!pano || (uint32)angle >= count)
+			continue;
+		const byte *r = pano + 8 + (uint32)angle * kPanoramaRecordStride;
+		if (r + kPanoramaRecordStride > _fileData.end())
+			continue;
+		uint32 transitionId = READ_LE_UINT32(r + 0x34);
+		if (transitionId != 0)
+			return transitionId;
+	}
+	return 0;
+}
+
+bool Set::transitionDestination(uint32 transitionId, uint32 &scene,
+		Common::String &view, int &angle) const {
+	int idx = resourceIndexById(transitionId);
+	if (idx < 0)
+		return false;
+	const byte *transition = engineBase((uint32)idx);
+	if (!transition || transition + 0x0c > _fileData.end())
+		return false;
+	uint32 count = READ_LE_UINT32(transition + 0x04);
+	if (count == 0)
+		return false;
+	const Archive::Resource &res = _archive.getResource((uint32)idx);
+	if ((uint64)count * kPanoramaRecordStride + 0x0c > res.length + 4)
+		return false;
+	int sceneIdx = findSceneByViewDirId(READ_LE_UINT32(transition + 0x08));
+	if (sceneIdx < 0)
+		return false;
+	const byte *last = transition + 0x0c + (count - 1) * kPanoramaRecordStride;
+	if (last + kPanoramaRecordStride > _fileData.end())
+		return false;
+	int viewIdx = nearestViewForHeading((uint32)sceneIdx, READ_LE_INT16(last + 0x26));
+	if (viewIdx < 0)
+		return false;
+	int viewAngle = angleForView((uint32)sceneIdx, 0, viewIdx);
+	scene = (uint32)sceneIdx;
+	view = viewName((uint32)sceneIdx, (uint32)viewIdx);
+	angle = viewAngle >= 0 ? viewAngle : 0;
+	return !view.empty();
 }
 
 bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameImage &out) {

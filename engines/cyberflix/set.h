@@ -173,6 +173,9 @@ public:
 	 */
 	int findView(uint32 scene, const Common::String &name) const;
 
+	/** View @p index's name in scene @p scene, or empty if out of range. */
+	Common::String viewName(uint32 scene, uint32 index) const;
+
 	/**
 	 * The panorama angle (record index in @p table) whose record is tagged
 	 * with view index @p viewIdx, or -1. Mirrors the camera-set scan of
@@ -180,6 +183,24 @@ public:
 	 * faces (u32 @+0x38 in TI's record frame; -1 = between views).
 	 */
 	int angleForView(uint32 scene, uint32 table, int viewIdx) const;
+
+	/** View tag stored on panorama @p angle, or -1 for an in-between frame. */
+	int viewTagAtAngle(uint32 scene, uint32 table, uint32 angle) const;
+
+	/** First later panorama angle with a view tag, wrapping cyclically. */
+	int nextTaggedAngle(uint32 scene, uint32 table, int startAngle) const;
+
+	/** Forward transition resource id for @p viewIdx in @p scene, or 0. */
+	uint32 forwardTransitionForView(uint32 scene, int viewIdx) const;
+
+	/**
+	 * Resolve a forward transition resource to the destination scene/view and
+	 * stable panorama angle. Mirrors TI.EXE FUN_00442b70's final step: take the
+	 * transition's destination view-directory id and choose the view nearest to
+	 * the final transition heading.
+	 */
+	bool transitionDestination(uint32 transitionId, uint32 &scene,
+			Common::String &view, int &angle) const;
 
 	/**
 	 * Render scene @p scene's background for panorama @p table (0 = A, 1 = B) at
@@ -203,6 +224,10 @@ private:
 	const byte *sceneRecord(uint32 scene) const;
 	/** Panorama table payload for scene @p scene / table @p table, or nullptr. */
 	const byte *panoramaTable(uint32 scene, uint32 table, uint32 &count) const;
+	/** Index of the scene whose view-directory resource id is @p viewDirId. */
+	int findSceneByViewDirId(uint32 viewDirId) const;
+	/** View index in @p scene closest to @p heading on the 256-unit circle. */
+	int nearestViewForHeading(uint32 scene, int heading) const;
 
 	Common::String _name;
 	Common::String _setName;      ///< Embedded master-header name (+0x070).
