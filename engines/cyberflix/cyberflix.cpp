@@ -58,6 +58,12 @@
 
 namespace Cyberflix {
 
+static const double kDefaultPaletteGamma = 0.65;
+static const double kPaletteGammaUp = 1.05;
+static const double kPaletteGammaDown = 0.9523809523809523;
+static const double kPaletteGammaMin = 0.15;
+static const double kPaletteGammaMax = 2.5;
+
 // The runtime accesses every resource through a "record+8" data pointer (the
 // info tag), which is four bytes before the payload that Archive exposes via
 // dataOffset (== record+12). All master-header/table field offsets below are
@@ -313,7 +319,6 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 	_setAngle = 0;
 	_setView.clear();
 	_setTransitionActive = false;
-	_setTransitionLastMs = 0;
 	_setVisible = true;
 	debug(1, "Cyberflix: set '%s' open (%u scenes, name '%s', default scene '%s' view '%s')",
 			name.c_str(), _set->sceneCount(), _set->setName().c_str(),
@@ -385,7 +390,6 @@ void CyberflixEngine::closeSetFile() {
 	_setAngle = 0;
 	_setView.clear();
 	_setTransitionActive = false;
-	_setTransitionLastMs = 0;
 	_setVisible = false;
 }
 
@@ -1071,17 +1075,18 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 void CyberflixEngine::programPalette(const byte (&rgb)[256 * 3]) {
 	memcpy(_screenClut, rgb, sizeof(_screenClut));
 
-	static byte gammaTable[256];
-	static bool gammaTableBuilt = false;
-	if (!gammaTableBuilt) {
+	byte gammaTable[3][256];
+	for (int c = 0; c < 3; ++c) {
 		for (int i = 0; i < 256; ++i)
-			gammaTable[i] = (byte)(pow(i / 255.0, 0.65) * 255.0); // trunc, like __ftol
-		gammaTableBuilt = true;
+			gammaTable[c][i] = (byte)(pow(i / 255.0, _paletteGamma[c]) * 255.0); // trunc, like __ftol
 	}
 
 	byte hw[256 * 3];
-	for (int i = 0; i < 256 * 3; ++i)
-		hw[i] = gammaTable[_screenClut[i]];
+	for (int i = 0; i < 256; ++i) {
+		hw[i * 3 + 0] = gammaTable[0][_screenClut[i * 3 + 0]];
+		hw[i * 3 + 1] = gammaTable[1][_screenClut[i * 3 + 1]];
+		hw[i * 3 + 2] = gammaTable[2][_screenClut[i * 3 + 2]];
+	}
 	_system->getPaletteManager()->setPalette(hw, 0, 256);
 }
 
@@ -1239,7 +1244,6 @@ void CyberflixEngine::navigateSet(const Common::String &action) {
 		}
 		renderSetScene(_setScene, table, startAngle, _setView);
 		_setTransitionActive = true;
-		_setTransitionLastMs = _system->getMillis();
 		return;
 	}
 
@@ -1262,11 +1266,6 @@ void CyberflixEngine::navigateSet(const Common::String &action) {
 void CyberflixEngine::advanceSetTransition() {
 	if (!_setTransitionActive || !_set || !_set->isOpen() || _setScene < 0)
 		return;
-
-	const uint32 now = _system->getMillis();
-	if (now - _setTransitionLastMs < 1000 / 60)
-		return;
-	_setTransitionLastMs = now;
 
 	uint32 count = _set->angleCount((uint32)_setScene, (uint32)_setTable);
 	if (count == 0) {
@@ -1480,30 +1479,39 @@ Common::Error CyberflixEngine::run() {
 				if (!handled)
 					warning("Cyberflix: boot script has no mousedown handler");
 			} else if (event.type == Common::EVENT_KEYDOWN) {
-				const char *direction = nullptr;
+				if (handleGlobalKey(event))
+					continue;
+				if (event.kbd.keycode == Common::KEYCODE_ESCAPE)
+					continue;
+				if (event.kbd.flags & (Common::KBD_CTRL | Common::KBD_ALT))
+					continue;
+				Common::String key;
 				switch (event.kbd.keycode) {
 				case Common::KEYCODE_LEFT:
-					direction = "leftarrow";
+					key = "leftarrow";
 					break;
 				case Common::KEYCODE_UP:
-					direction = "uparrow";
+					key = "uparrow";
 					break;
 				case Common::KEYCODE_RIGHT:
-					direction = "rightarrow";
+					key = "rightarrow";
 					break;
 				case Common::KEYCODE_DOWN:
-					direction = "downarrow";
+					key = "downarrow";
 					break;
 				default:
+					if (event.kbd.ascii > 0 && event.kbd.ascii < 256)
+						key = Common::String::format("%c", (char)event.kbd.ascii);
 					break;
 				}
-				if (direction) {
+				if (!key.empty()) {
 					Common::Array<Value> args;
-					args.push_back(Value::makeString(direction));
+					args.push_back(Value::makeString(key));
 					bool handled = false;
-					_vm.callFunction("keydown", args, &handled);
+					_vm.callFunction(event.kbdRepeat ? "keyrepeat" : "keydown", args, &handled);
 					if (!handled)
-						warning("Cyberflix: boot script has no keydown handler");
+						warning("Cyberflix: boot script has no %s handler",
+								event.kbdRepeat ? "keyrepeat" : "keydown");
 					refreshPropsIfDirty();
 				}
 			}
@@ -1571,6 +1579,9 @@ uint32 CyberflixEngine::handleMovieHotkeys(const Common::Event &event, bool skip
 	if (event.type != Common::EVENT_KEYDOWN)
 		return 0;
 
+	if (handleGlobalKey(event))
+		return 0;
+
 	const Common::KeyCode kc = event.kbd.keycode;
 	const bool ctrl = (event.kbd.flags & Common::KBD_CTRL) != 0;
 
@@ -1614,12 +1625,6 @@ uint32 CyberflixEngine::handleMovieHotkeys(const Common::Event &event, bool skip
 		return _system->getMillis() - pauseStart;
 	}
 
-	// ABOUT. WndProc maps VK_F12 (0x7b) directly to FUN_00404120 (no modifier).
-	if (kc == Common::KEYCODE_F12) {
-		showAboutDialog();
-		return 0;
-	}
-
 	// Open the ScummVM debug console (a development aid, not an original
 	// shortcut): backquote or Ctrl+D.
 	if (kc == Common::KEYCODE_BACKQUOTE || (ctrl && kc == Common::KEYCODE_d))
@@ -1627,28 +1632,71 @@ uint32 CyberflixEngine::handleMovieHotkeys(const Common::Event &event, bool skip
 
 	// NOT IMPLEMENTED (no faithful analog in our pre-mixed, single-stream audio):
 	//
-	// * F1-F9 audio playback-RATE tuning. WndProc FUN_00403690 maps VK_F1..VK_F9
-	//   (0x70..0x78) to FUN_00403bf0(p1,p2,p3,p4), which scales three per-channel
-	//   rate multipliers (_DAT_00457040/48/50; default 0.65, clamp [0.15, 2.5])
-	//   by an up/down factor (_DAT_00456018/20). F1/F2 = all channels down/up,
-	//   F3/F4 = ch1, F5/F6 = ch2, F7/F8 = ch3, F9 (0,0,0,0) = reset all to 0.65.
-	//   To implement: split the soundtrack into the three source channels
-	//   (music/sfx/speech) instead of pre-mixing, then drive each channel's
-	//   Audio::RateConverter / output sample rate from a per-channel multiplier.
-	//
 	// * Ctrl+0..9 audio channel/level select. FUN_0040e430 case 0x30..0x39 ->
 	//   FUN_0042f620(n) -> FUN_0042f630: DAT_00460a54 = (long)n + DAT_00460a38,
 	//   then invokes the DirectSound mixer callback (*DAT_00460ab8)(). To
 	//   implement: reproduce that mixer object so the index has a target; with a
 	//   single pre-mixed stream there is nothing to address.
-	//
-	// * Arrow keys -> navigation. WndProc maps VK_LEFT/UP/RIGHT/DOWN
-	//   (0x25..0x28) to the nav chars 0x1c/0x1e/0x1d/0x1f, posted as char events
-	//   and consumed by the scene/stage navigation handler. To implement: once
-	//   node-to-node / scene-to-scene navigation exists, route these keycodes to
-	//   the same nav entry point the directional hotspots use.
 
 	return 0;
+}
+
+bool CyberflixEngine::handleGlobalKey(const Common::Event &event) {
+	if (event.type != Common::EVENT_KEYDOWN)
+		return false;
+
+	const Common::KeyCode kc = event.kbd.keycode;
+	bool handled = true;
+	switch (kc) {
+	case Common::KEYCODE_F1:
+		for (int i = 0; i < 3; ++i)
+			_paletteGamma[i] *= kPaletteGammaDown;
+		break;
+	case Common::KEYCODE_F2:
+		for (int i = 0; i < 3; ++i)
+			_paletteGamma[i] *= kPaletteGammaUp;
+		break;
+	case Common::KEYCODE_F3:
+		_paletteGamma[0] *= kPaletteGammaDown;
+		break;
+	case Common::KEYCODE_F4:
+		_paletteGamma[0] *= kPaletteGammaUp;
+		break;
+	case Common::KEYCODE_F5:
+		_paletteGamma[1] *= kPaletteGammaDown;
+		break;
+	case Common::KEYCODE_F6:
+		_paletteGamma[1] *= kPaletteGammaUp;
+		break;
+	case Common::KEYCODE_F7:
+		_paletteGamma[2] *= kPaletteGammaDown;
+		break;
+	case Common::KEYCODE_F8:
+		_paletteGamma[2] *= kPaletteGammaUp;
+		break;
+	case Common::KEYCODE_F9:
+		for (int i = 0; i < 3; ++i)
+			_paletteGamma[i] = kDefaultPaletteGamma;
+		break;
+	case Common::KEYCODE_F12:
+		showAboutDialog();
+		return true;
+	default:
+		handled = false;
+		break;
+	}
+
+	if (!handled)
+		return false;
+
+	for (int i = 0; i < 3; ++i)
+		_paletteGamma[i] = CLIP(_paletteGamma[i], kPaletteGammaMin, kPaletteGammaMax);
+
+	byte rgb[256 * 3];
+	memcpy(rgb, _screenClut, sizeof(rgb));
+	programPalette(rgb);
+	_system->updateScreen();
+	return true;
 }
 
 void CyberflixEngine::showAboutDialog() {

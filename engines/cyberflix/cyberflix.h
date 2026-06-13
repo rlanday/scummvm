@@ -189,6 +189,9 @@ private:
 	/** Show the original's F12 "About" dialog (TI.EXE FUN_00404120). */
 	void showAboutDialog();
 
+	/** Handle the original's global WndProc key actions (F1-F9, F12). */
+	bool handleGlobalKey(const Common::Event &event);
+
 	const CyberflixGameDescription *_gameDescription;
 	Common::RandomSource _rnd;
 	Console *_console; ///< Owned by the engine framework's debugger, not by us.
@@ -205,7 +208,6 @@ private:
 	int _setAngle = 0;               ///< Active panorama angle within _setScene.
 	Common::String _setView;         ///< Active view name in _setScene (DAT_004611dc).
 	bool _setTransitionActive = false; ///< A left/right SET panorama table is advancing.
-	uint32 _setTransitionLastMs = 0;
 	bool _setVisible = false;        ///< TI.EXE DAT_00461182, read by setvisible().
 	int _stageNode = 0;              ///< Current stage node (TI.EXE DAT_00461160).
 
@@ -336,6 +338,7 @@ private:
 	 * until blacktoscreen() reveals it (the original's transition model).
 	 */
 	byte _screenClut[256 * 3] = {};
+	double _paletteGamma[3] = { 0.65, 0.65, 0.65 };
 };
 
 } // End of namespace Cyberflix
