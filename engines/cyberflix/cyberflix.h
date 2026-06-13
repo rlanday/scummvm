@@ -144,10 +144,6 @@ private:
 	 */
 	bool setGameCursor(const Common::String &name);
 
-	/** Capture/restore the last composited SET screen buffer for palette fades. */
-	void captureSetScreen();
-	bool restoreSetScreen();
-
 	/** Lazily open the game's TI.EXE for resource access. Returns nullptr if
 	 *  it cannot be found (the game can still run without a custom cursor). */
 	Common::PEResources *gameExe();
@@ -199,9 +195,6 @@ private:
 	int _setAngle = 0;               ///< Active panorama angle within _setScene.
 	bool _setVisible = false;        ///< TI.EXE DAT_00461182, read by setvisible().
 	int _stageNode = 0;              ///< Current stage node (TI.EXE DAT_00461160).
-	Common::Array<byte> _setScreenSnapshot;
-	bool _hasSetScreenSnapshot = false;
-	bool _suppressSetScreenCapture = false;
 
 	/** Kind recorded by the last hittest, read back by result() — mirrors the
 	 *  TI.EXE global DAT_00461298. */

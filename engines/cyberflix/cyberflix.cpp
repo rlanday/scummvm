@@ -217,29 +217,6 @@ bool CyberflixEngine::setGameCursor(const Common::String &name) {
 	return true;
 }
 
-void CyberflixEngine::captureSetScreen() {
-	if (!_set || !_set->isOpen())
-		return;
-	_setScreenSnapshot.resize(kScreenWidth * kScreenHeight);
-	Graphics::Surface *screen = _system->lockScreen();
-	for (int y = 0; y < kScreenHeight; ++y)
-		memcpy(&_setScreenSnapshot[(uint)y * kScreenWidth],
-				screen->getBasePtr(0, y), kScreenWidth);
-	_system->unlockScreen();
-	_hasSetScreenSnapshot = true;
-}
-
-bool CyberflixEngine::restoreSetScreen() {
-	if (!_hasSetScreenSnapshot || _setScreenSnapshot.size() != kScreenWidth * kScreenHeight)
-		return false;
-	Graphics::Surface *screen = _system->lockScreen();
-	for (int y = 0; y < kScreenHeight; ++y)
-		memcpy(screen->getBasePtr(0, y),
-				&_setScreenSnapshot[(uint)y * kScreenWidth], kScreenWidth);
-	_system->unlockScreen();
-	return true;
-}
-
 // openstagefile(name): open a DATA/*.STG deck. The boot script calls this for
 // MAIN.STG just before sendtostage(0). Mirrors TI.EXE FUN_004090b0 (which parses
 // via FUN_00409150). See files/decomp/stage-notes.md.
@@ -334,7 +311,6 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 	_setScene = -1;
 	_setAngle = 0;
 	_setVisible = true;
-	_hasSetScreenSnapshot = false;
 	debug(1, "Cyberflix: set '%s' open (%u scenes, name '%s', default scene '%s' view '%s')",
 			name.c_str(), _set->sceneCount(), _set->setName().c_str(),
 			_set->defaultScene().c_str(), _set->defaultView().c_str());
@@ -400,7 +376,6 @@ void CyberflixEngine::closeSetFile() {
 	_setScene = -1;
 	_setAngle = 0;
 	_setVisible = false;
-	_hasSetScreenSnapshot = false;
 }
 
 // currentset(): the open set's EMBEDDED name (master header +0x070, e.g.
@@ -1079,23 +1054,22 @@ void CyberflixEngine::blackScreen() {
 }
 
 void CyberflixEngine::forceUpdate() {
-	// forceupdate() presents transient prop changes (e.g. HELP pressed) without
-	// replacing the saved SET screen later revealed by blacktoscreen('set').
-	bool oldSuppress = _suppressSetScreenCapture;
-	_suppressSetScreenCapture = true;
+	// forceupdate() (TI.EXE 0x2f14 -> FUN_00446910 -> FUN_00423a60): rebuild the
+	// display list from LIVE prop visibility, composite, and present.
 	refreshPropsIfDirty();
-	_suppressSetScreenCapture = oldSuppress;
 	_system->updateScreen();
 	debug(1, "Cyberflix: forceupdate()");
 }
 
 // blacktoscreen(target, n) / screentoblack(target, n): palette-only fade
 // between black and the target clut, one interpolation step per 60 Hz tick
-// (FUN_0041b3f0 / FUN_0041b3a0 stepping FUN_0041b200 against the scaled
-// timer). The pixels must already be on screen. TI.EXE's compositor keeps a
-// current SET framebuffer that blacktoscreen('set', n) reveals even after
-// blackscreen/movie playback overwrote the front buffer; this engine snapshots
-// that composited SET screen at render/forceupdate time and restores it here.
+// (FUN_0041b3f0 / FUN_0041b3a0 stepping FUN_0041b200 against the scaled timer).
+// Verified: TI.EXE's blacktoscreen (FUN_00446b00 -> FUN_004470b0 -> FUN_0041b3f0)
+// only resolves the target CLUT and interpolates the palette; it does NOT
+// re-render props. ScummVM currently has no separate native SET framebuffer to
+// reveal after movie playback, so rebuild the SET from live prop state before a
+// 'set' fade-in. This keeps hidden props (e.g. invenhelp after initprop()) gone
+// visually as well as from hittest.
 void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool toBlack) {
 	byte to[256 * 3];
 	if (!resolveClut(target, to))
@@ -1107,8 +1081,7 @@ void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool 
 		Common::String key = target;
 		key.toLowercase();
 		if (key == "set" && _set && _set->isOpen() && _setScene >= 0) {
-			if (!restoreSetScreen())
-				renderSetScene(_setScene, _setAngle);
+			renderSetScene(_setScene, _setAngle);
 			_propsDirty = false;
 		}
 	}
@@ -1257,8 +1230,6 @@ void CyberflixEngine::renderSetScene(int scene, int angle) {
 	}
 	_propsDirty = false;
 	_system->unlockScreen();
-	if (!_suppressSetScreenCapture)
-		captureSetScreen();
 
 	// Default arrow until per-view hotspot hit-testing (directional cursors) is
 	// implemented. Views (the scene's hotspot lists) are documented in
