@@ -242,7 +242,9 @@ Common::Platform CyberflixEngine::getPlatform() const {
 }
 
 bool CyberflixEngine::hasFeature(EngineFeature f) const {
-	return (f == kSupportsReturnToLauncher) || (f == kSupportsSavingDuringRuntime);
+	return (f == kSupportsReturnToLauncher) ||
+			(f == kSupportsLoadingDuringRuntime) ||
+			(f == kSupportsSavingDuringRuntime);
 }
 
 // The cursor bitmaps are copyrighted game art, so they are loaded at runtime
@@ -1530,6 +1532,7 @@ void CyberflixEngine::playTheme(const Common::String &name) {
 	_themeTrackName.clear();
 	_themeSpans.clear();
 	_themeIntroSamples = _themeLoopSamples = 0;
+	_themeStartSample = 0;
 	if (track->playlist.empty())
 		return;
 
@@ -1584,6 +1587,7 @@ void CyberflixEngine::haltTheme() {
 	_themeTrackName.clear();
 	_themeSpans.clear();
 	_themeIntroSamples = _themeLoopSamples = 0;
+	_themeStartSample = 0;
 }
 
 bool CyberflixEngine::playSoundCue(const Common::String &name, Audio::SoundHandle &handle,
@@ -1733,7 +1737,7 @@ Common::String CyberflixEngine::currentTheme(int which) {
 	if (which == 2)
 		return _themeTrackName;
 	// 8-bit mono at kAudioSampleRate: one sample per byte.
-	uint32 sample = (uint32)((uint64)_mixer->getSoundElapsedTime(_themeHandle) *
+	uint32 sample = _themeStartSample + (uint32)((uint64)_mixer->getSoundElapsedTime(_themeHandle) *
 			kAudioSampleRate / 1000);
 	if (sample >= _themeIntroSamples && _themeLoopSamples)
 		sample = _themeIntroSamples + (sample - _themeIntroSamples) % _themeLoopSamples;
@@ -2537,6 +2541,8 @@ Common::Error CyberflixEngine::run() {
 				}
 			}
 		}
+		if (processPendingLoad())
+			continue;
 		processScheduledLoops();
 		bool handled = false;
 		_vm.callFunction("idle", Common::Array<Value>(), &handled);

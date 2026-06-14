@@ -76,7 +76,9 @@ public:
 	Common::Error run() override;
 
 	bool hasFeature(EngineFeature f) const override;
+	Common::Error loadGameState(int slot) override;
 	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
+	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
 	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
 
 	int getGameType() const;
@@ -176,6 +178,7 @@ public:
 	int calcDeg(int32 a, int32 b) override;
 	void setCursorResource(const Common::String &resourceName) override;
 	void saveGame(const Common::String &signature) override;
+	void openGame(const Common::String &signature) override;
 
 private:
 	/**
@@ -315,6 +318,7 @@ private:
 	bool closeCurrentSceneForNavigation();
 	/** Repaint the current set scene if prop state changed (post-dispatch). */
 	void refreshPropsIfDirty();
+	bool processPendingLoad();
 
 	/**
 	 * The script VM driving the boot/stage scripts, with BOOTFILE res2
@@ -380,6 +384,7 @@ private:
 	Common::Array<ThemeCueSpan> _themeSpans;
 	uint32 _themeIntroSamples = 0; ///< Samples before the loop region.
 	uint32 _themeLoopSamples = 0;  ///< Length of the looping region.
+	uint32 _themeStartSample = 0;  ///< Virtual sample offset used after restoring a theme mid-stream.
 
 	struct SoundSlot {
 		Audio::SoundHandle handle;
@@ -443,7 +448,9 @@ private:
 	byte _screenClut[256 * 3] = {};
 	double _paletteGamma[3] = { 0.65, 0.65, 0.65 };
 
-	Common::String _saveSignature; ///< Current savegame() argument while the ScummVM dialog is active.
+	Common::String _saveSignature; ///< Current savegame()/opengame() argument while a ScummVM dialog is active.
+	int _pendingLoadSlot = -1;
+	Common::String _pendingLoadSignature;
 };
 
 } // End of namespace Cyberflix

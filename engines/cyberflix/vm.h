@@ -420,6 +420,9 @@ public:
 
 	/** savegame(signature) (0x2f2d FUN_00426620): open the save UI and persist state. */
 	virtual void saveGame(const Common::String &signature) {}
+
+	/** opengame(signature) (0x2f2e FUN_004266e0/FUN_00426f00): open the load UI. */
+	virtual void openGame(const Common::String &signature) {}
 };
 
 /**
@@ -518,6 +521,7 @@ public:
 			bool *handled = nullptr);
 
 	const Common::HashMap<Common::String, Value> &globalVars() const { return _vars; }
+	Common::HashMap<Common::String, Value> &globalVars() { return _vars; }
 
 private:
 	void execute(const Script &script, uint32 index);

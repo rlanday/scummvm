@@ -25,13 +25,23 @@
 #include "common/savefile.h"
 #include "common/stream.h"
 #include "common/system.h"
+#include "common/translation.h"
+#include "common/util.h"
 
 #include "engines/metaengine.h"
+
+#include "gui/message.h"
+#include "gui/saveload.h"
+
+#include "audio/audiostream.h"
+#include "audio/decoders/raw.h"
+#include "audio/mixer.h"
 
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/detection.h"
 #include "cyberflix/set.h"
 #include "cyberflix/shop.h"
+#include "cyberflix/sound.h"
 #include "cyberflix/stage.h"
 #include "cyberflix/vm.h"
 
@@ -59,6 +69,55 @@ static void writeValue(Common::WriteStream &out, const Value &value) {
 	writeSaveString(out, value.strValue);
 }
 
+static bool readSaveString(Common::SeekableReadStream &in, int64 end, Common::String &s) {
+	if (in.pos() + 4 > end)
+		return false;
+	uint32 len = in.readUint32LE();
+	if (in.pos() + len > end)
+		return false;
+	s.clear();
+	if (!len)
+		return !in.err();
+	Common::Array<char> buf;
+	buf.resize(len);
+	return in.read(buf.begin(), len) == len && (s = Common::String(buf.begin(), len), true);
+}
+
+static bool readSaveData(Common::SeekableReadStream &in, int64 end, Common::Array<byte> &data) {
+	if (in.pos() + 4 > end)
+		return false;
+	uint32 len = in.readUint32LE();
+	if (in.pos() + len > end)
+		return false;
+	data.clear();
+	data.resize(len);
+	if (!len)
+		return !in.err();
+	return in.read(data.begin(), len) == len;
+}
+
+static bool readValue(Common::SeekableReadStream &in, int64 end, Value &value) {
+	if (in.pos() + 8 > end)
+		return false;
+	uint32 type = in.readUint32LE();
+	if (type > Value::kBool)
+		return false;
+	value.type = (Value::Type)type;
+	value.intValue = in.readSint32LE();
+	return readSaveString(in, end, value.strValue);
+}
+
+static bool readChunkHeader(Common::SeekableReadStream &in, char tag[5], int64 &end) {
+	if (in.pos() + 8 > in.size())
+		return false;
+	if (in.read(tag, 4) != 4)
+		return false;
+	tag[4] = 0;
+	uint32 size = in.readUint32LE();
+	end = in.pos() + size;
+	return end <= in.size();
+}
+
 static void writeChunk(Common::WriteStream &out, const char tag[4], Common::MemoryWriteStreamDynamic &payload) {
 	out.write(tag, 4);
 	out.writeUint32LE((uint32)payload.size());
@@ -72,8 +131,363 @@ static Common::String defaultSaveSignature(int gameType) {
 	return Common::String();
 }
 
+static bool isLoadedReplacementStage(const Common::SharedPtr<Stage> &stage) {
+	return stage && stage->isOpen() && !stage->name().equalsIgnoreCase("main.stg");
+}
+
+struct HeaderState {
+	bool seen = false;
+	Common::String signature;
+	Common::String description;
+	Common::String gameId;
+	uint32 platform = 0;
+	uint32 language = 0;
+	uint32 gameType = 0;
+	Common::String activeCursor;
+	Common::String hitKind;
+	uint16 actionFrameMask = 0;
+	Common::String stageName;
+	int32 stageNode = 0;
+	Common::String flatName;
+	Common::String setFileName;
+	Common::String setName;
+	int32 setScene = -1;
+	Common::String sceneName;
+	int32 setTable = 0;
+	int32 setAngle = 0;
+	Common::String setView;
+	bool setVisible = false;
+	uint32 setTransitionType = 0;
+	uint32 setTransitionResource = 0;
+	uint32 setTransitionFrame = 0;
+};
+
+struct PropState {
+	Common::String name;
+	Common::String setName;
+	Common::String sceneName;
+	uint32 masterResId = 0;
+	uint32 scriptResId = 0;
+	bool visible = false;
+	uint16 mode = 0;
+	int16 y = 0;
+	int16 x = 0;
+	int16 z = 0;
+	int16 angle = 0;
+	int16 depth = 0;
+	int32 scale = 1000;
+	int32 zClip = 0;
+	int32 value = 0;
+	Common::String shapeName;
+	Common::String owner;
+};
+
+struct ShopState {
+	Common::String name;
+	Common::Array<PropState> props;
+};
+
+struct CueState {
+	Common::String name;
+	uint32 resId = 0;
+	byte flags = 0;
+	uint32 dataOffset = 0;
+	uint32 length = 0;
+};
+
+struct TrackState {
+	Common::String sourceName;
+	Common::String name;
+	Common::Array<byte> fileData;
+	Common::Array<uint16> playlist;
+	Common::Array<CueState> cues;
+	Common::Array<CueState> sfxCues;
+	uint32 loopIdx = 0;
+	int32 volume = 255;
+};
+
+struct ThemeSpanState {
+	uint32 startSample = 0;
+	Common::String name;
+};
+
+struct SoundSlotState {
+	bool active = false;
+	Common::String cueName;
+	uint32 resId = 0;
+	uint32 elapsedMillis = 0;
+};
+
+struct AudioState {
+	bool seen = false;
+	bool themeActive = false;
+	Common::String themeTrack;
+	uint32 themeElapsedMillis = 0;
+	uint32 themeIntroSamples = 0;
+	uint32 themeLoopSamples = 0;
+	Common::Array<ThemeSpanState> themeSpans;
+	SoundSlotState soundSlots[2];
+	SoundSlotState voiceSlot;
+};
+
+struct LoopState {
+	Common::String kind;
+	Common::String target;
+	Common::String message;
+	uint32 remainingMillis = 0;
+};
+
+struct CricketStateSave {
+	Common::String name;
+	bool paused = false;
+};
+
+static bool parseHeaderChunk(Common::SeekableReadStream &in, int64 end, HeaderState &header) {
+	header.seen = true;
+	if (!readSaveString(in, end, header.signature) ||
+			!readSaveString(in, end, header.description) ||
+			!readSaveString(in, end, header.gameId) ||
+			in.pos() + 18 > end)
+		return false;
+	header.platform = in.readUint32LE();
+	header.language = in.readUint32LE();
+	header.gameType = in.readUint32LE();
+	if (!readSaveString(in, end, header.activeCursor) ||
+			!readSaveString(in, end, header.hitKind) ||
+			in.pos() + 2 > end)
+		return false;
+	header.actionFrameMask = in.readUint16LE();
+	if (!readSaveString(in, end, header.stageName) ||
+			in.pos() + 4 > end)
+		return false;
+	header.stageNode = in.readSint32LE();
+	if (!readSaveString(in, end, header.flatName) ||
+			!readSaveString(in, end, header.setFileName) ||
+			!readSaveString(in, end, header.setName) ||
+			in.pos() + 4 > end)
+		return false;
+	header.setScene = in.readSint32LE();
+	if (!readSaveString(in, end, header.sceneName) ||
+			in.pos() + 21 > end)
+		return false;
+	header.setTable = in.readSint32LE();
+	header.setAngle = in.readSint32LE();
+	if (!readSaveString(in, end, header.setView) ||
+			in.pos() + 13 > end)
+		return false;
+	header.setVisible = in.readByte() != 0;
+	header.setTransitionType = in.readUint32LE();
+	header.setTransitionResource = in.readUint32LE();
+	header.setTransitionFrame = in.readUint32LE();
+	return !in.err();
+}
+
+static bool parsePathChunk(Common::SeekableReadStream &in, int64 end, Common::String (&pathSlots)[9]) {
+	for (uint i = 0; i < 9; ++i)
+		if (!readSaveString(in, end, pathSlots[i]))
+			return false;
+	return !in.err();
+}
+
+static bool parsePaletteChunk(Common::SeekableReadStream &in, int64 end,
+		byte (&screenClut)[256 * 3], double (&paletteGamma)[3]) {
+	if (in.pos() + 256 * 3 + 3 * 8 > end)
+		return false;
+	if (in.read(screenClut, sizeof(screenClut)) != sizeof(screenClut))
+		return false;
+	for (uint i = 0; i < 3; ++i)
+		paletteGamma[i] = in.readDoubleLE();
+	return !in.err();
+}
+
+static bool parseShopChunk(Common::SeekableReadStream &in, int64 end, Common::Array<ShopState> &shops) {
+	if (in.pos() + 4 > end)
+		return false;
+	uint32 shopCount = in.readUint32LE();
+	shops.clear();
+	for (uint32 s = 0; s < shopCount; ++s) {
+		ShopState shop;
+		if (!readSaveString(in, end, shop.name) || in.pos() + 4 > end)
+			return false;
+		uint32 propCount = in.readUint32LE();
+		for (uint32 p = 0; p < propCount; ++p) {
+			PropState prop;
+			if (!readSaveString(in, end, prop.name) ||
+					!readSaveString(in, end, prop.setName) ||
+					!readSaveString(in, end, prop.sceneName) ||
+					in.pos() + 35 > end)
+				return false;
+			prop.masterResId = in.readUint32LE();
+			prop.scriptResId = in.readUint32LE();
+			prop.visible = in.readByte() != 0;
+			prop.mode = in.readUint16LE();
+			prop.y = in.readSint16LE();
+			prop.x = in.readSint16LE();
+			prop.z = in.readSint16LE();
+			prop.angle = in.readSint16LE();
+			prop.depth = in.readSint16LE();
+			prop.scale = in.readSint32LE();
+			prop.zClip = in.readSint32LE();
+			prop.value = in.readSint32LE();
+			if (!readSaveString(in, end, prop.shapeName) ||
+					!readSaveString(in, end, prop.owner) ||
+					in.pos() + 4 > end)
+				return false;
+			uint32 shapeCount = in.readUint32LE();
+			for (uint32 i = 0; i < shapeCount; ++i) {
+				Common::String ignoredShapeName;
+				if (in.pos() + 4 > end)
+					return false;
+				in.readUint32LE();
+				if (!readSaveString(in, end, ignoredShapeName))
+					return false;
+			}
+			shop.props.push_back(prop);
+		}
+		shops.push_back(shop);
+	}
+	return !in.err();
+}
+
+static bool parseCueArray(Common::SeekableReadStream &in, int64 end, Common::Array<CueState> &cues) {
+	if (in.pos() + 4 > end)
+		return false;
+	uint32 count = in.readUint32LE();
+	cues.clear();
+	for (uint32 i = 0; i < count; ++i) {
+		CueState cue;
+		if (!readSaveString(in, end, cue.name) || in.pos() + 17 > end)
+			return false;
+		cue.resId = in.readUint32LE();
+		cue.flags = in.readByte();
+		cue.dataOffset = in.readUint32LE();
+		cue.length = in.readUint32LE();
+		cues.push_back(cue);
+	}
+	return !in.err();
+}
+
+static bool parseTrackChunk(Common::SeekableReadStream &in, int64 end, Common::Array<TrackState> &tracks) {
+	if (in.pos() + 4 > end)
+		return false;
+	uint32 count = in.readUint32LE();
+	tracks.clear();
+	for (uint32 t = 0; t < count; ++t) {
+		TrackState track;
+		if (!readSaveString(in, end, track.sourceName) ||
+				!readSaveString(in, end, track.name) ||
+				!readSaveData(in, end, track.fileData) ||
+				in.pos() + 16 > end)
+			return false;
+		track.loopIdx = in.readUint32LE();
+		track.volume = in.readSint32LE();
+		uint32 playlistCount = in.readUint32LE();
+		if (in.pos() + playlistCount * 2 > end)
+			return false;
+		for (uint32 i = 0; i < playlistCount; ++i)
+			track.playlist.push_back(in.readUint16LE());
+		if (!parseCueArray(in, end, track.cues) ||
+				!parseCueArray(in, end, track.sfxCues))
+			return false;
+		tracks.push_back(track);
+	}
+	return !in.err();
+}
+
+static bool parseSoundSlot(Common::SeekableReadStream &in, int64 end, SoundSlotState &slot) {
+	if (in.pos() + 1 > end)
+		return false;
+	slot.active = in.readByte() != 0;
+	return readSaveString(in, end, slot.cueName) &&
+			in.pos() + 8 <= end &&
+			(slot.resId = in.readUint32LE(), slot.elapsedMillis = in.readUint32LE(), !in.err());
+}
+
+static bool parseAudioChunk(Common::SeekableReadStream &in, int64 end, AudioState &audio) {
+	audio.seen = true;
+	if (in.pos() + 1 > end)
+		return false;
+	audio.themeActive = in.readByte() != 0;
+	if (!readSaveString(in, end, audio.themeTrack) || in.pos() + 16 > end)
+		return false;
+	audio.themeElapsedMillis = in.readUint32LE();
+	audio.themeIntroSamples = in.readUint32LE();
+	audio.themeLoopSamples = in.readUint32LE();
+	uint32 spanCount = in.readUint32LE();
+	audio.themeSpans.clear();
+	for (uint32 i = 0; i < spanCount; ++i) {
+		ThemeSpanState span;
+		if (in.pos() + 4 > end)
+			return false;
+		span.startSample = in.readUint32LE();
+		if (!readSaveString(in, end, span.name))
+			return false;
+		audio.themeSpans.push_back(span);
+	}
+	return parseSoundSlot(in, end, audio.soundSlots[0]) &&
+			parseSoundSlot(in, end, audio.soundSlots[1]) &&
+			parseSoundSlot(in, end, audio.voiceSlot);
+}
+
+static bool parseVarsChunk(Common::SeekableReadStream &in, int64 end,
+		Common::HashMap<Common::String, Value> &vars) {
+	if (in.pos() + 4 > end)
+		return false;
+	uint32 count = in.readUint32LE();
+	vars.clear();
+	for (uint32 i = 0; i < count; ++i) {
+		Common::String key;
+		Value value;
+		if (!readSaveString(in, end, key) || !readValue(in, end, value))
+			return false;
+		vars[key] = value;
+	}
+	return !in.err();
+}
+
+static bool parseLoopChunk(Common::SeekableReadStream &in, int64 end,
+		bool &loopsPaused, Common::Array<LoopState> &loops) {
+	if (in.pos() + 5 > end)
+		return false;
+	loopsPaused = in.readByte() != 0;
+	uint32 count = in.readUint32LE();
+	loops.clear();
+	for (uint32 i = 0; i < count; ++i) {
+		LoopState loop;
+		if (!readSaveString(in, end, loop.kind) ||
+				!readSaveString(in, end, loop.target) ||
+				!readSaveString(in, end, loop.message) ||
+				in.pos() + 4 > end)
+			return false;
+		loop.remainingMillis = in.readUint32LE();
+		loops.push_back(loop);
+	}
+	return !in.err();
+}
+
+static bool parseCricketChunk(Common::SeekableReadStream &in, int64 end,
+		bool &cricketsPaused, Common::Array<CricketStateSave> &crickets) {
+	if (in.pos() + 5 > end)
+		return false;
+	cricketsPaused = in.readByte() != 0;
+	uint32 count = in.readUint32LE();
+	crickets.clear();
+	for (uint32 i = 0; i < count; ++i) {
+		CricketStateSave cricket;
+		if (!readSaveString(in, end, cricket.name) || in.pos() + 1 > end)
+			return false;
+		cricket.paused = in.readByte() != 0;
+		crickets.push_back(cricket);
+	}
+	return !in.err();
+}
+
 bool CyberflixEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 	return (_stage && _stage->isOpen()) || (_set && _set->isOpen());
+}
+
+bool CyberflixEngine::canLoadGameStateCurrently(Common::U32String *msg) {
+	return true;
 }
 
 void CyberflixEngine::saveGame(const Common::String &signature) {
@@ -81,6 +495,388 @@ void CyberflixEngine::saveGame(const Common::String &signature) {
 	_saveSignature = signature;
 	saveGameDialog();
 	_saveSignature = oldSignature;
+}
+
+void CyberflixEngine::openGame(const Common::String &signature) {
+	if (!canLoadGameStateCurrently()) {
+		g_system->displayMessageOnOSD(_("Loading game is currently unavailable"));
+		return;
+	}
+
+	Common::ScopedPtr<GUI::SaveLoadChooser> dialog(new GUI::SaveLoadChooser(false));
+	int slotNum;
+	{
+		PauseToken pt = pauseEngine();
+		slotNum = dialog->runModalWithCurrentTarget();
+	}
+
+	if (slotNum < 0)
+		return;
+
+	_pendingLoadSlot = slotNum;
+	_pendingLoadSignature = signature;
+}
+
+bool CyberflixEngine::processPendingLoad() {
+	if (_pendingLoadSlot < 0)
+		return false;
+
+	int slot = _pendingLoadSlot;
+	Common::String signature = _pendingLoadSignature;
+	_pendingLoadSlot = -1;
+	_pendingLoadSignature.clear();
+
+	Common::String oldSignature = _saveSignature;
+	_saveSignature = signature;
+	Common::Error loadError = loadGameState(slot);
+	_saveSignature = oldSignature;
+
+	if (loadError.getCode() != Common::kNoError) {
+		GUI::MessageDialog errorDialog(loadError.getDesc());
+		errorDialog.runModal();
+		return false;
+	}
+
+	return true;
+}
+
+Common::Error CyberflixEngine::loadGameState(int slot) {
+	Common::InSaveFile *inFile = _saveFileMan->openForLoading(getSaveStateName(slot));
+	if (!inFile)
+		return Common::Error(Common::kReadingFailed, getSaveStateName(slot));
+	Common::ScopedPtr<Common::InSaveFile> saveFile(inFile);
+
+	char magic[5] = {};
+	if (saveFile->read(magic, 4) != 4 || memcmp(magic, "CFXS", 4))
+		return Common::Error(Common::kReadingFailed, "Not a CyberFlix save");
+	uint32 version = saveFile->readUint32LE();
+	if (version != kCyberflixSaveVersion)
+		return Common::Error(Common::kReadingFailed, "Unsupported CyberFlix save version");
+
+	HeaderState header;
+	Common::String pathSlots[9];
+	byte savedClut[256 * 3] = {};
+	double savedGamma[3] = { 0.65, 0.65, 0.65 };
+	Common::Array<ShopState> shopStates;
+	Common::Array<TrackState> trackStates;
+	AudioState audioState;
+	Common::HashMap<Common::String, Value> vars;
+	bool varsSeen = false;
+	bool loopsPaused = false;
+	Common::Array<LoopState> loopStates;
+	bool cricketsPaused = false;
+	Common::Array<CricketStateSave> cricketStates;
+	bool sawEnd = false;
+
+	while (!saveFile->eos() && !saveFile->err()) {
+		char tag[5];
+		int64 end = 0;
+		if (!readChunkHeader(*saveFile, tag, end))
+			return Common::Error(Common::kReadingFailed, "Corrupt CyberFlix save chunk");
+
+		bool ok = true;
+		if (!strcmp(tag, "HEAD")) {
+			ok = parseHeaderChunk(*saveFile, end, header);
+		} else if (!strcmp(tag, "PATH")) {
+			ok = parsePathChunk(*saveFile, end, pathSlots);
+		} else if (!strcmp(tag, "PAL ")) {
+			ok = parsePaletteChunk(*saveFile, end, savedClut, savedGamma);
+		} else if (!strcmp(tag, "SHOP")) {
+			ok = parseShopChunk(*saveFile, end, shopStates);
+		} else if (!strcmp(tag, "TRAK")) {
+			ok = parseTrackChunk(*saveFile, end, trackStates);
+		} else if (!strcmp(tag, "AUDI")) {
+			ok = parseAudioChunk(*saveFile, end, audioState);
+		} else if (!strcmp(tag, "VARS")) {
+			ok = parseVarsChunk(*saveFile, end, vars);
+			varsSeen = ok;
+		} else if (!strcmp(tag, "LOOP")) {
+			ok = parseLoopChunk(*saveFile, end, loopsPaused, loopStates);
+		} else if (!strcmp(tag, "CRIK")) {
+			ok = parseCricketChunk(*saveFile, end, cricketsPaused, cricketStates);
+		} else if (!strcmp(tag, "CAST") || !strcmp(tag, "PUPP")) {
+			// Native save buckets retained for subsystems not modelled yet.
+		} else if (!strcmp(tag, "END ")) {
+			sawEnd = true;
+		}
+
+		if (!ok || saveFile->pos() > end)
+			return Common::Error(Common::kReadingFailed, Common::String::format("Corrupt CyberFlix save chunk %.4s", tag));
+		saveFile->seek(end);
+		if (sawEnd)
+			break;
+	}
+
+	if (!header.seen || !sawEnd)
+		return Common::Error(Common::kReadingFailed, "Incomplete CyberFlix save");
+
+	Common::String expectedSignature = !_saveSignature.empty()
+			? _saveSignature : defaultSaveSignature(getGameType());
+	if (!expectedSignature.empty() && !header.signature.equalsIgnoreCase(expectedSignature))
+		return Common::Error(Common::kReadingFailed, "Save signature does not match this game");
+
+	haltTheme();
+	haltSound(3);
+	haltVoice();
+	_tracks.clear();
+	_shops.clear();
+	_scheduledLoops.clear();
+	_crickets.clear();
+	_stage.reset();
+	_stageNode = 0;
+	_set.reset();
+	_setScene = -1;
+	_setTable = 0;
+	_setAngle = 0;
+	_setView.clear();
+	_setTransitionType = kSetTransitionNone;
+	_setTransitionResource = 0;
+	_setTransitionFrame = 0;
+	_setFrameSequence.clear();
+	_setVisible = false;
+	_propsDirty = false;
+
+	for (uint i = 0; i < ARRAYSIZE(pathSlots); ++i) {
+		_pathSlots[i] = pathSlots[i];
+		registerPathSlotDirectory(i);
+	}
+
+	memcpy(_screenClut, savedClut, sizeof(_screenClut));
+	for (uint i = 0; i < ARRAYSIZE(_paletteGamma); ++i)
+		_paletteGamma[i] = savedGamma[i];
+
+	if (varsSeen) {
+		_vm.globalVars().clear();
+		for (Common::HashMap<Common::String, Value>::const_iterator it = vars.begin(); it != vars.end(); ++it)
+			_vm.globalVars()[it->_key] = it->_value;
+	}
+
+	for (uint i = 0; i < shopStates.size(); ++i) {
+		Common::SharedPtr<Shop> shop(new Shop());
+		if (!shop->open(shopStates[i].name)) {
+			warning("Cyberflix: load could not reopen shop '%s'", shopStates[i].name.c_str());
+			continue;
+		}
+		for (uint p = 0; p < shopStates[i].props.size(); ++p) {
+			const PropState &state = shopStates[i].props[p];
+			Shop::Prop *prop = shop->findProp(state.name);
+			if (!prop) {
+				warning("Cyberflix: load shop '%s' missing prop '%s'",
+						shopStates[i].name.c_str(), state.name.c_str());
+				continue;
+			}
+			prop->setName = state.setName;
+			prop->sceneName = state.sceneName;
+			prop->visible = state.visible;
+			prop->mode = state.mode;
+			prop->y = state.y;
+			prop->x = state.x;
+			prop->z = state.z;
+			prop->angle = state.angle;
+			prop->depth = state.depth;
+			prop->scale = state.scale;
+			prop->zClip = state.zClip;
+			prop->value = state.value;
+			prop->shapeName = state.shapeName;
+			prop->owner = state.owner;
+		}
+		_shops.push_back(shop);
+	}
+
+	for (uint i = 0; i < trackStates.size(); ++i) {
+		Common::SharedPtr<ThemeTrack> track(new ThemeTrack());
+		track->sourceName = trackStates[i].sourceName;
+		track->name = trackStates[i].name;
+		track->fileData = trackStates[i].fileData;
+		track->playlist = trackStates[i].playlist;
+		track->loopIdx = trackStates[i].loopIdx;
+		track->volume = trackStates[i].volume;
+		for (uint c = 0; c < trackStates[i].cues.size(); ++c) {
+			ThemeTrack::Cue cue;
+			cue.name = trackStates[i].cues[c].name;
+			cue.resId = trackStates[i].cues[c].resId;
+			cue.flags = trackStates[i].cues[c].flags;
+			cue.dataOffset = trackStates[i].cues[c].dataOffset;
+			cue.length = trackStates[i].cues[c].length;
+			track->cues.push_back(cue);
+		}
+		for (uint c = 0; c < trackStates[i].sfxCues.size(); ++c) {
+			ThemeTrack::Cue cue;
+			cue.name = trackStates[i].sfxCues[c].name;
+			cue.resId = trackStates[i].sfxCues[c].resId;
+			cue.flags = trackStates[i].sfxCues[c].flags;
+			cue.dataOffset = trackStates[i].sfxCues[c].dataOffset;
+			cue.length = trackStates[i].sfxCues[c].length;
+			track->sfxCues.push_back(cue);
+		}
+		_tracks.push_back(track);
+	}
+
+	auto restoreTheme = [&](const Common::String &name, uint32 elapsedMillis) {
+		ThemeTrack *track = findTrack(name);
+		if (!track || track->playlist.empty())
+			return;
+
+		Common::Array<byte> intro, loop;
+		_themeSpans.clear();
+		_themeIntroSamples = _themeLoopSamples = 0;
+		for (uint i = 0; i < track->playlist.size(); ++i) {
+			bool inLoop = (i >= track->loopIdx);
+			Common::Array<byte> &out = inLoop ? loop : intro;
+			uint16 cueIdx = track->playlist[i];
+			if (cueIdx < 1 || cueIdx > track->cues.size())
+				continue;
+			const ThemeTrack::Cue &cue = track->cues[cueIdx - 1];
+			ThemeCueSpan span;
+			span.startSample = (inLoop ? _themeIntroSamples : 0) + out.size();
+			span.name = cue.name;
+			_themeSpans.push_back(span);
+			if (cue.length && cue.dataOffset + cue.length <= track->fileData.size())
+				decodeCbxAudio(track->fileData.begin() + cue.dataOffset, cue.length, out);
+			if (!inLoop)
+				_themeIntroSamples = intro.size();
+		}
+		_themeLoopSamples = loop.size();
+
+		const uint32 startSample = (uint32)((uint64)elapsedMillis * kAudioSampleRate / 1000);
+		_themeStartSample = startSample;
+		Audio::QueuingAudioStream *queue = Audio::makeQueuingAudioStream(kAudioSampleRate, false);
+		bool queued = false;
+		auto queueSlice = [&](const Common::Array<byte> &pcm, uint32 offset) {
+			if (offset >= pcm.size())
+				return;
+			uint32 len = pcm.size() - offset;
+			byte *buf = (byte *)malloc(len);
+			memcpy(buf, pcm.begin() + offset, len);
+			queue->queueBuffer(buf, len, DisposeAfterUse::YES, Audio::FLAG_UNSIGNED);
+			queued = true;
+		};
+
+		if (startSample < intro.size()) {
+			queueSlice(intro, startSample);
+			if (!loop.empty()) {
+				byte *buf = (byte *)malloc(loop.size());
+				memcpy(buf, loop.begin(), loop.size());
+				Audio::SeekableAudioStream *loopStream = Audio::makeRawStream(
+						buf, loop.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED, DisposeAfterUse::YES);
+				queue->queueAudioStream(new Audio::LoopingAudioStream(loopStream, 0), DisposeAfterUse::YES);
+				queued = true;
+			}
+		} else if (!loop.empty()) {
+			uint32 loopOffset = (startSample - intro.size()) % loop.size();
+			if (loopOffset)
+				queueSlice(loop, loopOffset);
+			byte *buf = (byte *)malloc(loop.size());
+			memcpy(buf, loop.begin(), loop.size());
+			Audio::SeekableAudioStream *loopStream = Audio::makeRawStream(
+					buf, loop.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED, DisposeAfterUse::YES);
+			queue->queueAudioStream(new Audio::LoopingAudioStream(loopStream, 0), DisposeAfterUse::YES);
+			queued = true;
+		}
+
+		if (!queued) {
+			delete queue;
+			return;
+		}
+		queue->finish();
+		_mixer->playStream(Audio::Mixer::kMusicSoundType, &_themeHandle, queue);
+		_mixer->setChannelVolume(_themeHandle, (byte)CLIP(track->volume, 0, 255));
+		_themeTrackName = track->name;
+	};
+
+	if (audioState.seen) {
+		if (audioState.themeActive)
+			restoreTheme(audioState.themeTrack, audioState.themeElapsedMillis);
+		if (audioState.soundSlots[0].active)
+			playSoundCue(audioState.soundSlots[0].cueName, _soundSlots[0].handle,
+					_soundSlots[0].cueName, _soundSlots[0].resId);
+		if (audioState.soundSlots[1].active)
+			playSoundCue(audioState.soundSlots[1].cueName, _soundSlots[1].handle,
+					_soundSlots[1].cueName, _soundSlots[1].resId);
+		if (audioState.voiceSlot.active)
+			playSoundCue(audioState.voiceSlot.cueName, _voiceSlot.handle,
+					_voiceSlot.cueName, _voiceSlot.resId);
+	}
+
+	_loopsPaused = loopsPaused;
+	const uint32 now = _system->getMillis();
+	for (uint i = 0; i < loopStates.size(); ++i) {
+		ScheduledLoop loop;
+		loop.kind = loopStates[i].kind;
+		loop.target = loopStates[i].target;
+		loop.message = loopStates[i].message;
+		loop.dueMillis = now + loopStates[i].remainingMillis;
+		_scheduledLoops.push_back(loop);
+	}
+
+	_cricketsPaused = cricketsPaused;
+	for (uint i = 0; i < cricketStates.size(); ++i) {
+		CricketState cricket;
+		cricket.name = cricketStates[i].name;
+		cricket.paused = cricketStates[i].paused;
+		_crickets.push_back(cricket);
+		if (!_cricketsPaused && !cricket.paused)
+			playSound(cricket.name, 1);
+	}
+
+	if (!header.stageName.empty()) {
+		Common::SharedPtr<Stage> stage(new Stage());
+		if (stage->open(header.stageName)) {
+			_stage = stage;
+			_stageNode = header.stageNode;
+			if (_stageNode < 0 || (uint32)_stageNode >= _stage->nodeCount()) {
+				int node = _stage->findNode(header.flatName);
+				_stageNode = node >= 0 ? node : 0;
+			}
+		} else {
+			warning("Cyberflix: load could not reopen stage '%s'", header.stageName.c_str());
+		}
+	}
+
+	if (!header.setFileName.empty()) {
+		Common::ScopedPtr<Set> set(new Set());
+		if (set->open(header.setFileName)) {
+			_set.reset(set.release());
+			_setScene = header.setScene;
+			if (_setScene < 0 || (uint32)_setScene >= _set->sceneCount())
+				_setScene = _set->findScene(header.sceneName);
+			_setTable = header.setTable;
+			if (_setTable < 0 || _setTable > 1)
+				_setTable = 0;
+			_setAngle = header.setAngle;
+			if (_setScene >= 0) {
+				uint32 angleCount = _set->angleCount((uint32)_setScene, (uint32)_setTable);
+				if (angleCount && ((uint32)_setAngle >= angleCount))
+					_setAngle = 0;
+			}
+			_setView = header.setView;
+			_setVisible = header.setVisible;
+			_setTransitionType = header.setTransitionType <= kSetTransitionForward ?
+					(SetTransitionType)header.setTransitionType : kSetTransitionNone;
+			_setTransitionResource = header.setTransitionResource;
+			_setTransitionFrame = header.setTransitionFrame;
+		} else {
+			warning("Cyberflix: load could not reopen set '%s'", header.setFileName.c_str());
+		}
+	}
+
+	if (_setVisible && _set && _set->isOpen() && _setScene >= 0 && !isLoadedReplacementStage(_stage)) {
+		renderSetScene(_setScene, _setTable, _setAngle, _setView);
+	} else if (_stage && _stage->isOpen()) {
+		renderStageNode(_stageNode);
+	} else {
+		blackScreen();
+	}
+
+	programPalette(savedClut);
+	_activeCursor = header.activeCursor;
+	_hitKind = header.hitKind;
+	_actionFrameMask = header.actionFrameMask;
+	if (!_activeCursor.empty())
+		setGameCursor(_activeCursor);
+	_system->updateScreen();
+
+	return Common::kNoError;
 }
 
 Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
@@ -221,9 +1017,12 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		};
 
 		const bool themeActive = !_themeTrackName.empty() && _mixer->isSoundHandleActive(_themeHandle);
+		const uint32 themeElapsedMillis = themeActive ?
+				_mixer->getSoundElapsedTime(_themeHandle) +
+				(uint32)((uint64)_themeStartSample * 1000 / kAudioSampleRate) : 0;
 		payload.writeByte(themeActive ? 1 : 0);
 		writeSaveString(payload, themeActive ? _themeTrackName : Common::String());
-		payload.writeUint32LE(themeActive ? _mixer->getSoundElapsedTime(_themeHandle) : 0);
+		payload.writeUint32LE(themeElapsedMillis);
 		payload.writeUint32LE(_themeIntroSamples);
 		payload.writeUint32LE(_themeLoopSamples);
 		payload.writeUint32LE((uint32)_themeSpans.size());
@@ -297,7 +1096,7 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		writeChunk(*saveFile, "END ", payload);
 	}
 
-	getMetaEngine()->appendExtendedSave(saveFile.get(), getTotalPlayTime() / 1000, desc, isAutosave);
+	getMetaEngine()->appendExtendedSave(saveFile.get(), getTotalPlayTime(), desc, isAutosave);
 	if (saveFile->err())
 		return Common::Error(Common::kWritingFailed, getSaveStateName(slot));
 	return Common::kNoError;
