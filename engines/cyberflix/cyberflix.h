@@ -94,6 +94,7 @@ public:
 	Common::String currentStage() override;
 	Common::String currentFlat() override;
 	void sendToStage(const Common::String &message, const Common::Array<Value> &args) override;
+	void sendToBoot(const Common::String &message, const Common::Array<Value> &args) override;
 	void sendToFlat(const Common::String &flat, const Common::String &message,
 			const Common::Array<Value> &args) override;
 	void sendToButton(const Common::String &flat, const Common::String &button,
@@ -179,6 +180,8 @@ public:
 	void setCursorResource(const Common::String &resourceName) override;
 	void saveGame(const Common::String &signature) override;
 	void openGame(const Common::String &signature) override;
+	bool questionDialog(const Common::String &message) override;
+	void requestQuit() override;
 
 private:
 	/**

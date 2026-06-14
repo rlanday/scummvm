@@ -405,6 +405,20 @@ void CyberflixEngine::sendToStage(const Common::String &message, const Common::A
 	refreshPropsIfDirty();
 }
 
+// sendtoboot(message(...)): dispatch against [BOOTFILE res1, BOOTFILE res2].
+// CTL.STG's QUIT button reaches BOOTFILE res1 menuselect("quit") through this
+// path. Mirrors TI.EXE FUN_00439080 -> FUN_004390a0.
+void CyberflixEngine::sendToBoot(const Common::String &message, const Common::Array<Value> &args) {
+	if (!_bootScript) {
+		warning("Cyberflix: sendtoboot('%s') before BOOTFILE loaded", message.c_str());
+		return;
+	}
+	Common::Array<const Script *> scopes;
+	scopes.push_back(_bootScript.get());
+	dispatchWithScopeChain(scopes, "bootfile", Common::String(), message, args, "boot");
+	refreshPropsIfDirty();
+}
+
 // sendtoflat(flat, message): dispatch against [node script, stage script,
 // BOOTFILE res2] without changing the current node (TI.EXE FUN_0040a960).
 void CyberflixEngine::sendToFlat(const Common::String &flat, const Common::String &message,
@@ -2742,6 +2756,15 @@ void CyberflixEngine::showAboutDialog() {
 			"\n"
 			"Running under ScummVM");
 	dialog.runModal();
+}
+
+bool CyberflixEngine::questionDialog(const Common::String &message) {
+	GUI::MessageDialog dialog(message, "Yes", "No");
+	return dialog.runModal() == GUI::kMessageOK;
+}
+
+void CyberflixEngine::requestQuit() {
+	Engine::quitGame();
 }
 
 void CyberflixEngine::playMovie(const Common::String &name) {

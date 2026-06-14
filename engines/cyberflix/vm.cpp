@@ -337,7 +337,8 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 			// The message-carrying builtins sendtoactor (0x2ef0), sendtoscene
 			// (0x2f02), sendtocast (0x2f10), sendtoprop (0x2f17), sendtoshop
 			// (0x2f1b), sendtopainting (0x2f22), sendtobutton (0x2f24),
-			// sendtoflat (0x2f25) and sendtostage (0x2f26) pass their final
+			// sendtoflat (0x2f25), sendtostage (0x2f26) and sendtoboot
+			// (0x2f31) pass their final
 			// argument UNevaluated: it is a message `name(args)` matched
 			// against script definitions (TI.EXE FUN_0040ad80/FUN_0042ae80
 			// hand the raw code span to the dispatcher FUN_0040b690). Leading
@@ -347,7 +348,8 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 			// scene/flat/button, which would re-enter itself.
 			if (headOp == 0x2ef0 || headOp == 0x2f02 || headOp == 0x2f10 ||
 					headOp == 0x2f17 || headOp == 0x2f1b || headOp == 0x2f22 ||
-					headOp == 0x2f24 || headOp == 0x2f25 || headOp == 0x2f26)
+					headOp == 0x2f24 || headOp == 0x2f25 || headOp == 0x2f26 ||
+					headOp == 0x2f31)
 				return dispatchMessageBuiltin(script, pc, headOp);
 			Common::Array<Value> args;
 			parseCallArgs(script, pc, args);
@@ -404,6 +406,10 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	case 0x2f26: // sendtostage(message(...)) -> TI.EXE FUN_0040ad80
 		if (_host)
 			_host->sendToStage(message, msgArgs);
+		break;
+	case 0x2f31: // sendtoboot(message(...)) -> TI.EXE FUN_00439080/FUN_004390a0
+		if (_host)
+			_host->sendToBoot(message, msgArgs);
 		break;
 	case 0x2f1b: // sendtoshop('file.shp', message) -> TI.EXE FUN_0042b2b0:
 	             // dispatch against [shop script, BOOTFILE res2].
@@ -560,6 +566,9 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x2f14: // forceupdate() -> FUN_00446910 -> FUN_00423a60
 			_host->forceUpdate();
 			break;
+		case 0x2f27: // quit() -> FUN_00446c80: restore cursor, set native quit flag
+			_host->requestQuit();
+			break;
 		case 0x2f11: // blacktoscreen(target, steps): palette fade black -> target
 			_host->fadePalette(args.size() > 0 ? args[0].strValue : Common::String("current"),
 					args.size() > 1 ? args[1].intValue : 1, false);
@@ -684,6 +693,9 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return Value::makeBool(_host->stillDown());
 		case 0x4e28: // tick() -> FUN_004368f0: native 60 Hz timer
 			return Value::makeInt(_host->tick());
+		case 0x4e64: // questiondialog(text) -> FUN_004363f0/FUN_00409030
+			return Value::makeBool(_host->questionDialog(
+					args.empty() ? Common::String() : args[0].strValue));
 		case 0x4e32: // countpaintings(scene, view) -> FUN_00431fe0
 			if (args.size() >= 2)
 				return Value::makeInt(_host->countPaintings(args[0].strValue, args[1].strValue));

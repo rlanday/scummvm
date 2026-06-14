@@ -101,6 +101,12 @@ public:
 	virtual void sendToStage(const Common::String &message, const Common::Array<Value> &args) {}
 
 	/**
+	 * sendtoboot(message(args)) (0x2f31, FUN_00439080/FUN_004390a0): dispatch
+	 * against [BOOTFILE res1, BOOTFILE res2].
+	 */
+	virtual void sendToBoot(const Common::String &message, const Common::Array<Value> &args) {}
+
+	/**
 	 * sendtoflat(flat, message(args)) (0x2f25): dispatch against
 	 * [flat/node script, stage script, BOOTFILE res2].
 	 */
@@ -423,6 +429,12 @@ public:
 
 	/** opengame(signature) (0x2f2e FUN_004266e0/FUN_00426f00): open the load UI. */
 	virtual void openGame(const Common::String &signature) {}
+
+	/** questiondialog(text) (0x4e64 FUN_004363f0): native yes/no message box. */
+	virtual bool questionDialog(const Common::String &message) { return false; }
+
+	/** quit() (0x2f27 FUN_00446c80): request engine shutdown. */
+	virtual void requestQuit() {}
 };
 
 /**
