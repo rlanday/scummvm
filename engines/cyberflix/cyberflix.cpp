@@ -3121,8 +3121,14 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				while (_eventMan->pollEvent(event)) {
 					handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
 					if (event.type == Common::EVENT_LBUTTONDOWN) {
-						int fx = event.mouse.x - x0;
-						int fy = event.mouse.y - y0;
+						// TI.EXE FUN_0040e230 waits for event code 1
+						// (WM_LBUTTONDOWN), then reads the current mouse point
+						// from the movie port instead of using the queued event
+						// payload. Keep click hit-testing consistent with the
+						// hover helper above, which also polls the current point.
+						Common::Point m = _eventMan->getMousePos();
+						int fx = m.x - x0;
+						int fy = m.y - y0;
 						for (uint b = 0; b < pfButtons[fi].size(); ++b) {
 							const MovieButton &mb = pfButtons[fi][b];
 							if (!mb.contains(fx, fy))
@@ -3137,6 +3143,10 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 							} else { // END / unsupported -> leave the movie
 								skip = true;
 							}
+							debug(1, "Cyberflix: movie '%s' button frame %u '%s' click (%d,%d) action %u target '%s' -> %d",
+									name.c_str(), fi,
+									(fi < pfName.size()) ? pfName[fi].c_str() : "",
+									fx, fy, mb.action, mb.target.c_str(), (int)nextFi);
 							break;
 						}
 					}
