@@ -1178,7 +1178,26 @@ void CyberflixEngine::propView(const Common::String &name, const Common::String 
 	}
 }
 
-void CyberflixEngine::propXY(const Common::String &name, int x, int y) {
+int CyberflixEngine::propXY(const Common::String &name, int selector) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propxy('%s', %d): no such prop", name.c_str(), selector);
+		return 0;
+	}
+	switch (selector) {
+	case 1:
+		return prop->x;
+	case 2:
+		return prop->y;
+	case 3:
+		return ((int32)prop->x << 16) | ((int32)prop->y & 0xffff);
+	default:
+		warning("Cyberflix: propxy('%s', %d): bad selector", name.c_str(), selector);
+		return 0;
+	}
+}
+
+void CyberflixEngine::setPropXY(const Common::String &name, int x, int y) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
 		warning("Cyberflix: propxy('%s'): no such prop", name.c_str());

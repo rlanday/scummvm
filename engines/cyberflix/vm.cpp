@@ -681,7 +681,9 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			break;
 		case 0x3e92: // propxy(name, x, y) -> FUN_0042a370 (mode=0, depth=-1)
 			if (args.size() >= 3)
-				_host->propXY(args[0].strValue, args[1].intValue, args[2].intValue);
+				_host->setPropXY(args[0].strValue, args[1].intValue, args[2].intValue);
+			if (args.size() == 2)
+				return Value::makeInt(_host->propXY(args[0].strValue, args[1].intValue));
 			break;
 		case 0x3e9c: // propscale(name, scale) -> FUN_00429870
 			if (args.size() >= 2)

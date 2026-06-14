@@ -327,9 +327,13 @@ public:
 	 * setting mode=1 so the prop is no longer a screen overlay. */
 	virtual void propXYZ(const Common::String &name, int x, int y, int z) {}
 
+	/** propxy(name, selector) (0x3e92 FUN_0042a450): selector 1 = x,
+	 *  2 = y, 3 = packed point. */
+	virtual int propXY(const Common::String &name, int selector) { return 0; }
+
 	/** propxy(name, x, y) (0x3e92 FUN_0042a370): screen-space placement —
 	 *  sets mode=0 and depth=-1 alongside the anchor point. */
-	virtual void propXY(const Common::String &name, int x, int y) {}
+	virtual void setPropXY(const Common::String &name, int x, int y) {}
 
 	/** propscale(name, scale) (0x3e9c FUN_00429870): non-negative world scale. */
 	virtual void propScale(const Common::String &name, int scale) {}
