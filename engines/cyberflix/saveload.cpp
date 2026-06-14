@@ -787,15 +787,8 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	if (audioState.seen) {
 		if (audioState.themeActive)
 			restoreTheme(audioState.themeTrack, audioState.themeElapsedMillis);
-		if (audioState.soundSlots[0].active)
-			playSoundCue(audioState.soundSlots[0].cueName, _soundSlots[0].handle,
-					_soundSlots[0].cueName, _soundSlots[0].resId);
-		if (audioState.soundSlots[1].active)
-			playSoundCue(audioState.soundSlots[1].cueName, _soundSlots[1].handle,
-					_soundSlots[1].cueName, _soundSlots[1].resId);
-		if (audioState.voiceSlot.active)
-			playSoundCue(audioState.voiceSlot.cueName, _voiceSlot.handle,
-					_voiceSlot.cueName, _voiceSlot.resId);
+		// Native save/load restores open TRKs and loop/runtime state, but not
+		// transient one-shot SFX or voice playback buffers.
 	}
 
 	_loopsPaused = loopsPaused;
@@ -1008,12 +1001,13 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		auto writeSoundSlot = [&](const SoundSlot &slot) {
-			const bool active = _mixer->isSoundHandleActive(slot.handle);
-			payload.writeByte(active ? 1 : 0);
-			writeSaveString(payload, active ? slot.cueName : Common::String());
-			payload.writeUint32LE(active ? slot.resId : 0);
-			payload.writeUint32LE(active ? _mixer->getSoundElapsedTime(slot.handle) : 0);
+		// Keep the chunk fields stable, but match native persistence: live
+		// one-shot SFX/voice channels are not part of the durable save graph.
+		auto writeInactiveSoundSlot = [&]() {
+			payload.writeByte(0);
+			writeSaveString(payload, Common::String());
+			payload.writeUint32LE(0);
+			payload.writeUint32LE(0);
 		};
 
 		const bool themeActive = !_themeTrackName.empty() && _mixer->isSoundHandleActive(_themeHandle);
@@ -1030,9 +1024,9 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 			payload.writeUint32LE(_themeSpans[i].startSample);
 			writeSaveString(payload, _themeSpans[i].name);
 		}
-		writeSoundSlot(_soundSlots[0]);
-		writeSoundSlot(_soundSlots[1]);
-		writeSoundSlot(_voiceSlot);
+		writeInactiveSoundSlot();
+		writeInactiveSoundSlot();
+		writeInactiveSoundSlot();
 
 		writeChunk(*saveFile, "AUDI", payload);
 	}
