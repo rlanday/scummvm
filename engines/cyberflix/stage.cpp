@@ -73,6 +73,13 @@ Common::String Stage::nodeName(uint32 node) const {
 	return Common::String((const char *)p + 1, len);
 }
 
+int Stage::findNode(const Common::String &name) const {
+	for (uint32 i = 0; i < _nodeCount; ++i)
+		if (nodeName(i).equalsIgnoreCase(name))
+			return (int)i;
+	return -1;
+}
+
 bool Stage::open(const Common::String &name) {
 	_master = -1;
 	_nodeCount = 0;

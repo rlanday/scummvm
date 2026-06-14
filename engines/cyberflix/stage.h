@@ -100,6 +100,9 @@ public:
 	 */
 	Common::String nodeName(uint32 node) const;
 
+	/** Index of the node named @p name, or -1 if missing. */
+	int findNode(const Common::String &name) const;
+
 	/** Expand the stage's embedded palette into @p rgb (256*3, R,G,B). */
 	bool loadStagePalette(byte *rgb) const;
 

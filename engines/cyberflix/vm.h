@@ -79,6 +79,18 @@ public:
 	/** Open the stage file @p name (a DATA/ basename, e.g. "main.stg"). */
 	virtual void openStageFile(const Common::String &name) {}
 
+	/** Close the current stage file (closestagefile, TI.EXE opcode 0x2f1d). */
+	virtual void closeStageFile() {}
+
+	/** gotoflat(name|index) (0x2f1e): switch to a 1-based stage node or node name. */
+	virtual void gotoFlat(const Value &flat) {}
+
+	/** currentstage() (0x4e50): open stage name, or native "None". */
+	virtual Common::String currentStage() { return "None"; }
+
+	/** currentflat() (0x4e46): current stage node name, or native "None". */
+	virtual Common::String currentFlat() { return "None"; }
+
 	/**
 	 * Deliver the message call `message(args)` to the open stage's script. The
 	 * original sendtostage (TI.EXE FUN_0040ad80) passes the message UNevaluated

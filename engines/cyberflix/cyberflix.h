@@ -85,6 +85,10 @@ public:
 	// VMHost
 	void playMovie(const Common::String &name) override;
 	void openStageFile(const Common::String &name) override;
+	void closeStageFile() override;
+	void gotoFlat(const Value &flat) override;
+	Common::String currentStage() override;
+	Common::String currentFlat() override;
 	void sendToStage(const Common::String &message, const Common::Array<Value> &args) override;
 	void openSetFile(const Common::String &name,
 			const Common::String &scene = Common::String(),

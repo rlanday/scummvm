@@ -463,6 +463,13 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x2f1c: // openstagefile('name.stg')
 			_host->openStageFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
+		case 0x2f1d: // closestagefile() -> FUN_00409330
+			_host->closeStageFile();
+			break;
+		case 0x2f1e: // gotoflat(name|index) -> FUN_00409460
+			if (!args.empty())
+				_host->gotoFlat(args[0]);
+			break;
 		case 0x2f00: // opensetfile('name.set'[, scene[, view]]) -> FUN_00430690
 			_host->openSetFile(args.size() > 0 ? args[0].strValue : Common::String(),
 					args.size() > 1 ? args[1].strValue : Common::String(),
@@ -499,6 +506,10 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			break;
 		case 0x4e55: // currentset() -> open set name or 'none'
 			return Value::makeString(_host->currentSet());
+		case 0x4e50: // currentstage() -> open stage name or native 'None'
+			return Value::makeString(_host->currentStage());
+		case 0x4e46: // currentflat() -> current stage node name or native 'None'
+			return Value::makeString(_host->currentFlat());
 		case 0x3e8b: // currentview() -> current SET view name
 			return Value::makeString(_host->currentView());
 		case 0x3e9d: { // currentscene([name|left|right|strait])

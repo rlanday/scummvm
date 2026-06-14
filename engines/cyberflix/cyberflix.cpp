@@ -243,6 +243,45 @@ void CyberflixEngine::openStageFile(const Common::String &name) {
 	renderStageNode(0);
 }
 
+void CyberflixEngine::closeStageFile() {
+	if (!_stage || !_stage->isOpen())
+		return;
+	_stage.reset();
+	_stageNode = 0;
+	blackScreen();
+}
+
+void CyberflixEngine::gotoFlat(const Value &flat) {
+	if (!_stage || !_stage->isOpen())
+		return;
+	int node = -1;
+	if (flat.type == Value::kInt) {
+		node = flat.intValue - 1;
+	} else {
+		node = _stage->findNode(flat.strValue);
+	}
+	if (node < 0 || (uint32)node >= _stage->nodeCount()) {
+		warning("Cyberflix: gotoflat('%s') not found in stage '%s'",
+				flat.toString().c_str(), _stage->name().c_str());
+		return;
+	}
+	if (node == _stageNode)
+		return;
+	renderStageNode(node);
+}
+
+Common::String CyberflixEngine::currentStage() {
+	if (_stage && _stage->isOpen())
+		return _stage->name();
+	return "None";
+}
+
+Common::String CyberflixEngine::currentFlat() {
+	if (_stage && _stage->isOpen())
+		return _stage->nodeName((uint32)_stageNode);
+	return "None";
+}
+
 // sendtostage(message(...)): deliver a message call to the stage's script
 // scope chain. Mirrors TI.EXE FUN_0040ad80, which dispatches the unevaluated
 // message against [stage script, BOOTFILE res2 global library]; our VM holds
