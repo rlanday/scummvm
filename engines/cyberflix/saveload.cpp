@@ -808,8 +808,6 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		cricket.name = cricketStates[i].name;
 		cricket.paused = cricketStates[i].paused;
 		_crickets.push_back(cricket);
-		if (!_cricketsPaused && !cricket.paused)
-			playSound(cricket.name, 1);
 	}
 
 	if (!header.stageName.empty()) {
