@@ -464,6 +464,26 @@ void CyberflixEngine::renderStageNode(int node) {
 				*((byte *)screen->getBasePtr(x, y)) = frame.pixels[(uint)y * frame.width + x];
 		}
 	}
+	// CTL.STG and other flats can place screen-space SHOP props over the stage
+	// with propxy()/propvisible(); the native compositor draws those display
+	// items after the stage backing buffer.
+	Common::Array<const Shop::Prop *> draw;
+	Common::Array<const Shop *> drawShop;
+	collectScreenProps(draw, drawShop);
+	for (uint32 i = 0; i < draw.size(); ++i) {
+		CelImage cel;
+		Common::Rect r;
+		if (!drawShop[i]->renderProp(*draw[i], cel, r))
+			continue;
+		for (int y = 0; y < cel.height; ++y) {
+			for (int x = 0; x < cel.width; ++x) {
+				int sx = r.left + x, sy = r.top + y;
+				if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight &&
+						cel.isOpaque(x, y))
+					*((byte *)screen->getBasePtr(sx, sy)) = cel.pixels[(uint)y * cel.width + x];
+			}
+		}
+	}
 	_system->unlockScreen();
 
 	// Show the default arrow over the rendered node until per-node hotspot
@@ -710,6 +730,7 @@ void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw
 		// BOOTFILE transtoflat() hides HOUSE.SHP's main-stage interface props
 		// before opening closeup stages; do not let stale state hit-test through.
 		if (_stage && _stage->isOpen() && !_stage->name().equalsIgnoreCase("main.stg") &&
+				!_stage->name().equalsIgnoreCase("ctl.stg") &&
 				_shops[s]->name().equalsIgnoreCase("house.shp"))
 			continue;
 		for (uint32 i = 0; i < _shops[s]->propCount(); ++i) {
@@ -732,6 +753,10 @@ void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw
 		draw[j] = p;
 		drawShop[j] = sh;
 	}
+}
+
+static bool isReplacementStage(const Common::SharedPtr<Stage> &stage) {
+	return stage && stage->isOpen() && !stage->name().equalsIgnoreCase("main.stg");
 }
 
 // hittest(point) -> TI.EXE FUN_00435e70. The point packs (x << 16) | y; the
@@ -769,6 +794,16 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 			continue;
 		_hitKind = "prop";
 		return draw[i]->name;
+	}
+
+	if (isReplacementStage(_stage)) {
+		Common::String button = _stage->hitTestButton((uint32)_stageNode, x, y);
+		if (!button.empty()) {
+			_hitKind = "button";
+			return button;
+		}
+		_hitKind = "flat";
+		return _stage->nodeName((uint32)_stageNode);
 	}
 
 	if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
@@ -1082,7 +1117,7 @@ void CyberflixEngine::refreshPropsIfDirty() {
 	// props are picked up by the next renderSetScene.
 	if (!_propsDirty)
 		return;
-	if (!_setVisible) {
+	if (!_setVisible || isReplacementStage(_stage)) {
 		if (_stage && _stage->isOpen())
 			renderStageNode(_stageNode);
 		_propsDirty = false;
@@ -1658,7 +1693,10 @@ void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool 
 	if (!toBlack) {
 		Common::String key = target;
 		key.toLowercase();
-		if (key == "set" && _set && _set->isOpen() && _setScene >= 0) {
+		if (key == "stage" && _stage && _stage->isOpen()) {
+			renderStageNode(_stageNode);
+			_propsDirty = false;
+		} else if (key == "set" && _set && _set->isOpen() && _setScene >= 0) {
 			renderSetScene(_setScene, _setAngle);
 			_propsDirty = false;
 		}
