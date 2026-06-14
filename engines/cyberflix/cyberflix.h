@@ -159,6 +159,8 @@ public:
 	int propValue(const Common::String &name, const int *newValue) override;
 	int countProps() override;
 	Common::String indexToProp(int index) override;
+	bool pointInButton(const Common::String &flat,
+			const Common::String &button, int32 packedPoint) override;
 	Common::String hitTest(int32 packedPoint) override;
 	Common::String hitTestResult() override;
 	int32 mousePoint() override;

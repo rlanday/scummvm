@@ -704,6 +704,11 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return Value::makeInt(_host->countProps());
 		case 0x4e40: // indextoprop(i) -> FUN_0042b550: 1-based global index
 			return Value::makeString(_host->indexToProp(args.empty() ? 0 : args[0].intValue));
+		case 0x4e4b: // pointinbutton(flat, button, point) -> FUN_0040a0d0
+			if (args.size() >= 3)
+				return Value::makeBool(_host->pointInButton(args[0].strValue,
+						args[1].strValue, args[2].intValue));
+			return Value::makeBool(false);
 		case 0x4e66: // hittest(point) -> FUN_00435e70: name of the topmost item
 		             // under the packed point; kind stored for result()
 			if (!args.empty())

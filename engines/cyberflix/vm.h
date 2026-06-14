@@ -355,6 +355,11 @@ public:
 	/** indextoprop(i) (0x4e40 FUN_0042b550): 1-based global index -> name. */
 	virtual Common::String indexToProp(int index) { return Common::String(); }
 
+	/** pointinbutton(flat, button, point) (0x4e4b FUN_0040a0d0): named STG
+	 *  button rect containment, with point packed as (x << 16) | y. */
+	virtual bool pointInButton(const Common::String &flat,
+			const Common::String &button, int32 packedPoint) { return false; }
+
 	/**
 	 * hittest(point) (0x4e66 FUN_00435e70). @p packedPoint packs the screen
 	 * point as (x << 16) | (y & 0xffff) (the in-rect test FUN_0041ac60 checks

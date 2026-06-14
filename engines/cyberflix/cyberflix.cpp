@@ -448,6 +448,9 @@ void CyberflixEngine::sendToButton(const Common::String &flat, const Common::Str
 	scopes.push_back(dispatchStage->buttonScript((uint32)node, button));
 	scopes.push_back(dispatchStage->nodeScript((uint32)node));
 	scopes.push_back(dispatchStage->stageScript());
+	debug(1, "Cyberflix: sendtobutton('%s', '%s') -> %s(%u args)",
+			dispatchStage->nodeName((uint32)node).c_str(), button.c_str(),
+			message.c_str(), args.size());
 	dispatchWithScopeChain(scopes, button, button, message, args, "button");
 	refreshPropsIfDirty();
 }
@@ -852,6 +855,22 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 
 	_hitKind = "None";
 	return Common::String();
+}
+
+bool CyberflixEngine::pointInButton(const Common::String &flat,
+		const Common::String &button, int32 packedPoint) {
+	if (!_stage || !_stage->isOpen())
+		return false;
+	int node = flat.empty() ? _stageNode : _stage->findNode(flat);
+	if (node < 0 || (uint32)node >= _stage->nodeCount())
+		return false;
+	const int16 x = (int16)(packedPoint >> 16);
+	const int16 y = (int16)(packedPoint & 0xffff);
+	bool hit = _stage->pointInButton((uint32)node, button, x, y);
+	debug(1, "Cyberflix: pointinbutton('%s', '%s', %d,%d) -> %s",
+			_stage->nodeName((uint32)node).c_str(), button.c_str(), x, y,
+			hit ? "true" : "false");
+	return hit;
 }
 
 // result() -> TI.EXE FUN_004366a0: the kind recorded by the last hittest.

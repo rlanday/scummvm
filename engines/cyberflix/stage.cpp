@@ -30,6 +30,14 @@
 
 namespace Cyberflix {
 
+static bool pointInButtonRect(const byte *rec, int16 x, int16 y) {
+	int16 top = (int16)READ_LE_UINT16(rec + Stage::kButtonRectOffset);
+	int16 left = (int16)READ_LE_UINT16(rec + Stage::kButtonRectOffset + 2);
+	int16 bottom = (int16)READ_LE_UINT16(rec + Stage::kButtonRectOffset + 4);
+	int16 right = (int16)READ_LE_UINT16(rec + Stage::kButtonRectOffset + 6);
+	return x >= left && x < right && y >= top && y < bottom;
+}
+
 const byte *Stage::engineBase(uint32 index) const {
 	if (index >= _archive.getResourceCount())
 		return nullptr;
@@ -152,14 +160,15 @@ Common::String Stage::hitTestButton(uint32 node, int16 x, int16 y) const {
 		const byte *rec = table + kButtonRecordsOffset + (uint32)i * kButtonRecordStride;
 		if (kButtonRecordsOffset + (uint32)i * kButtonRecordStride + kButtonRecordStride > length)
 			break;
-		int16 top = (int16)READ_LE_UINT16(rec + kButtonRectOffset);
-		int16 left = (int16)READ_LE_UINT16(rec + kButtonRectOffset + 2);
-		int16 bottom = (int16)READ_LE_UINT16(rec + kButtonRectOffset + 4);
-		int16 right = (int16)READ_LE_UINT16(rec + kButtonRectOffset + 6);
-		if (x >= left && x < right && y >= top && y < bottom)
+		if (pointInButtonRect(rec, x, y))
 			return pascalString(rec + kButtonNameOffset);
 	}
 	return Common::String();
+}
+
+bool Stage::pointInButton(uint32 node, const Common::String &button, int16 x, int16 y) const {
+	const byte *rec = buttonRecord(node, button);
+	return rec && pointInButtonRect(rec, x, y);
 }
 
 const Script *Stage::stageScript() const {

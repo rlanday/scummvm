@@ -121,6 +121,12 @@ public:
 	 */
 	Common::String hitTestButton(uint32 node, int16 x, int16 y) const;
 
+	/**
+	 * Named button rectangle test used by pointinbutton(flat, button, point)
+	 * (TI.EXE FUN_0040a0d0 -> FUN_0040b4b0 -> FUN_0041ac60).
+	 */
+	bool pointInButton(uint32 node, const Common::String &button, int16 x, int16 y) const;
+
 	/** The stage-wide behavior script, or null if unavailable. */
 	const Script *stageScript() const;
 
