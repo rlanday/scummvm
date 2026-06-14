@@ -622,6 +622,10 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			const Common::String *newPath = args.size() >= 2 ? &args[1].strValue : nullptr;
 			return Value::makeString(_host->pathSlot(slot, newPath));
 		}
+		case 0x4e22: // pointx(point) -> high word of packed (x << 16) | y
+			return Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue >> 16));
+		case 0x4e23: // pointy(point) -> low word of packed (x << 16) | y
+			return Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue & 0xffff));
 		case 0x4e32: // countpaintings(scene, view) -> FUN_00431fe0
 			if (args.size() >= 2)
 				return Value::makeInt(_host->countPaintings(args[0].strValue, args[1].strValue));
