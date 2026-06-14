@@ -626,6 +626,15 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue >> 16));
 		case 0x4e23: // pointy(point) -> low word of packed (x << 16) | y
 			return Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue & 0xffff));
+		case 0x4e24: // makepoint(x, y) -> packed (x << 16) | y
+			return Value::makeInt(_host->makePoint(args.size() > 0 ? args[0].intValue : 0,
+					args.size() > 1 ? args[1].intValue : 0));
+		case 0x4e25: // button() -> FUN_00436880: live left mouse button state
+			return Value::makeBool(_host->buttonDown());
+		case 0x4e27: // stilldown() -> FUN_00436920: live mouse button state
+			return Value::makeBool(_host->stillDown());
+		case 0x4e28: // tick() -> FUN_004368f0: native 60 Hz timer
+			return Value::makeInt(_host->tick());
 		case 0x4e32: // countpaintings(scene, view) -> FUN_00431fe0
 			if (args.size() >= 2)
 				return Value::makeInt(_host->countPaintings(args[0].strValue, args[1].strValue));
@@ -718,6 +727,10 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (!args.empty())
 				return Value::makeString(_host->hitTest(args[0].intValue));
 			break;
+		case 0x4e67: // calcdeg(pointA, pointB) -> FUN_00435c70
+			if (args.size() >= 2)
+				return Value::makeInt(_host->calcDeg(args[0].intValue, args[1].intValue));
+			return Value::makeInt(0);
 		case 0x3e8a: // result() -> FUN_004366a0: last hittest kind (DAT_00461298)
 			return Value::makeString(_host->hitTestResult());
 		case 0x4e26: // mouse() -> FUN_004368b0: current mouse point, packed

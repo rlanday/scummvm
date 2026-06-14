@@ -164,6 +164,11 @@ public:
 	Common::String hitTest(int32 packedPoint) override;
 	Common::String hitTestResult() override;
 	int32 mousePoint() override;
+	int32 makePoint(int x, int y) override;
+	bool buttonDown() override;
+	bool stillDown() override;
+	int tick() override;
+	int calcDeg(int32 a, int32 b) override;
 	void setCursorResource(const Common::String &resourceName) override;
 
 private:

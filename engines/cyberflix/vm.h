@@ -382,6 +382,18 @@ public:
 	 *  (x << 16) | (y & 0xffff). */
 	virtual int32 mousePoint() { return 0; }
 
+	/** makepoint(x, y) (0x4e24 FUN_00436800): pack an x/y point value. */
+	virtual int32 makePoint(int x, int y) { return ((int32)(int16)x << 16) | ((int32)y & 0xffff); }
+
+	/** button() (0x4e25 FUN_00436880): current left mouse button state. */
+	virtual bool buttonDown() { return false; }
+
+	/** stilldown() (0x4e27 FUN_00436920): whether a mouse button is still down. */
+	virtual bool stillDown() { return false; }
+
+	/** tick() (0x4e28 FUN_004368f0): the native 60 Hz scaled timer. */
+	virtual int tick() { return 0; }
+
 	/**
 	 * cursor(arg) (0x2f07 FUN_00446920), with the name already resolved to a
 	 * TI.EXE PE resource name: int arg n -> "CURS<n>" (FUN_0041b700, format
@@ -390,6 +402,10 @@ public:
 	 * name -> "CURS.<NAME>" (FUN_0041b580, format "%s.%s" + strupr).
 	 */
 	virtual void setCursorResource(const Common::String &resourceName) {}
+
+	/** calcdeg(a, b) (0x4e67 FUN_00435c70): signed 8-bit angle in 256ths of a
+	 *  full turn from packed point @p a to packed point @p b. */
+	virtual int calcDeg(int32 a, int32 b) { return 0; }
 };
 
 /**

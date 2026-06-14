@@ -56,6 +56,8 @@
 #include "cyberflix/stage.h"
 #include "cyberflix/vm.h"
 
+#include <math.h>
+
 namespace Cyberflix {
 
 static const double kDefaultPaletteGamma = 0.65;
@@ -883,6 +885,52 @@ Common::String CyberflixEngine::hitTestResult() {
 int32 CyberflixEngine::mousePoint() {
 	const Common::Point m = _eventMan->getMousePos();
 	return ((int32)(int16)m.x << 16) | ((int32)m.y & 0xffff);
+}
+
+int32 CyberflixEngine::makePoint(int x, int y) {
+	return ((int32)(int16)x << 16) | ((int32)y & 0xffff);
+}
+
+bool CyberflixEngine::buttonDown() {
+	Common::Event event;
+	while (_eventMan->pollEvent(event)) {
+		if (event.type == Common::EVENT_QUIT) {
+			quitGame();
+			return false;
+		}
+	}
+	return (_eventMan->getButtonState() & Common::EventManager::LBUTTON) != 0;
+}
+
+bool CyberflixEngine::stillDown() {
+	Common::Event event;
+	while (_eventMan->pollEvent(event)) {
+		if (event.type == Common::EVENT_QUIT) {
+			quitGame();
+			return false;
+		}
+	}
+	return (_eventMan->getButtonState() &
+			(Common::EventManager::LBUTTON | Common::EventManager::RBUTTON)) != 0;
+}
+
+int CyberflixEngine::tick() {
+	return (int)((uint64)_system->getMillis() * 60 / 1000);
+}
+
+int CyberflixEngine::calcDeg(int32 a, int32 b) {
+	const int16 ax = (int16)(a >> 16);
+	const int16 ay = (int16)(a & 0xffff);
+	const int16 bx = (int16)(b >> 16);
+	const int16 by = (int16)(b & 0xffff);
+	int deg = (int)(atan2((double)(bx - ax), (double)(by - ay)) *
+			(256.0 / 6.28318530717958647692));
+	deg %= 256;
+	if (deg < 0)
+		deg += 256;
+	if (deg >= 128)
+		deg -= 256;
+	return deg;
 }
 
 // cursor(...) -> TI.EXE FUN_00446920, with the script name already resolved
