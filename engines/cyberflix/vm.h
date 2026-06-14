@@ -149,7 +149,9 @@ public:
 	/** currentpuppet() (0x4e51), or "none" while the puppet subsystem is absent. */
 	virtual Common::String currentPuppet() { return "none"; }
 
-	/** Navigate to @p scene and optionally dispatch a scene message. */
+	/** Dispatch a scene message. The native sendtoscene() does not switch the
+	 *  current rendered scene; current scene changes are driven by currentscene()
+	 *  / SET navigation. */
 	virtual void sendToScene(const Common::String &scene,
 			const Common::String &message = Common::String(),
 			const Common::Array<Value> &args = Common::Array<Value>()) {}

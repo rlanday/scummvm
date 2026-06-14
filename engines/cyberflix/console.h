@@ -63,9 +63,9 @@ private:
 	// the Set parser + scene renderer used by sendtoscene/changeset).
 	bool cmdShowSet(int argc, const char **argv);
 
-	// Drives the real engine host path opensetfile()+sendtoscene() (mirrors the
-	// script-level changeset wrapper): opens a SET, selects a scene by name and
-	// renders it with palette and cursor, persisting it as the active room.
+	// Drives the real engine host path opensetfile(set, scene): opens a SET,
+	// selects a scene by name and renders it with palette and cursor, persisting
+	// it as the active room.
 	bool cmdChangeSet(int argc, const char **argv);
 
 	CyberflixEngine *_engine;

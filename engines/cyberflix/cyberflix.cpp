@@ -1986,9 +1986,9 @@ void CyberflixEngine::processScheduledLoops() {
 	}
 }
 
-// sendtoscene(name[, message]): select a scene of the open set by name, render
-// it if needed, then dispatch the message against [scene script, set script,
-// BOOTFILE res2] (TI.EXE FUN_004311e0/FUN_00431200).
+// sendtoscene(name, message): dispatch the message against [scene script, set
+// script, BOOTFILE res2] for the named scene, without changing the currently
+// rendered scene (TI.EXE FUN_004311e0/FUN_00431200).
 void CyberflixEngine::sendToScene(const Common::String &scene,
 		const Common::String &message, const Common::Array<Value> &args) {
 	if (!_set || !_set->isOpen()) {
@@ -2001,8 +2001,6 @@ void CyberflixEngine::sendToScene(const Common::String &scene,
 				_set->name().c_str(), scene.c_str());
 		return;
 	}
-	if (_setScene != index)
-		renderSetScene(index, 0, 0);
 	if (!message.empty())
 		dispatchSceneMessage((uint32)index, message, args);
 }

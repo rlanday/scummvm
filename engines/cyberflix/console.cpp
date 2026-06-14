@@ -660,7 +660,7 @@ bool Console::cmdShowSet(int argc, const char **argv) {
 
 bool Console::cmdChangeSet(int argc, const char **argv) {
 	if (argc < 2) {
-		debugPrintf("Drives the engine host path opensetfile()+sendtoscene()\n");
+		debugPrintf("Drives the engine host path opensetfile(set, scene)\n");
 		debugPrintf("(the script-level changeset wrapper): opens a SET as the active\n");
 		debugPrintf("room and renders a scene with palette and navigation cursor.\n");
 		debugPrintf("Usage: %s <setfile> [scene]\n", argv[0]);
@@ -669,8 +669,6 @@ bool Console::cmdChangeSet(int argc, const char **argv) {
 		return true;
 	}
 
-	_engine->openSetFile(argv[1]);
-
 	// Default to the first scene when none is named, matching showset's listing.
 	Common::String scene = (argc >= 3) ? Common::String(argv[2]) : Common::String();
 	if (scene.empty()) {
@@ -678,7 +676,7 @@ bool Console::cmdChangeSet(int argc, const char **argv) {
 		if (probe.open(argv[1]) && probe.sceneCount() > 0)
 			scene = probe.sceneName(0);
 	}
-	_engine->sendToScene(scene);
+	_engine->openSetFile(argv[1], scene);
 	debugPrintf("changeset('%s', '%s') issued. Close the console to view.\n",
 			argv[1], scene.c_str());
 	return true;
