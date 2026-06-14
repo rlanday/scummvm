@@ -309,10 +309,10 @@ bool CyberflixEngine::setGameCursor(const Common::String &name) {
 void CyberflixEngine::openStageFile(const Common::String &name) {
 	if (name.empty())
 		return;
-	Common::ScopedPtr<Stage> stage(new Stage());
+	Common::SharedPtr<Stage> stage(new Stage());
 	if (!stage->open(name))
 		return;
-	_stage.reset(stage.release());
+	_stage = stage;
 	debug(1, "Cyberflix: stage '%s' open (%u nodes)", name.c_str(), _stage->nodeCount());
 
 	// The original renders the stage's current node immediately on open:
@@ -321,11 +321,17 @@ void CyberflixEngine::openStageFile(const Common::String &name) {
 	// MAIN.STG node 0 is the persistent UI shell (art-deco frame + inventory
 	// bar) that room viewports later draw on top of.
 	renderStageNode(0);
+	Common::Array<Value> noArgs;
+	sendToStage("openstage", noArgs);
+	sendToFlat(currentFlat(), "openflat", noArgs);
 }
 
 void CyberflixEngine::closeStageFile() {
 	if (!_stage || !_stage->isOpen())
 		return;
+	Common::Array<Value> noArgs;
+	sendToFlat(currentFlat(), "closeflat", noArgs);
+	sendToStage("closestage", noArgs);
 	_stage.reset();
 	_stageNode = 0;
 	blackScreen();
@@ -364,16 +370,68 @@ Common::String CyberflixEngine::currentFlat() {
 
 // sendtostage(message(...)): deliver a message call to the stage's script
 // scope chain. Mirrors TI.EXE FUN_0040ad80, which dispatches the unevaluated
-// message against [stage script, BOOTFILE res2 global library]; our VM holds
-// that chain, so dispatch is a callFunction over its libraries. The per-node
-// enter/idle handler scripts inside MAIN.STG land in a later phase — see
-// files/decomp/stage-notes.md ("Script FUNCTIONS + message dispatch").
+// message against [stage script, BOOTFILE res2].
 void CyberflixEngine::sendToStage(const Common::String &message, const Common::Array<Value> &args) {
-	debug(1, "Cyberflix: sendtostage -> %s(%u args)", message.c_str(), args.size());
-	bool handled = false;
-	_vm.callFunction(message, args, &handled);
-	if (!handled)
-		warning("Cyberflix: stage message '%s' unhandled", message.c_str());
+	if (!_stage || !_stage->isOpen()) {
+		warning("Cyberflix: sendtostage('%s') with no stage open", message.c_str());
+		return;
+	}
+	Common::SharedPtr<Stage> dispatchStage = _stage;
+	Common::Array<const Script *> scopes;
+	scopes.push_back(dispatchStage->stageScript());
+	dispatchWithScopeChain(scopes, dispatchStage->name(), Common::String(), message, args, "stage");
+	refreshPropsIfDirty();
+}
+
+// sendtoflat(flat, message): dispatch against [node script, stage script,
+// BOOTFILE res2] without changing the current node (TI.EXE FUN_0040a960).
+void CyberflixEngine::sendToFlat(const Common::String &flat, const Common::String &message,
+		const Common::Array<Value> &args) {
+	if (!_stage || !_stage->isOpen()) {
+		warning("Cyberflix: sendtoflat('%s') with no stage open", flat.c_str());
+		return;
+	}
+	Common::SharedPtr<Stage> dispatchStage = _stage;
+	int node = flat.empty() ? _stageNode : dispatchStage->findNode(flat);
+	if (node < 0 || (uint32)node >= dispatchStage->nodeCount()) {
+		warning("Cyberflix: stage '%s' has no flat named '%s'",
+				dispatchStage->name().c_str(), flat.c_str());
+		return;
+	}
+	Common::String flatName = dispatchStage->nodeName((uint32)node);
+	Common::Array<const Script *> scopes;
+	scopes.push_back(dispatchStage->nodeScript((uint32)node));
+	scopes.push_back(dispatchStage->stageScript());
+	dispatchWithScopeChain(scopes, flatName, flatName, message, args, "flat");
+	refreshPropsIfDirty();
+}
+
+// sendtobutton(flat, button, message): dispatch against [button script, node
+// script, stage script, BOOTFILE res2] (TI.EXE FUN_0040a430).
+void CyberflixEngine::sendToButton(const Common::String &flat, const Common::String &button,
+		const Common::String &message, const Common::Array<Value> &args) {
+	if (!_stage || !_stage->isOpen()) {
+		warning("Cyberflix: sendtobutton('%s') with no stage open", button.c_str());
+		return;
+	}
+	Common::SharedPtr<Stage> dispatchStage = _stage;
+	int node = flat.empty() ? _stageNode : dispatchStage->findNode(flat);
+	if (node < 0 || (uint32)node >= dispatchStage->nodeCount()) {
+		warning("Cyberflix: stage '%s' has no flat named '%s'",
+				dispatchStage->name().c_str(), flat.c_str());
+		return;
+	}
+	if (!dispatchStage->hasButton((uint32)node, button)) {
+		warning("Cyberflix: stage '%s' flat '%s' has no button named '%s'",
+				dispatchStage->name().c_str(), flat.c_str(), button.c_str());
+		return;
+	}
+	Common::Array<const Script *> scopes;
+	scopes.push_back(dispatchStage->buttonScript((uint32)node, button));
+	scopes.push_back(dispatchStage->nodeScript((uint32)node));
+	scopes.push_back(dispatchStage->stageScript());
+	dispatchWithScopeChain(scopes, button, button, message, args, "button");
+	refreshPropsIfDirty();
 }
 
 void CyberflixEngine::renderStageNode(int node) {
@@ -729,8 +787,11 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 	}
 
 	if (_stage && _stage->isOpen()) {
-		// Stage button hit-test (FUN_0040af40) pending; the whole screen is
-		// the current flat.
+		Common::String button = _stage->hitTestButton((uint32)_stageNode, x, y);
+		if (!button.empty()) {
+			_hitKind = "button";
+			return button;
+		}
 		_hitKind = "flat";
 		return _stage->nodeName((uint32)_stageNode);
 	}
@@ -846,6 +907,21 @@ void CyberflixEngine::openShopFile(const Common::String &name) {
 				"openprop", Common::Array<Value>());
 	}
 	refreshPropsIfDirty();
+}
+
+void CyberflixEngine::closeShopFile(const Common::String &name) {
+	Common::String key = name;
+	key.toLowercase();
+	for (uint32 i = 0; i < _shops.size(); ++i) {
+		if (_shops[i]->name() == key) {
+			debug(1, "Cyberflix: shop '%s' closed", key.c_str());
+			_shops.remove_at(i);
+			_propsDirty = true;
+			refreshPropsIfDirty();
+			return;
+		}
+	}
+	debug(1, "Cyberflix: closeshopfile('%s'): shop not open", key.c_str());
 }
 
 void CyberflixEngine::sendToShop(const Common::String &shopName, const Common::String &message,

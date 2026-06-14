@@ -23,10 +23,12 @@
 #define CYBERFLIX_STAGE_H
 
 #include "common/array.h"
+#include "common/ptr.h"
 #include "common/str.h"
 
 #include "cyberflix/archive.h"
 #include "cyberflix/image.h"
+#include "cyberflix/script.h"
 
 namespace Cyberflix {
 
@@ -67,9 +69,19 @@ public:
 		kNodeTableOffset = 0x84c,
 		kNodeRecordStride = 0x2e,
 		kNodeFlagsOffset = 0x00,
+		kNodeScriptResOffset = 0x06,
 		kNodeImageResOffset = 0x0a,
+		kNodeButtonTableOffset = 0x0e,
 		kNodeNameOffset = 0x1e,
-		kNodeFlagKeyframe = 0x1
+		kNodeFlagKeyframe = 0x1,
+
+		kStageScriptIdOffset = 0x02c,
+		kButtonCountOffset = 0x400,
+		kButtonRecordsOffset = 0x404,
+		kButtonRecordStride = 0x20,
+		kButtonRectOffset = 0x04,
+		kButtonScriptOffset = 0x0c,
+		kButtonNameOffset = 0x10
 	};
 
 	/**
@@ -103,16 +115,44 @@ public:
 	/** Index of the node named @p name, or -1 if missing. */
 	int findNode(const Common::String &name) const;
 
+	/**
+	 * Back-to-front button hit-test for node @p node. Returns the button name
+	 * under @p x,@p y, or empty on no hit. Mirrors TI.EXE FUN_0040af40.
+	 */
+	Common::String hitTestButton(uint32 node, int16 x, int16 y) const;
+
+	/** The stage-wide behavior script, or null if unavailable. */
+	const Script *stageScript() const;
+
+	/** Node/flat @p node's behavior script, or null if unavailable. */
+	const Script *nodeScript(uint32 node) const;
+
+	/** Button @p button's behavior script in @p node, or null if unavailable. */
+	const Script *buttonScript(uint32 node, const Common::String &button) const;
+
+	/** True if node @p node has a button record named @p button. */
+	bool hasButton(uint32 node, const Common::String &button) const;
+
 	/** Expand the stage's embedded palette into @p rgb (256*3, R,G,B). */
 	bool loadStagePalette(byte *rgb) const;
 
 private:
 	/** Engine-base pointer (record+8) of resource @p index, or nullptr. */
 	const byte *engineBase(uint32 index) const;
+	/** Payload pointer (record+12) of resource @p index, or nullptr. */
+	const byte *payload(uint32 index) const;
 	/** Archive index of the resource whose id is @p id, or -1. */
 	int resourceIndexById(uint32 id) const;
 	/** Node record pointer for @p node, or nullptr if out of range. */
 	const byte *nodeRecord(uint32 node) const;
+	/** Button table payload pointer for @p node, or nullptr if unavailable. */
+	const byte *buttonTable(uint32 node, uint32 &count, uint32 &length) const;
+	/** Button record for @p button in @p node, or nullptr if missing. */
+	const byte *buttonRecord(uint32 node, const Common::String &button) const;
+	/** Read the Pascal string at @p p (bounded by the file buffer). */
+	Common::String pascalString(const byte *p) const;
+	/** Parsed script resource @p id, or null if missing/not a script. */
+	const Script *scriptById(uint32 id) const;
 
 	Common::String _name;
 	// _fileData outlives _archive: the archive's stream and every frame pointer
@@ -120,6 +160,8 @@ private:
 	Common::Array<byte> _fileData;
 	Archive _archive;
 	int _master = -1;     ///< Archive index of the master-header resource.
+	uint32 _stageScriptId = 0;
+	Common::Array<Common::SharedPtr<Script> > _scripts;
 	uint32 _nodeCount = 0;
 	uint16 _width = 0;
 	uint16 _height = 0;

@@ -90,6 +90,10 @@ public:
 	Common::String currentStage() override;
 	Common::String currentFlat() override;
 	void sendToStage(const Common::String &message, const Common::Array<Value> &args) override;
+	void sendToFlat(const Common::String &flat, const Common::String &message,
+			const Common::Array<Value> &args) override;
+	void sendToButton(const Common::String &flat, const Common::String &button,
+			const Common::String &message, const Common::Array<Value> &args) override;
 	void openSetFile(const Common::String &name,
 			const Common::String &scene = Common::String(),
 			const Common::String &view = Common::String()) override;
@@ -128,6 +132,7 @@ public:
 	Common::String currentVoice() override;
 	Common::String pathSlot(int slot, const Common::String *newPath) override;
 	void openShopFile(const Common::String &name) override;
+	void closeShopFile(const Common::String &name) override;
 	void sendToShop(const Common::String &shop, const Common::String &message,
 			const Common::Array<Value> &args) override;
 	void sendToProp(const Common::String &prop, const Common::String &message,
@@ -222,7 +227,7 @@ private:
 	Common::HashMap<Common::String, Common::SharedPtr<Graphics::WinCursorGroup> > _cursorCache;
 	Common::String _activeCursor;
 
-	Common::ScopedPtr<Stage> _stage; ///< Currently open stage (DATA/*.STG), or null.
+	Common::SharedPtr<Stage> _stage; ///< Currently open stage (DATA/*.STG), or null.
 	Common::ScopedPtr<Set> _set;     ///< Currently open set (DATA/*.SET), or null.
 	enum SetTransitionType {
 		kSetTransitionNone,

@@ -43,11 +43,36 @@ const byte *Stage::engineBase(uint32 index) const {
 	return _fileData.begin() + res.dataOffset - 4;
 }
 
+const byte *Stage::payload(uint32 index) const {
+	if (index >= _archive.getResourceCount())
+		return nullptr;
+	const Archive::Resource &res = _archive.getResource(index);
+	if (res.empty || res.dataOffset > _fileData.size())
+		return nullptr;
+	return _fileData.begin() + res.dataOffset;
+}
+
 int Stage::resourceIndexById(uint32 id) const {
 	for (uint32 i = 0; i < _archive.getResourceCount(); ++i)
 		if (!_archive.getResource(i).empty && _archive.getResource(i).id == id)
 			return (int)i;
 	return -1;
+}
+
+Common::String Stage::pascalString(const byte *p) const {
+	if (!p || p < _fileData.begin() || p >= _fileData.end())
+		return Common::String();
+	uint len = *p;
+	if (p + 1 + len > _fileData.end())
+		return Common::String();
+	return Common::String((const char *)p + 1, len);
+}
+
+const Script *Stage::scriptById(uint32 id) const {
+	int idx = resourceIndexById(id);
+	if (idx < 0 || (uint32)idx >= _scripts.size())
+		return nullptr;
+	return _scripts[(uint32)idx].get();
 }
 
 const byte *Stage::nodeRecord(uint32 node) const {
@@ -60,6 +85,44 @@ const byte *Stage::nodeRecord(uint32 node) const {
 	if (rec + kNodeRecordStride > _fileData.end())
 		return nullptr;
 	return rec;
+}
+
+const byte *Stage::buttonTable(uint32 node, uint32 &count, uint32 &length) const {
+	count = length = 0;
+	const byte *rec = nodeRecord(node);
+	if (!rec)
+		return nullptr;
+	uint32 tableId = READ_LE_UINT32(rec + kNodeButtonTableOffset);
+	int idx = resourceIndexById(tableId);
+	if (idx < 0)
+		return nullptr;
+	const Archive::Resource &res = _archive.getResource((uint32)idx);
+	if (res.length < kButtonCountOffset + 4)
+		return nullptr;
+	const byte *table = payload((uint32)idx);
+	if (!table)
+		return nullptr;
+	uint32 c = READ_LE_UINT32(table + kButtonCountOffset);
+	if (kButtonRecordsOffset + (uint64)c * kButtonRecordStride > res.length)
+		return nullptr;
+	count = c;
+	length = res.length;
+	return table;
+}
+
+const byte *Stage::buttonRecord(uint32 node, const Common::String &button) const {
+	uint32 count = 0, length = 0;
+	const byte *table = buttonTable(node, count, length);
+	if (!table)
+		return nullptr;
+	for (uint32 i = 0; i < count; ++i) {
+		const byte *rec = table + kButtonRecordsOffset + i * kButtonRecordStride;
+		if (kButtonRecordsOffset + i * kButtonRecordStride + kButtonRecordStride > length)
+			break;
+		if (button.equalsIgnoreCase(pascalString(rec + kButtonNameOffset)))
+			return rec;
+	}
+	return nullptr;
 }
 
 Common::String Stage::nodeName(uint32 node) const {
@@ -80,9 +143,52 @@ int Stage::findNode(const Common::String &name) const {
 	return -1;
 }
 
+Common::String Stage::hitTestButton(uint32 node, int16 x, int16 y) const {
+	uint32 count = 0, length = 0;
+	const byte *table = buttonTable(node, count, length);
+	if (!table)
+		return Common::String();
+	for (int i = (int)count - 1; i >= 0; --i) {
+		const byte *rec = table + kButtonRecordsOffset + (uint32)i * kButtonRecordStride;
+		if (kButtonRecordsOffset + (uint32)i * kButtonRecordStride + kButtonRecordStride > length)
+			break;
+		int16 top = (int16)READ_LE_UINT16(rec + kButtonRectOffset);
+		int16 left = (int16)READ_LE_UINT16(rec + kButtonRectOffset + 2);
+		int16 bottom = (int16)READ_LE_UINT16(rec + kButtonRectOffset + 4);
+		int16 right = (int16)READ_LE_UINT16(rec + kButtonRectOffset + 6);
+		if (x >= left && x < right && y >= top && y < bottom)
+			return pascalString(rec + kButtonNameOffset);
+	}
+	return Common::String();
+}
+
+const Script *Stage::stageScript() const {
+	return scriptById(_stageScriptId);
+}
+
+const Script *Stage::nodeScript(uint32 node) const {
+	const byte *rec = nodeRecord(node);
+	if (!rec)
+		return nullptr;
+	return scriptById(READ_LE_UINT32(rec + kNodeScriptResOffset));
+}
+
+const Script *Stage::buttonScript(uint32 node, const Common::String &button) const {
+	const byte *rec = buttonRecord(node, button);
+	if (!rec)
+		return nullptr;
+	return scriptById(READ_LE_UINT32(rec + kButtonScriptOffset));
+}
+
+bool Stage::hasButton(uint32 node, const Common::String &button) const {
+	return buttonRecord(node, button) != nullptr;
+}
+
 bool Stage::open(const Common::String &name) {
 	_master = -1;
 	_nodeCount = 0;
+	_stageScriptId = 0;
+	_scripts.clear();
 	_width = _height = 0;
 	_name = name;
 
@@ -123,6 +229,7 @@ bool Stage::open(const Common::String &name) {
 	}
 	_width = READ_LE_UINT16(hdr + kMasterWidthOffset);
 	_height = READ_LE_UINT16(hdr + kMasterHeightOffset);
+	_stageScriptId = READ_LE_UINT32(hdr + kStageScriptIdOffset);
 	_nodeCount = READ_LE_UINT32(hdr + kNodeCountOffset);
 
 	// Bound the node table against the file so a corrupt count can't run off.
@@ -130,6 +237,20 @@ bool Stage::open(const Common::String &name) {
 	if (tableEnd > _fileData.end()) {
 		warning("Cyberflix: stage '%s' node table overruns file (count %u)", name.c_str(), _nodeCount);
 		_nodeCount = 0;
+	}
+
+	_scripts.resize(_archive.getResourceCount());
+	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
+		const Archive::Resource &res = _archive.getResource(i);
+		if (res.empty || res.info != Script::kScriptInfoTag)
+			continue;
+		Common::SeekableReadStream *stream = _archive.createReadStreamForResource(i);
+		Common::SharedPtr<Script> script(new Script());
+		if (stream && script->parse(stream))
+			_scripts[i] = script;
+		else
+			warning("Cyberflix: failed to parse stage '%s' script resource %u", name.c_str(), res.id);
+		delete stream;
 	}
 
 	debug(1, "Cyberflix: opened stage '%s': %ux%u, %u node(s)",

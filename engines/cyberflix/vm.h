@@ -101,6 +101,20 @@ public:
 	virtual void sendToStage(const Common::String &message, const Common::Array<Value> &args) {}
 
 	/**
+	 * sendtoflat(flat, message(args)) (0x2f25): dispatch against
+	 * [flat/node script, stage script, BOOTFILE res2].
+	 */
+	virtual void sendToFlat(const Common::String &flat, const Common::String &message,
+			const Common::Array<Value> &args) {}
+
+	/**
+	 * sendtobutton(flat, button, message(args)) (0x2f24): dispatch against
+	 * [button script, flat/node script, stage script, BOOTFILE res2].
+	 */
+	virtual void sendToButton(const Common::String &flat, const Common::String &button,
+			const Common::String &message, const Common::Array<Value> &args) {}
+
+	/**
 	 * Open the set file @p name. @p scene / @p view optionally name the scene
 	 * and view to make current (the opensetfile optional args; TI.EXE
 	 * FUN_00430690). Empty = default to the set's first scene.
@@ -250,6 +264,9 @@ public:
 	/** openshopfile('name.shp'): load a .SHP prop container and dispatch its
 	 *  openshop()/openprop() messages (TI.EXE 0x2f18 FUN_00428450). */
 	virtual void openShopFile(const Common::String &name) {}
+
+	/** closeshopfile('name.shp'): remove the shop and its props (0x2f19). */
+	virtual void closeShopFile(const Common::String &name) {}
 
 	/**
 	 * sendtoshop('file.shp', message(args)): dispatch @p message against the

@@ -378,20 +378,17 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 					targets.size() > 2 ? targets[2].strValue : Common::String(),
 					message, msgArgs);
 		break;
-	case 0x2f24: // sendtobutton(name, message) -> FUN_0040a410/FUN_0040a430:
-	             // chain [button script, node script, stage script, res2]
-	             // from the open stage archive (DAT_0046115c).
-	case 0x2f25: // sendtoflat(name, message) -> FUN_0040a940/FUN_0040a960
-		// These chains all end in BOOTFILE res2. While their target-specific
-		// scripts are pending, preserve the res2 hover fallback for idle():
-		// res2 setcursor(point) is cursor("arrow"). Do not do this for
-		// mousedown(), which would recurse through the boot handler if routed
-		// over the normal library chain.
-		if (message.equalsIgnoreCase("setcursor") && _host)
-			_host->setCursorResource("CURS.ARROW");
-		if (_trace)
-			debug(0, "    (scene/painting/button/flat message '%s' ignored: subsystem pending)",
-					message.c_str());
+	case 0x2f24: // sendtobutton(flat, button, message) -> FUN_0040a410/FUN_0040a430:
+	             // chain [button script, node script, stage script, res2].
+		if (_host)
+			_host->sendToButton(targets.size() > 0 ? targets[0].strValue : Common::String(),
+					targets.size() > 1 ? targets[1].strValue : Common::String(),
+					message, msgArgs);
+		break;
+	case 0x2f25: // sendtoflat(flat, message) -> FUN_0040a940/FUN_0040a960
+		if (_host)
+			_host->sendToFlat(targets.empty() ? Common::String() : targets[0].strValue,
+					message, msgArgs);
 		break;
 	default:
 		break;
@@ -593,6 +590,9 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x2f18: // openshopfile('name.shp') -> FUN_00428450: parse the .SHP,
 		             // then dispatch openshop() and per-prop openprop().
 			_host->openShopFile(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x2f19: // closeshopfile('name.shp') -> FUN_0042a7e0
+			_host->closeShopFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
 		case 0x3e8f: // propvisible(name, flag) -> FUN_00429d00
 			if (args.size() >= 2)
