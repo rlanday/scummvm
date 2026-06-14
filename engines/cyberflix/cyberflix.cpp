@@ -1750,30 +1750,15 @@ void CyberflixEngine::forceUpdate() {
 // blacktoscreen(target, n) / screentoblack(target, n): palette-only fade
 // between black and the target clut, one interpolation step per 60 Hz tick
 // (FUN_0041b3f0 / FUN_0041b3a0 stepping FUN_0041b200 against the scaled timer).
-// Verified: TI.EXE's blacktoscreen (FUN_00446b00 -> FUN_004470b0 -> FUN_0041b3f0)
-// only resolves the target CLUT and interpolates the palette; it does NOT
-// re-render props. ScummVM currently has no separate native SET framebuffer to
-// reveal after movie playback, so rebuild the SET from live prop state before a
-// 'set' fade-in. This keeps hidden props (e.g. invenhelp after initprop()) gone
-// visually as well as from hittest.
+// Verified: TI.EXE's blacktoscreen (FUN_00446b00 -> FUN_004470b0 ->
+// FUN_0041b3f0) only resolves the target CLUT and interpolates the palette; it
+// does NOT re-render props. Scripts redraw first via visualeffect(plain, 0).
 void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool toBlack) {
 	byte to[256 * 3];
 	if (!resolveClut(target, to))
 		return;
 	if (steps < 1)
 		steps = 1;
-
-	if (!toBlack) {
-		Common::String key = target;
-		key.toLowercase();
-		if (key == "stage" && _stage && _stage->isOpen()) {
-			renderStageNode(_stageNode);
-			_propsDirty = false;
-		} else if (key == "set" && _set && _set->isOpen() && _setScene >= 0) {
-			renderSetScene(_setScene, _setAngle);
-			_propsDirty = false;
-		}
-	}
 
 	byte from[256 * 3];
 	if (toBlack) {
@@ -1818,11 +1803,30 @@ void CyberflixEngine::fadePaletteSteps(const byte (&from)[256 * 3], const byte (
 	_system->updateScreen();
 }
 
-// visualeffect(effect, dur) (FUN_00446400): set the default transition used
-// by subsequent set/stage redraws (effect codes 0x5dc1..0x5dd5; the boot
-// scripts only ever select 'plain' 0x5dce = immediate blit, which is what the
-// renderer already does). Stored for when other effects are implemented.
+// visualeffect(effect, dur) (FUN_00446400): mark a full-screen dirty rect
+// (FUN_00441ce0(2)), run the compositor (FUN_00423a60), then apply the chosen
+// visual transition to the full-screen backing buffer (FUN_004439c0). The boot
+// scripts use plain (0x5dce) before blacktoscreen('set'/'stage') so the pixels
+// are already redrawn while the palette is black.
 void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
+	if (duration < 1)
+		duration = 1;
+	else if (duration > 1000)
+		duration = 1000;
+
+	refreshPropsIfDirty();
+	if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
+		if (_setTransitionType != kSetTransitionNone)
+			advanceSetTransition();
+		else
+			renderSetScene(_setScene, _setTable, _setAngle, _setView);
+	} else if (_stage && _stage->isOpen()) {
+		renderStageNode(_stageNode);
+		_propsDirty = false;
+	} else {
+		_system->updateScreen();
+	}
+
 	debug(1, "Cyberflix: visualeffect(%#x, %d)", effect, duration);
 }
 
@@ -2174,10 +2178,10 @@ void CyberflixEngine::displaySetFrame(const FrameImage &frame) {
 	}
 	// Screen-space props (HELP button, life preserver, owned items...) on top
 	// of the bar/room. The original's compositor draws screen items (negative
-	// depth, clipped to the screen rect FUN_00443250) ordered by depth — more
-	// negative paints FIRST so shallower items overdraw (display-item builder
-	// FUN_0042bb90, depth from prop record +0x26). World-mode props (angle/
-	// scale path) land with set-prop rendering.
+	// depth, clipped to the screen rect FUN_00443250) ordered by depth — larger
+	// signed depths paint first, so more-negative items overdraw them (display
+	// builder FUN_004434f0, depth from prop record +0x26). World-mode props
+	// (angle/scale path) land with set-prop rendering.
 	{
 		Common::Array<const Shop::Prop *> draw;
 		Common::Array<const Shop *> drawShop;
