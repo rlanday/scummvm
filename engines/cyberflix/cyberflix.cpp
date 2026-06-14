@@ -939,7 +939,7 @@ int CyberflixEngine::calcDeg(int32 a, int32 b) {
 	const int16 ay = (int16)(a & 0xffff);
 	const int16 bx = (int16)(b >> 16);
 	const int16 by = (int16)(b & 0xffff);
-	int deg = (int)(atan2((double)(bx - ax), (double)(by - ay)) *
+	int deg = (int)(atan2((double)(by - ay), (double)(bx - ax)) *
 			(256.0 / 6.28318530717958647692));
 	deg %= 256;
 	if (deg < 0)
