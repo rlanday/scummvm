@@ -209,6 +209,10 @@ public:
 	 */
 	Common::String hitTestPainting(uint32 scene, const Common::String &view, int16 x, int16 y) const;
 
+	/** True if named painting @p painting in @p scene/@p view contains @p x,@p y. */
+	bool pointInPainting(uint32 scene, const Common::String &view,
+			const Common::String &painting, int16 x, int16 y) const;
+
 	/** Painting @p painting's behavior script in @p scene/@p view, or null. */
 	const Script *paintingScript(uint32 scene, const Common::String &view,
 			const Common::String &painting) const;

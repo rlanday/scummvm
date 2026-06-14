@@ -154,13 +154,15 @@ public:
 	void propScale(const Common::String &name, int scale) override;
 	void propZClip(const Common::String &name, int dist) override;
 	void propDist(const Common::String &name, int dist) override;
-	void propDeg(const Common::String &name, int deg) override;
+	int propDeg(const Common::String &name, const int *newDeg) override;
 	Common::String propOwner(const Common::String &name, const Common::String *newOwner) override;
 	int propValue(const Common::String &name, const int *newValue) override;
 	int countProps() override;
 	Common::String indexToProp(int index) override;
 	bool pointInButton(const Common::String &flat,
 			const Common::String &button, int32 packedPoint) override;
+	bool pointInPainting(const Common::String &scene, const Common::String &view,
+			const Common::String &painting, int32 packedPoint) override;
 	Common::String hitTest(int32 packedPoint) override;
 	Common::String hitTestResult() override;
 	int32 mousePoint() override;

@@ -341,8 +341,9 @@ public:
 	 *  (only applied when d < 0 and the prop is in screen mode). */
 	virtual void propDist(const Common::String &name, int dist) {}
 
-	/** propdeg(name, deg) (0x3e90): set the prop's view angle. */
-	virtual void propDeg(const Common::String &name, int deg) {}
+	/** propdeg(name[, deg]) (0x3e90 FUN_00429730/FUN_00429520): get or set
+	 *  the prop's 0..255 view angle. */
+	virtual int propDeg(const Common::String &name, const int *newDeg) { return 0; }
 
 	/** propowner(name[, owner]) (0x3ea0 FUN_00428d40): set (2 args) or get
 	 *  (1 arg) the prop's owner string; the player is "frank". */
@@ -361,6 +362,12 @@ public:
 	 *  button rect containment, with point packed as (x << 16) | y. */
 	virtual bool pointInButton(const Common::String &flat,
 			const Common::String &button, int32 packedPoint) { return false; }
+
+	/** pointinpainting(scene, view, painting, point) (0x4e31 FUN_004322e0):
+	 *  named SET painting rect containment, with point packed as (x << 16) | y. */
+	virtual bool pointInPainting(const Common::String &scene,
+			const Common::String &view, const Common::String &painting,
+			int32 packedPoint) { return false; }
 
 	/**
 	 * hittest(point) (0x4e66 FUN_00435e70). @p packedPoint packs the screen

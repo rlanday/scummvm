@@ -875,6 +875,22 @@ bool CyberflixEngine::pointInButton(const Common::String &flat,
 	return hit;
 }
 
+bool CyberflixEngine::pointInPainting(const Common::String &scene,
+		const Common::String &view, const Common::String &painting, int32 packedPoint) {
+	if (!_set || !_set->isOpen())
+		return false;
+	int sceneIdx = _set->findScene(scene);
+	if (sceneIdx < 0)
+		return false;
+	const int16 x = (int16)(packedPoint >> 16);
+	const int16 y = (int16)(packedPoint & 0xffff);
+	bool hit = _set->pointInPainting((uint32)sceneIdx, view, painting, x, y);
+	debug(1, "Cyberflix: pointinpainting('%s', '%s', '%s', %d,%d) -> %s",
+			scene.c_str(), view.c_str(), painting.c_str(), x, y,
+			hit ? "true" : "false");
+	return hit;
+}
+
 // result() -> TI.EXE FUN_004366a0: the kind recorded by the last hittest.
 Common::String CyberflixEngine::hitTestResult() {
 	return _hitKind;
@@ -1245,16 +1261,17 @@ void CyberflixEngine::propDist(const Common::String &name, int dist) {
 	}
 }
 
-void CyberflixEngine::propDeg(const Common::String &name, int deg) {
+int CyberflixEngine::propDeg(const Common::String &name, const int *newDeg) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
 		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
-		return;
+		return 0;
 	}
-	if (prop->angle != (int16)deg) {
-		prop->angle = (int16)deg;
+	if (newDeg && prop->angle != (int16)(*newDeg & 0xff)) {
+		prop->angle = (int16)(*newDeg & 0xff);
 		_propsDirty = true;
 	}
+	return prop->angle;
 }
 
 Common::String CyberflixEngine::propOwner(const Common::String &name, const Common::String *newOwner) {

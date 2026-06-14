@@ -695,9 +695,13 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() >= 2)
 				_host->propDist(args[0].strValue, args[1].intValue);
 			break;
-		case 0x3e90: // propdeg(name, deg)
-			if (args.size() >= 2)
-				_host->propDeg(args[0].strValue, args[1].intValue);
+		case 0x3e90: // propdeg(name[, deg]) -> FUN_00429730/FUN_00429520
+			if (args.size() >= 2) {
+				int deg = args[1].intValue;
+				return Value::makeInt(_host->propDeg(args[0].strValue, &deg));
+			}
+			if (args.size() == 1)
+				return Value::makeInt(_host->propDeg(args[0].strValue, nullptr));
 			break;
 		case 0x3ea0: // propowner(name[, owner]) -> FUN_00428d40: get or set
 			if (args.size() >= 2)
@@ -721,6 +725,11 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() >= 3)
 				return Value::makeBool(_host->pointInButton(args[0].strValue,
 						args[1].strValue, args[2].intValue));
+			return Value::makeBool(false);
+		case 0x4e31: // pointinpainting(scene, view, painting, point) -> FUN_004322e0
+			if (args.size() >= 4)
+				return Value::makeBool(_host->pointInPainting(args[0].strValue,
+						args[1].strValue, args[2].strValue, args[3].intValue));
 			return Value::makeBool(false);
 		case 0x4e66: // hittest(point) -> FUN_00435e70: name of the topmost item
 		             // under the packed point; kind stored for result()

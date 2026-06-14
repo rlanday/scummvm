@@ -484,6 +484,28 @@ Common::String Set::hitTestPainting(uint32 scene, const Common::String &view, in
 	return Common::String();
 }
 
+bool Set::pointInPainting(uint32 scene, const Common::String &view,
+		const Common::String &painting, int16 x, int16 y) const {
+	const byte *v = viewRecord(scene, view);
+	uint32 count = 0, length = 0;
+	const byte *table = paintingTable(v, count, length);
+	if (!table)
+		return false;
+	for (uint32 i = 0; i < count; ++i) {
+		const byte *rec = table + 8 + i * 0x24;
+		if (8 + i * 0x24 + 0x24 > length)
+			break;
+		if (!painting.equalsIgnoreCase(pascalString(rec + 0x14)))
+			continue;
+		int16 top = (int16)READ_LE_UINT16(rec + 0x08);
+		int16 left = (int16)READ_LE_UINT16(rec + 0x0a);
+		int16 bottom = (int16)READ_LE_UINT16(rec + 0x0c);
+		int16 right = (int16)READ_LE_UINT16(rec + 0x0e);
+		return x >= left && x < right && y >= top && y < bottom;
+	}
+	return false;
+}
+
 const Script *Set::paintingScript(uint32 scene, const Common::String &view,
 		const Common::String &painting) const {
 	const byte *v = viewRecord(scene, view);
