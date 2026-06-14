@@ -598,8 +598,19 @@ bool CyberflixEngine::setVisible(const bool *newVisible) {
 	if (!_set || !_set->isOpen())
 		return false;
 	if (newVisible) {
+		bool wasVisible = _setVisible;
 		_setVisible = *newVisible;
-		_propsDirty = true;
+		if (_setVisible) {
+			if (!wasVisible && _setScene >= 0)
+				renderSetScene(_setScene, _setTable, _setAngle, _setView);
+			else
+				_propsDirty = true;
+		} else {
+			_setTransitionType = kSetTransitionNone;
+			_propsDirty = false;
+			if (_stage && _stage->isOpen())
+				renderStageNode(_stageNode);
+		}
 	}
 	return _setVisible;
 }
@@ -697,7 +708,7 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 		return draw[i]->name;
 	}
 
-	if (_set && _set->isOpen() && _setScene >= 0) {
+	if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
 		const int16 vl = _set->viewLeft(), vt = _set->viewTop();
 		if (x >= vl && x < vl + (int)_set->width() && y >= vt && y < vt + (int)_set->height()) {
 			if (_setTransitionType == kSetTransitionNone) {
@@ -990,6 +1001,12 @@ void CyberflixEngine::refreshPropsIfDirty() {
 	// props are picked up by the next renderSetScene.
 	if (!_propsDirty)
 		return;
+	if (!_setVisible) {
+		if (_stage && _stage->isOpen())
+			renderStageNode(_stageNode);
+		_propsDirty = false;
+		return;
+	}
 	if (_set && _set->isOpen() && _setScene >= 0)
 		renderSetScene(_setScene, _setAngle);
 }
@@ -1670,7 +1687,7 @@ void CyberflixEngine::sendToPainting(const Common::String &sceneName, const Comm
 }
 
 void CyberflixEngine::navigateSet(const Common::String &action) {
-	if (!_set || !_set->isOpen() || _setScene < 0)
+	if (!_setVisible || !_set || !_set->isOpen() || _setScene < 0)
 		return;
 	if (_setTransitionType != kSetTransitionNone)
 		return;
@@ -1731,7 +1748,8 @@ void CyberflixEngine::navigateSet(const Common::String &action) {
 }
 
 void CyberflixEngine::advanceSetTransition() {
-	if (_setTransitionType == kSetTransitionNone || !_set || !_set->isOpen() || _setScene < 0)
+	if (!_setVisible || _setTransitionType == kSetTransitionNone ||
+			!_set || !_set->isOpen() || _setScene < 0)
 		return;
 
 	if (_setTransitionType == kSetTransitionTurn) {
@@ -1830,10 +1848,11 @@ void CyberflixEngine::renderSetScene(int scene, int table, int angle, const Comm
 	memset(rgb, 0, sizeof(rgb));
 	// As with stage nodes: while the screen palette is black the room is
 	// painted invisibly and revealed later by blacktoscreen('set', n).
-	if (_set->loadSetPalette(rgb) && !paletteIsBlack())
+	if (_setVisible && _set->loadSetPalette(rgb) && !paletteIsBlack())
 		programPalette(rgb);
 
-	displaySetFrame(frame);
+	if (_setVisible)
+		displaySetFrame(frame);
 
 	debug(1, "Cyberflix: rendered set '%s' scene %d '%s' angle %d (%ux%u)",
 			_set->name().c_str(), scene, _set->sceneName((uint32)scene).c_str(),
@@ -1841,7 +1860,7 @@ void CyberflixEngine::renderSetScene(int scene, int table, int angle, const Comm
 }
 
 void CyberflixEngine::displaySetFrame(const FrameImage &frame) {
-	if (!_set || !_set->isOpen())
+	if (!_setVisible || !_set || !_set->isOpen())
 		return;
 
 	Graphics::Surface *screen = _system->lockScreen();
