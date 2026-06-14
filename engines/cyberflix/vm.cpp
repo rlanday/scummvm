@@ -24,6 +24,9 @@
 
 #include "cyberflix/vm.h"
 
+#include <cstdlib>
+#include <cstring>
+
 namespace Cyberflix {
 
 Common::String Value::toString() const {
@@ -52,6 +55,37 @@ static bool shouldLogTransitionDispatch(const Common::String &name) {
 			name.equalsIgnoreCase("savestages") ||
 			name.equalsIgnoreCase("openflat") ||
 			name.equalsIgnoreCase("closeflat");
+}
+
+static int32 stringToNum(const Common::String &text) {
+	return (int32)strtol(text.c_str(), nullptr, 10);
+}
+
+static Common::String findWord(const Common::String &text, const Common::String &delimiter,
+		int32 wordIndex) {
+	if (wordIndex < 1)
+		return Common::String();
+
+	if (delimiter.empty()) {
+		if ((uint32)wordIndex > text.size())
+			return Common::String();
+		return Common::String(text.c_str() + wordIndex - 1, 1);
+	}
+
+	uint32 wordStart = 0;
+	int32 remaining = wordIndex;
+	for (uint32 i = 0; i + delimiter.size() <= text.size(); ++i) {
+		bool atDelimiter =
+				!memcmp(text.c_str() + i, delimiter.c_str(), delimiter.size());
+		if (atDelimiter) {
+			if (--remaining <= 0)
+				return Common::String(text.c_str() + wordStart, i - wordStart);
+			i += delimiter.size() - 1;
+			wordStart = i + 1;
+		}
+	}
+
+	return Common::String();
 }
 
 Value ScriptVM::getVar(const Common::String &name) const {
@@ -477,6 +511,21 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 	// not handled here remain logged no-ops (see files/method-catalog.md).
 	// (The message-carrying send* builtins never reach this path; they are
 	// routed through dispatchMessageBuiltin with the message unevaluated.)
+	switch (opcode) {
+	case 0x4e39: // stringtonum(str) -> FUN_00436ee0
+		return Value::makeInt(stringToNum(args.empty() ? Common::String() : args[0].strValue));
+	case 0x4e3a: // numtostring(n) -> FUN_00436f60
+		return Value::makeString(Common::String::format("%d", args.empty() ? 0 : args[0].intValue));
+	case 0x4e56: // findword(str, delimiter, index) -> FUN_00437160, 1-based
+		return Value::makeString(findWord(args.size() > 0 ? args[0].strValue : Common::String(),
+				args.size() > 1 ? args[1].strValue : Common::String(),
+				args.size() > 2 ? args[2].intValue : 0));
+	case 0x4e58: // stringlength(str) -> FUN_004373e0
+		return Value::makeInt(args.empty() ? 0 : args[0].strValue.size());
+	default:
+		break;
+	}
+
 	if (_host) {
 		switch (opcode) {
 		case 0x2ef1: // playmovie('name.mov')
