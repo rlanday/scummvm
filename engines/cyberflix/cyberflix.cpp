@@ -1111,6 +1111,58 @@ void CyberflixEngine::propXY(const Common::String &name, int x, int y) {
 	_propsDirty = true;
 }
 
+void CyberflixEngine::propSet(const Common::String &name, const Common::String &setName) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propset('%s'): no such prop", name.c_str());
+		return;
+	}
+	Common::String key = setName;
+	key.toLowercase();
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propset('%s', '%s') mode %u -> 1", name.c_str(),
+				key.c_str(), prop->mode);
+	prop->setName = key;
+	prop->mode = 1; // FUN_00428c20 writes record +0x12 = 1 for SET placement.
+	_propsDirty = true;
+}
+
+void CyberflixEngine::propXYZ(const Common::String &name, int x, int y, int z) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propxyz('%s'): no such prop", name.c_str());
+		return;
+	}
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propxyz('%s', %d, %d, %d) mode %u -> 1",
+				name.c_str(), x, y, z, prop->mode);
+	prop->mode = 1; // FUN_0042a140: world/SET-space placement.
+	prop->x = (int16)x;
+	prop->y = (int16)y;
+	prop->z = (int16)z;
+	_propsDirty = true;
+}
+
+void CyberflixEngine::propScale(const Common::String &name, int scale) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propscale('%s'): no such prop", name.c_str());
+		return;
+	}
+	prop->scale = scale < 0 ? 0 : scale;
+	_propsDirty = true;
+}
+
+void CyberflixEngine::propZClip(const Common::String &name, int dist) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propzclip('%s'): no such prop", name.c_str());
+		return;
+	}
+	prop->zClip = dist;
+	_propsDirty = true;
+}
+
 void CyberflixEngine::propDist(const Common::String &name, int dist) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {

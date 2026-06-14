@@ -148,7 +148,11 @@ public:
 	void propVisible(const Common::String &name, bool visible) override;
 	Common::String propView(const Common::String &name) override;
 	void propView(const Common::String &name, const Common::String &shape) override;
+	void propSet(const Common::String &name, const Common::String &setName) override;
+	void propXYZ(const Common::String &name, int x, int y, int z) override;
 	void propXY(const Common::String &name, int x, int y) override;
+	void propScale(const Common::String &name, int scale) override;
+	void propZClip(const Common::String &name, int dist) override;
 	void propDist(const Common::String &name, int dist) override;
 	void propDeg(const Common::String &name, int deg) override;
 	Common::String propOwner(const Common::String &name, const Common::String *newOwner) override;

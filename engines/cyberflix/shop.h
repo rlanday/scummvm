@@ -88,9 +88,11 @@ public:
 		uint16 mode = 1;            ///< +0x12; 0 = screen space (set by propxy)
 		int16 y = 0;                ///< +0x14 anchor V
 		int16 x = 0;                ///< +0x16 anchor H
+		int16 z = 0;                ///< propxyz world Z (world props pending)
 		int16 angle = 0;            ///< +0x18 (propdeg)
 		int16 depth = 0;            ///< +0x26 (negative = screen-clipped item)
 		int32 scale = 1000;         ///< +0x28
+		int32 zClip = 0;            ///< propzclip distance (world props pending)
 		int32 value = 0;            ///< +0x46 (propvalue)
 		Common::String shapeName;   ///< +0x7e current view (first shape at init)
 		Common::String owner;       ///< +0x8c (player == "frank")

@@ -657,9 +657,26 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() == 1)
 				return Value::makeString(_host->propView(args[0].strValue));
 			break;
+		case 0x3e9b: // propset(name, set) -> FUN_00428c20
+			if (args.size() >= 2)
+				_host->propSet(args[0].strValue, args[1].strValue);
+			break;
+		case 0x3e91: // propxyz(name, x, y, z) -> FUN_0042a140 (mode=1)
+			if (args.size() >= 4)
+				_host->propXYZ(args[0].strValue, args[1].intValue,
+						args[2].intValue, args[3].intValue);
+			break;
 		case 0x3e92: // propxy(name, x, y) -> FUN_0042a370 (mode=0, depth=-1)
 			if (args.size() >= 3)
 				_host->propXY(args[0].strValue, args[1].intValue, args[2].intValue);
+			break;
+		case 0x3e9c: // propscale(name, scale) -> FUN_00429870
+			if (args.size() >= 2)
+				_host->propScale(args[0].strValue, args[1].intValue);
+			break;
+		case 0x3eb4: // propzclip(name, dist) -> FUN_00428ea0
+			if (args.size() >= 2)
+				_host->propZClip(args[0].strValue, args[1].intValue);
 			break;
 		case 0x3e8d: // propdist(name, d) -> FUN_004295c0
 			if (args.size() >= 2)

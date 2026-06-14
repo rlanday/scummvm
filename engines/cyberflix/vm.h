@@ -317,9 +317,23 @@ public:
 	/** propview(name, shape) setter (0x3e99 FUN_004293a0): select the named shape. */
 	virtual void propView(const Common::String &name, const Common::String &shape) {}
 
+	/** propset(name, set) (0x3e9b FUN_00428c20): assign SET placement and
+	 * switch back to world/SET-space mode. */
+	virtual void propSet(const Common::String &name, const Common::String &setName) {}
+
+	/** propxyz(name, x, y, z) (0x3e91 FUN_0042a140): world/SET-space placement,
+	 * setting mode=1 so the prop is no longer a screen overlay. */
+	virtual void propXYZ(const Common::String &name, int x, int y, int z) {}
+
 	/** propxy(name, x, y) (0x3e92 FUN_0042a370): screen-space placement —
 	 *  sets mode=0 and depth=-1 alongside the anchor point. */
 	virtual void propXY(const Common::String &name, int x, int y) {}
+
+	/** propscale(name, scale) (0x3e9c FUN_00429870): non-negative world scale. */
+	virtual void propScale(const Common::String &name, int scale) {}
+
+	/** propzclip(name, dist) (0x3eb4 FUN_00428ea0): world z clip distance. */
+	virtual void propZClip(const Common::String &name, int dist) {}
 
 	/** propdist(name, d) (0x3e8d FUN_004295c0): screen-space stacking depth
 	 *  (only applied when d < 0 and the prop is in screen mode). */
