@@ -624,6 +624,14 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() == 1)
 				return Value::makeString(_host->propOwner(args[0].strValue, nullptr));
 			break;
+		case 0x3eaa: // propvalue(name[, value]) -> FUN_004290d0/FUN_00428e00
+			if (args.size() >= 2) {
+				int value = args[1].intValue;
+				return Value::makeInt(_host->propValue(args[0].strValue, &value));
+			}
+			if (args.size() == 1)
+				return Value::makeInt(_host->propValue(args[0].strValue, nullptr));
+			break;
 		case 0x4e3f: // countprops() -> FUN_0042b4f0: global count, all shops
 			return Value::makeInt(_host->countProps());
 		case 0x4e40: // indextoprop(i) -> FUN_0042b550: 1-based global index

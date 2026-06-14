@@ -1106,6 +1106,17 @@ Common::String CyberflixEngine::propOwner(const Common::String &name, const Comm
 	return prop->owner;
 }
 
+int CyberflixEngine::propValue(const Common::String &name, const int *newValue) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propvalue('%s'): no such prop", name.c_str());
+		return 0;
+	}
+	if (newValue)
+		prop->value = *newValue; // FUN_00428e00: copy int to record +0x46
+	return prop->value;
+}
+
 int CyberflixEngine::countProps() {
 	int total = 0;
 	for (uint32 i = 0; i < _shops.size(); ++i)

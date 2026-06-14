@@ -91,6 +91,7 @@ public:
 		int16 angle = 0;            ///< +0x18 (propdeg)
 		int16 depth = 0;            ///< +0x26 (negative = screen-clipped item)
 		int32 scale = 1000;         ///< +0x28
+		int32 value = 0;            ///< +0x46 (propvalue)
 		Common::String shapeName;   ///< +0x7e current view (first shape at init)
 		Common::String owner;       ///< +0x8c (player == "frank")
 

@@ -145,6 +145,7 @@ public:
 	void propDist(const Common::String &name, int dist) override;
 	void propDeg(const Common::String &name, int deg) override;
 	Common::String propOwner(const Common::String &name, const Common::String *newOwner) override;
+	int propValue(const Common::String &name, const int *newValue) override;
 	int countProps() override;
 	Common::String indexToProp(int index) override;
 	Common::String hitTest(int32 packedPoint) override;

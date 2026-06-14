@@ -313,6 +313,9 @@ public:
 	 *  (1 arg) the prop's owner string; the player is "frank". */
 	virtual Common::String propOwner(const Common::String &name, const Common::String *newOwner) { return Common::String(); }
 
+	/** propvalue(name[, value]) (0x3eaa FUN_004290d0/FUN_00428e00): stored int. */
+	virtual int propValue(const Common::String &name, const int *newValue) { return 0; }
+
 	/** countprops() (0x4e3f FUN_0042b4f0): total props across ALL open shops. */
 	virtual int countProps() { return 0; }
 
