@@ -759,12 +759,13 @@ void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw
 			}
 		}
 	}
-	// Stable insertion sort, most-negative depth first.
+	// Native FUN_004434f0 sorts larger signed depths first, then hittest walks
+	// the display list backward. This leaves more-negative screen props on top.
 	for (uint32 i = 1; i < draw.size(); ++i) {
 		const Shop::Prop *p = draw[i];
 		const Shop *sh = drawShop[i];
 		uint32 j = i;
-		for (; j > 0 && draw[j - 1]->depth > p->depth; --j) {
+		for (; j > 0 && draw[j - 1]->depth < p->depth; --j) {
 			draw[j] = draw[j - 1];
 			drawShop[j] = drawShop[j - 1];
 		}
