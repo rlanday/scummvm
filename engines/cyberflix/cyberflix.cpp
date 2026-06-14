@@ -2568,6 +2568,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// that obeys its nav command; non-empty => the player holds the frame and
 	// waits for a click, as the main menu does).
 	Common::Array<Common::String> pfName;
+	Common::Array<Common::String> pfNavTarget;
 	Common::Array<Common::Array<MovieButton> > pfButtons;
 	// Per-frame hold duration in ms (event chunk +2 in scaled timer units,
 	// floored by masterHdr[+0x1c]). Used to pace interactive movies frame by
@@ -2690,6 +2691,11 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				pfDrawOp.push_back((eb && eb + 0xe <= fileData.end())
 						? READ_LE_UINT16(eb + 0xc) : 0x10 /* plain blit */);
 				pfName.push_back(readPascalString(rec + 0x1a, fileData));
+				// FUN_0040d710 command 2 resolves a Pascal target in the event
+				// chunk. The decompile's +0x19 is word-indexed; in the raw
+				// record+8 frame used here it is byte offset +0x32.
+				pfNavTarget.push_back((eb && eb + 0x33 <= fileData.end())
+						? readPascalString(eb + 0x32, fileData) : Common::String());
 
 				// Interactive buttons: raw event chunks store a u32 count at
 				// +0x442 and 0x40-byte button records at +0x446. Ghidra's
@@ -3052,7 +3058,14 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			}
 			if (nav == 1)
 				break; // END: leave this (pressed) frame on screen and return
-			++fi;
+			if (nav == 2 && fi < pfNavTarget.size()) {
+				int idx = resolveFrameName(pfName, pfNavTarget[fi]);
+				fi = (idx >= 0) ? (uint32)idx : fi + 1;
+			} else if (nav == 7) {
+				fi = fi > 0 ? fi - 1 : 0;
+			} else {
+				++fi;
+			}
 			continue;
 		}
 
@@ -3063,8 +3076,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			break;
 		}
 
-		// NEXT (cmd 6, and any not-yet-implemented command): wait until this
-		// frame's authored end time on the playback clock, then advance.
+		// Wait until this frame's authored end time on the playback clock, then
+		// run the same nav command interpreter path as FUN_0040d710.
 		for (;;) {
 			while (_eventMan->pollEvent(event))
 				wallStartMs += handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
@@ -3077,10 +3090,18 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				break;
 			_system->delayMillis(5);
 		}
-		++fi;
+		if (nav == 2 && fi < pfNavTarget.size()) {
+			int idx = resolveFrameName(pfName, pfNavTarget[fi]);
+			fi = (idx >= 0) ? (uint32)idx : fi + 1;
+		} else if (nav == 7) {
+			fi = fi > 0 ? fi - 1 : 0;
+		} else {
+			++fi;
+		}
 	}
 
 	_mixer->stopHandle(audioHandle);
+	_eventMan->purgeKeyboardEvents();
 
 	// Leave the cursor hidden when we hand control back; the next interactive
 	// movie/node re-shows it.
