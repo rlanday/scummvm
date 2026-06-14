@@ -39,6 +39,17 @@ Common::String Value::toString() const {
 ScriptVM::ScriptVM() : _pc(0), _executed(0), _trace(false), _host(nullptr), _callDepth(0) {
 }
 
+static bool shouldLogTransitionDispatch(const Common::String &name) {
+	return name.equalsIgnoreCase("dolife") ||
+			name.equalsIgnoreCase("transtoflat") ||
+			name.equalsIgnoreCase("transfromflat") ||
+			name.equalsIgnoreCase("hideinterface") ||
+			name.equalsIgnoreCase("showinterface") ||
+			name.equalsIgnoreCase("savestages") ||
+			name.equalsIgnoreCase("openflat") ||
+			name.equalsIgnoreCase("closeflat");
+}
+
 Value ScriptVM::getVar(const Common::String &name) const {
 	// Scope lookup: innermost local scope first (TI.EXE 0x004138f0 against the
 	// per-call scope object), then the global object ([0x45f010]). Names are
@@ -758,6 +769,7 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 	if (handled)
 		*handled = false;
 	Value result;
+	const bool logTransitionDispatch = shouldLogTransitionDispatch(name);
 
 	if (_callDepth >= 64) { // TI.EXE has no explicit guard; protect the engine
 		warning("Cyberflix: script call depth overflow at '%s'", name.c_str());
@@ -769,6 +781,9 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 		const Script::Definition *def = lib->findDefinition(name);
 		if (!def)
 			continue;
+		if (logTransitionDispatch)
+			debug(1, "Cyberflix: script '%s' matched scope %d/%u body %u (%u args)",
+					name.c_str(), li, _libraries.size(), def->bodyStart, args.size());
 
 		_locals.push_back(Common::HashMap<Common::String, Value>());
 		for (uint32 i = 0; i < def->params.size(); ++i)
@@ -783,12 +798,18 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 			continue; // try the next scope on the chain
 		if (handled)
 			*handled = true;
+		if (logTransitionDispatch)
+			debug(1, "Cyberflix: script '%s' handled by scope %d -> %s",
+					name.c_str(), li, result.toString().c_str());
 		if (_trace)
 			debug(0, "  dispatch %s(%u args) -> %s", name.c_str(), args.size(),
 					result.toString().c_str());
 		return result;
 	}
 
+	if (logTransitionDispatch)
+		debug(1, "Cyberflix: script '%s' had no matching definition (%u scopes)",
+				name.c_str(), _libraries.size());
 	if (_trace)
 		debug(0, "  dispatch %s: no matching definition", name.c_str());
 	return result;

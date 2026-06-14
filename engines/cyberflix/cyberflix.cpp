@@ -309,9 +309,13 @@ bool CyberflixEngine::setGameCursor(const Common::String &name) {
 void CyberflixEngine::openStageFile(const Common::String &name) {
 	if (name.empty())
 		return;
+	debug(1, "Cyberflix: openstagefile('%s') from stage '%s' flat '%s'",
+			name.c_str(), currentStage().c_str(), currentFlat().c_str());
 	Common::SharedPtr<Stage> stage(new Stage());
-	if (!stage->open(name))
+	if (!stage->open(name)) {
+		debug(1, "Cyberflix: openstagefile('%s') failed", name.c_str());
 		return;
+	}
 	_stage = stage;
 	debug(1, "Cyberflix: stage '%s' open (%u nodes)", name.c_str(), _stage->nodeCount());
 
@@ -329,6 +333,8 @@ void CyberflixEngine::openStageFile(const Common::String &name) {
 void CyberflixEngine::closeStageFile() {
 	if (!_stage || !_stage->isOpen())
 		return;
+	debug(1, "Cyberflix: closestagefile() closing stage '%s' flat '%s'",
+			currentStage().c_str(), currentFlat().c_str());
 	Common::Array<Value> noArgs;
 	sendToFlat(currentFlat(), "closeflat", noArgs);
 	sendToStage("closestage", noArgs);
@@ -340,6 +346,8 @@ void CyberflixEngine::closeStageFile() {
 void CyberflixEngine::gotoFlat(const Value &flat) {
 	if (!_stage || !_stage->isOpen())
 		return;
+	debug(1, "Cyberflix: gotoflat(%s) in stage '%s' flat '%s'",
+			flat.toString().c_str(), currentStage().c_str(), currentFlat().c_str());
 	int node = -1;
 	if (flat.type == Value::kInt) {
 		node = flat.intValue - 1;
@@ -353,6 +361,7 @@ void CyberflixEngine::gotoFlat(const Value &flat) {
 	}
 	if (node == _stageNode)
 		return;
+	debug(1, "Cyberflix: gotoflat(%s) resolved node %d", flat.toString().c_str(), node);
 	Common::String openedName = _stage->name();
 	uint32 openedCount = _stage->nodeCount();
 	Common::String oldFlat = currentFlat();
@@ -1087,6 +1096,8 @@ void CyberflixEngine::propDist(const Common::String &name, int dist) {
 	}
 	// FUN_004295c0: only applied to screen-space props with a negative value.
 	if (prop->mode == 0 && dist < 0) {
+		debug(1, "Cyberflix: propdist('%s', %d) depth %d -> %d",
+				name.c_str(), dist, prop->depth, dist);
 		prop->depth = (int16)dist;
 		_propsDirty = true;
 	}
