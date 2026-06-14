@@ -45,6 +45,10 @@ static bool shouldLogTransitionDispatch(const Common::String &name) {
 			name.equalsIgnoreCase("transfromflat") ||
 			name.equalsIgnoreCase("hideinterface") ||
 			name.equalsIgnoreCase("showinterface") ||
+			name.equalsIgnoreCase("activateinterface") ||
+			name.equalsIgnoreCase("watchidle") ||
+			name.equalsIgnoreCase("bagidle") ||
+			name.equalsIgnoreCase("mapidle") ||
 			name.equalsIgnoreCase("savestages") ||
 			name.equalsIgnoreCase("openflat") ||
 			name.equalsIgnoreCase("closeflat");
@@ -59,10 +63,20 @@ Value ScriptVM::getVar(const Common::String &name) const {
 	// harmlessly (lookup miss at 0x0041395b returns the name).
 	Common::String key = name;
 	key.toLowercase();
-	if (!_locals.empty() && _locals.back().contains(key))
-		return _locals.back()[key];
-	if (_vars.contains(key))
-		return _vars[key];
+	if (!_locals.empty() && _locals.back().contains(key)) {
+		Value v = _locals.back()[key];
+		if (key == "tour")
+			debug(1, "Cyberflix: var tour local -> %s", v.toString().c_str());
+		return v;
+	}
+	if (_vars.contains(key)) {
+		Value v = _vars[key];
+		if (key == "tour")
+			debug(1, "Cyberflix: var tour global -> %s", v.toString().c_str());
+		return v;
+	}
+	if (key == "tour")
+		debug(1, "Cyberflix: var tour unbound");
 	return Value::makeSymbol(name);
 }
 

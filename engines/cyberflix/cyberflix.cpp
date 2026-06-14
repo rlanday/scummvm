@@ -1020,12 +1020,25 @@ void CyberflixEngine::sendToProp(const Common::String &propName, const Common::S
 	refreshPropsIfDirty();
 }
 
+static bool shouldLogInterfaceProp(const Common::String &name) {
+	return name.equalsIgnoreCase("life") ||
+			name.equalsIgnoreCase("watch") ||
+			name.equalsIgnoreCase("bag") ||
+			name.equalsIgnoreCase("map") ||
+			name.equalsIgnoreCase("lid") ||
+			name.equalsIgnoreCase("light") ||
+			name.equalsIgnoreCase("invenhelp");
+}
+
 bool CyberflixEngine::propVisible(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
 		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
 		return false;
 	}
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propvisible('%s') -> %s", name.c_str(),
+				prop->visible ? "true" : "false");
 	return prop->visible;
 }
 
@@ -1035,6 +1048,9 @@ void CyberflixEngine::propVisible(const Common::String &name, bool visible) {
 		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
 		return;
 	}
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propvisible('%s', %s) old=%s", name.c_str(),
+				visible ? "true" : "false", prop->visible ? "true" : "false");
 	if (prop->visible != visible) {
 		prop->visible = visible;
 		_propsDirty = true;
@@ -1047,6 +1063,9 @@ Common::String CyberflixEngine::propView(const Common::String &name) {
 		warning("Cyberflix: propview('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propview('%s') -> '%s'", name.c_str(),
+				prop->shapeName.c_str());
 	return prop->shapeName;
 }
 
@@ -1066,6 +1085,9 @@ void CyberflixEngine::propView(const Common::String &name, const Common::String 
 	}
 	Common::String key = shape;
 	key.toLowercase();
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propview('%s', '%s') old='%s'", name.c_str(),
+				key.c_str(), prop->shapeName.c_str());
 	if (prop->shapeName != key) {
 		prop->shapeName = key;
 		_propsDirty = true;
@@ -1123,6 +1145,11 @@ Common::String CyberflixEngine::propOwner(const Common::String &name, const Comm
 	}
 	if (newOwner)
 		prop->owner = *newOwner; // FUN_00428d40: copy into record +0x8c
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propowner('%s'%s%s%s) -> '%s'", name.c_str(),
+				newOwner ? ", '" : "", newOwner ? newOwner->c_str() : "",
+				newOwner ? "'" : "",
+				prop->owner.c_str());
 	return prop->owner;
 }
 
