@@ -417,6 +417,9 @@ public:
 	/** calcdeg(a, b) (0x4e67 FUN_00435c70): signed 8-bit angle in 256ths of a
 	 *  full turn from packed point @p a to packed point @p b. */
 	virtual int calcDeg(int32 a, int32 b) { return 0; }
+
+	/** savegame(signature) (0x2f2d FUN_00426620): open the save UI and persist state. */
+	virtual void saveGame(const Common::String &signature) {}
 };
 
 /**
@@ -513,6 +516,8 @@ public:
 	 */
 	Value callFunction(const Common::String &name, const Common::Array<Value> &args,
 			bool *handled = nullptr);
+
+	const Common::HashMap<Common::String, Value> &globalVars() const { return _vars; }
 
 private:
 	void execute(const Script &script, uint32 index);

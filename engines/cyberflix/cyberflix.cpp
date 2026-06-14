@@ -242,7 +242,7 @@ Common::Platform CyberflixEngine::getPlatform() const {
 }
 
 bool CyberflixEngine::hasFeature(EngineFeature f) const {
-	return (f == kSupportsReturnToLauncher);
+	return (f == kSupportsReturnToLauncher) || (f == kSupportsSavingDuringRuntime);
 }
 
 // The cursor bitmaps are copyrighted game art, so they are loaded at runtime
@@ -1404,6 +1404,8 @@ void CyberflixEngine::openTrackFile(const Common::String &name) {
 		return;
 
 	Common::SharedPtr<ThemeTrack> track(new ThemeTrack());
+	track->sourceName = name;
+	track->sourceName.toLowercase();
 	track->name = name;
 	track->name.toLowercase();
 
@@ -2033,14 +2035,42 @@ void CyberflixEngine::pauseLoop(const Common::String &kind, bool paused) {
 void CyberflixEngine::makeCricket(const Common::String &name) {
 	if (name.empty())
 		return;
+	for (uint i = 0; i < _crickets.size(); ++i) {
+		if (_crickets[i].name.equalsIgnoreCase(name)) {
+			_crickets[i].paused = _cricketsPaused;
+			playSound(name, 1);
+			return;
+		}
+	}
+	CricketState cricket;
+	cricket.name = name;
+	cricket.paused = _cricketsPaused;
+	_crickets.push_back(cricket);
 	playSound(name, 1);
 }
 
 void CyberflixEngine::stopCricket(const Common::String &name) {
+	if (name.equalsIgnoreCase("all")) {
+		_crickets.clear();
+		return;
+	}
+	for (int i = (int)_crickets.size() - 1; i >= 0; --i) {
+		if (_crickets[(uint)i].name.equalsIgnoreCase(name))
+			_crickets.remove_at((uint)i);
+	}
 	debug(2, "Cyberflix: stopcricket('%s')", name.c_str());
 }
 
 void CyberflixEngine::pauseCricket(const Common::String &kind, bool paused) {
+	if (kind.equalsIgnoreCase("all")) {
+		_cricketsPaused = paused;
+		for (uint i = 0; i < _crickets.size(); ++i)
+			_crickets[i].paused = paused;
+	} else {
+		for (uint i = 0; i < _crickets.size(); ++i)
+			if (_crickets[i].name.equalsIgnoreCase(kind))
+				_crickets[i].paused = paused;
+	}
 	debug(2, "Cyberflix: pausecricket('%s', %d)", kind.c_str(), paused ? 1 : 0);
 }
 

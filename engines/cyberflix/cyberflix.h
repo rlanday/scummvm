@@ -76,6 +76,8 @@ public:
 	Common::Error run() override;
 
 	bool hasFeature(EngineFeature f) const override;
+	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
+	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
 
 	int getGameType() const;
 	const char *getGameId() const;
@@ -173,6 +175,7 @@ public:
 	int tick() override;
 	int calcDeg(int32 a, int32 b) override;
 	void setCursorResource(const Common::String &resourceName) override;
+	void saveGame(const Common::String &signature) override;
 
 private:
 	/**
@@ -340,6 +343,7 @@ private:
 	 * builtins. See files/audio-re-notes.md.
 	 */
 	struct ThemeTrack {
+		Common::String sourceName;    ///< Lowercased file name requested by opentrackfile().
 		Common::String name;          ///< Lowercased logical track name from master.
 		Common::Array<byte> fileData; ///< Whole container; cue payloads point in.
 		struct Cue {
@@ -395,6 +399,13 @@ private:
 	bool _loopsPaused = false;
 	void processScheduledLoops();
 
+	struct CricketState {
+		Common::String name;
+		bool paused = false;
+	};
+	Common::Array<CricketState> _crickets;
+	bool _cricketsPaused = false;
+
 	Common::String _pathSlots[9];        ///< Native path slots 0..8 (FUN_00438450).
 	Common::String _pathSlotArchives[9]; ///< SearchMan archive names for slots 1..8.
 	void registerPathSlotDirectory(int slot);
@@ -431,6 +442,8 @@ private:
 	 */
 	byte _screenClut[256 * 3] = {};
 	double _paletteGamma[3] = { 0.65, 0.65, 0.65 };
+
+	Common::String _saveSignature; ///< Current savegame() argument while the ScummVM dialog is active.
 };
 
 } // End of namespace Cyberflix

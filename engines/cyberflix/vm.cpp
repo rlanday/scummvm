@@ -813,6 +813,9 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 				_host->setCursorResource(res);
 			}
 			break;
+		case 0x2f2d: // savegame(signature) -> FUN_00426620/FUN_00426790
+			_host->saveGame(args.empty() ? Common::String() : args[0].strValue);
+			break;
 		default:
 			break;
 		}
