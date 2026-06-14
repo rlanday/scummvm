@@ -501,6 +501,32 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			// the boot scripts; forward the duration.
 			_host->setVisualEffect(0x5dce, args.size() > 1 ? args[1].intValue : 0);
 			break;
+		case 0x2ee5: // makeloop(kind, target, message, delay) -> FUN_00423e60
+			if (args.size() >= 4)
+				_host->makeLoop(args[0].strValue, args[1].strValue,
+						args[2].strValue, args[3].intValue);
+			break;
+		case 0x2eeb: // stoploop(kind[, target]) -> FUN_00446d30/FUN_00423bf0
+			if (!args.empty())
+				_host->stopLoop(args[0].strValue,
+						args.size() > 1 ? args[1].strValue : Common::String());
+			break;
+		case 0x3eae: // pauseloop(kind, flag)
+			if (args.size() >= 2)
+				_host->pauseLoop(args[0].strValue, args[1].intValue != 0);
+			break;
+		case 0x2ee7: // makecricket(name, x, y, dist, angle, delay) -> FUN_00425640
+			if (!args.empty())
+				_host->makeCricket(args[0].strValue);
+			break;
+		case 0x2eec: // stopcricket(name) -> FUN_00446db0/FUN_00423c80
+			if (!args.empty())
+				_host->stopCricket(args[0].strValue);
+			break;
+		case 0x3eaf: // pausecricket(kind, flag)
+			if (args.size() >= 2)
+				_host->pauseCricket(args[0].strValue, args[1].intValue != 0);
+			break;
 		case 0x4e55: // currentset() -> open set name or 'none'
 			return Value::makeString(_host->currentSet());
 		case 0x4e50: // currentstage() -> open stage name or native 'None'

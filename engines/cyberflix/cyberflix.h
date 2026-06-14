@@ -118,6 +118,13 @@ public:
 	void forceUpdate() override;
 	void fadePalette(const Common::String &target, int steps, bool toBlack) override;
 	void setVisualEffect(uint16 effect, int duration) override;
+	void makeLoop(const Common::String &kind, const Common::String &target,
+			const Common::String &message, int delay) override;
+	void stopLoop(const Common::String &kind, const Common::String &target) override;
+	void pauseLoop(const Common::String &kind, bool paused) override;
+	void makeCricket(const Common::String &name) override;
+	void stopCricket(const Common::String &name) override;
+	void pauseCricket(const Common::String &kind, bool paused) override;
 	void openTrackFile(const Common::String &name) override;
 	void closeTrackFile(const Common::String &name) override;
 	void playTheme(const Common::String &name) override;
@@ -363,6 +370,16 @@ private:
 	};
 	SoundSlot _soundSlots[2]; ///< Normal sound slots (TI.EXE DAT_00460a58/70).
 	SoundSlot _voiceSlot;     ///< Voice slot (TI.EXE DAT_00460aa0).
+
+	struct ScheduledLoop {
+		Common::String kind;
+		Common::String target;
+		Common::String message;
+		uint32 dueMillis = 0;
+	};
+	Common::Array<ScheduledLoop> _scheduledLoops;
+	bool _loopsPaused = false;
+	void processScheduledLoops();
 
 	Common::String _pathSlots[9];        ///< Native path slots 0..8 (FUN_00438450).
 	Common::String _pathSlotArchives[9]; ///< SearchMan archive names for slots 1..8.

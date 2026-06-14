@@ -209,6 +209,25 @@ public:
 	 *  transition for subsequent redraws ('plain' = opcode 0x5dce). */
 	virtual void setVisualEffect(uint16 effect, int duration) {}
 
+	/** makeloop(kind, target, message, delay): schedule a native loop callback. */
+	virtual void makeLoop(const Common::String &kind, const Common::String &target,
+			const Common::String &message, int delay) {}
+
+	/** stoploop(kind[, target]): remove scheduled loop callbacks. */
+	virtual void stopLoop(const Common::String &kind, const Common::String &target) {}
+
+	/** pauseloop(kind, paused): pause or resume scheduled loop callbacks. */
+	virtual void pauseLoop(const Common::String &kind, bool paused) {}
+
+	/** makecricket(name, ...): start a positional/ambient SFX cue. */
+	virtual void makeCricket(const Common::String &name) {}
+
+	/** stopcricket(name): stop a native cricket ambient cue. */
+	virtual void stopCricket(const Common::String &name) {}
+
+	/** pausecricket(kind, paused): pause or resume cricket ambient cues. */
+	virtual void pauseCricket(const Common::String &kind, bool paused) {}
+
 	/** opentrackfile('name.trk'): load a .TRK track file (TI.EXE FUN_00411be0). */
 	virtual void openTrackFile(const Common::String &name) {}
 

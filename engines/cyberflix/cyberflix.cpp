@@ -1778,6 +1778,91 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 	debug(1, "Cyberflix: visualeffect(%#x, %d)", effect, duration);
 }
 
+void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String &target,
+		const Common::String &message, int delay) {
+	if (kind.empty() || message.empty()) {
+		warning("Cyberflix: makeloop('%s', '%s', '%s', %d): invalid arguments",
+				kind.c_str(), target.c_str(), message.c_str(), delay);
+		return;
+	}
+
+	stopLoop(kind, target);
+
+	ScheduledLoop loop;
+	loop.kind = kind;
+	loop.kind.toLowercase();
+	loop.target = target;
+	loop.message = message;
+	const uint32 delayMs = delay <= 0 ? 0 :
+			(delay < 1000 ? (uint32)((uint64)delay * 1000 / 60) : (uint32)delay);
+	loop.dueMillis = _system->getMillis() + delayMs;
+	_scheduledLoops.push_back(loop);
+	debug(2, "Cyberflix: makeloop('%s', '%s', '%s', %d) due in %u ms",
+			kind.c_str(), target.c_str(), message.c_str(), delay, delayMs);
+}
+
+void CyberflixEngine::stopLoop(const Common::String &kind, const Common::String &target) {
+	if (kind.empty())
+		return;
+	const bool all = kind.equalsIgnoreCase("all");
+	for (int i = (int)_scheduledLoops.size() - 1; i >= 0; --i) {
+		const ScheduledLoop &loop = _scheduledLoops[(uint32)i];
+		if (all || (loop.kind.equalsIgnoreCase(kind) &&
+				(target.empty() || loop.target.equalsIgnoreCase(target))))
+			_scheduledLoops.remove_at((uint32)i);
+	}
+}
+
+void CyberflixEngine::pauseLoop(const Common::String &kind, bool paused) {
+	if (kind.equalsIgnoreCase("all"))
+		_loopsPaused = paused;
+}
+
+void CyberflixEngine::makeCricket(const Common::String &name) {
+	if (name.empty())
+		return;
+	playSound(name, 1);
+}
+
+void CyberflixEngine::stopCricket(const Common::String &name) {
+	debug(2, "Cyberflix: stopcricket('%s')", name.c_str());
+}
+
+void CyberflixEngine::pauseCricket(const Common::String &kind, bool paused) {
+	debug(2, "Cyberflix: pausecricket('%s', %d)", kind.c_str(), paused ? 1 : 0);
+}
+
+void CyberflixEngine::processScheduledLoops() {
+	if (_loopsPaused || _scheduledLoops.empty())
+		return;
+
+	const uint32 now = _system->getMillis();
+	for (uint32 i = 0; i < _scheduledLoops.size();) {
+		if ((int32)(now - _scheduledLoops[i].dueMillis) < 0) {
+			++i;
+			continue;
+		}
+
+		ScheduledLoop loop = _scheduledLoops[i];
+		_scheduledLoops.remove_at(i);
+		Common::Array<Value> noArgs;
+		if (loop.kind.equalsIgnoreCase("scene")) {
+			sendToScene(loop.target, loop.message, noArgs);
+		} else if (loop.kind.equalsIgnoreCase("flat")) {
+			sendToFlat(loop.target, loop.message, noArgs);
+		} else if (loop.kind.equalsIgnoreCase("stage")) {
+			sendToStage(loop.message, noArgs);
+		} else if (loop.kind.equalsIgnoreCase("prop")) {
+			sendToProp(loop.target, loop.message, noArgs);
+		} else if (loop.kind.equalsIgnoreCase("shop")) {
+			sendToShop(loop.target, loop.message, noArgs);
+		} else {
+			debug(1, "Cyberflix: makeloop kind '%s' unhandled", loop.kind.c_str());
+		}
+		refreshPropsIfDirty();
+	}
+}
+
 // sendtoscene(name[, message]): select a scene of the open set by name, render
 // it if needed, then dispatch the message against [scene script, set script,
 // BOOTFILE res2] (TI.EXE FUN_004311e0/FUN_00431200).
@@ -2212,6 +2297,7 @@ Common::Error CyberflixEngine::run() {
 				}
 			}
 		}
+		processScheduledLoops();
 		bool handled = false;
 		_vm.callFunction("idle", Common::Array<Value>(), &handled);
 		refreshPropsIfDirty();
