@@ -353,7 +353,16 @@ void CyberflixEngine::gotoFlat(const Value &flat) {
 	}
 	if (node == _stageNode)
 		return;
+	Common::String openedName = _stage->name();
+	uint32 openedCount = _stage->nodeCount();
+	Common::String oldFlat = currentFlat();
+	Common::Array<Value> noArgs;
+	sendToFlat(oldFlat, "closeflat", noArgs);
+	if (!_stage || !_stage->isOpen() || _stage->name() != openedName ||
+			_stage->nodeCount() != openedCount)
+		return;
 	renderStageNode(node);
+	sendToFlat(currentFlat(), "openflat", noArgs);
 }
 
 Common::String CyberflixEngine::currentStage() {
