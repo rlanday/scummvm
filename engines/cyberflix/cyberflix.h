@@ -340,7 +340,7 @@ private:
 	 * builtins. See files/audio-re-notes.md.
 	 */
 	struct ThemeTrack {
-		Common::String name;          ///< Lowercased file name ('bedrad1.trk').
+		Common::String name;          ///< Lowercased logical track name from master.
 		Common::Array<byte> fileData; ///< Whole container; cue payloads point in.
 		struct Cue {
 			Common::String name;      ///< Cue label ('prelude.01').

@@ -1432,6 +1432,11 @@ void CyberflixEngine::openTrackFile(const Common::String &name) {
 		warning("Cyberflix: track '%s' has no master header", name.c_str());
 		return;
 	}
+	Common::String logicalName = readPascalString(master + 0x24, track->fileData);
+	if (!logicalName.empty()) {
+		track->name = logicalName;
+		track->name.toLowercase();
+	}
 	uint32 themeTableId = READ_LE_UINT32(master + 0x1c);
 	uint32 sfxTableId = READ_LE_UINT32(master + 0x20);
 	const byte *tt = (themeTableId < archive.getResourceCount())
@@ -1486,9 +1491,9 @@ void CyberflixEngine::openTrackFile(const Common::String &name) {
 	}
 
 	_tracks.push_back(track);
-	debug(1, "Cyberflix: track '%s' open (%u theme cues, %u sfx cues, playlist %u, loop @%u)",
-			name.c_str(), (uint32)track->cues.size(), (uint32)track->sfxCues.size(),
-			(uint32)track->playlist.size(), track->loopIdx);
+	debug(1, "Cyberflix: track '%s' open as '%s' (%u theme cues, %u sfx cues, playlist %u, loop @%u)",
+			name.c_str(), track->name.c_str(), (uint32)track->cues.size(),
+			(uint32)track->sfxCues.size(), (uint32)track->playlist.size(), track->loopIdx);
 }
 
 // closetrackfile('name.trk'): remove the named track from the open list
