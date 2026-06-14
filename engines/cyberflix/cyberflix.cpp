@@ -918,6 +918,20 @@ void CyberflixEngine::dispatchSceneMessage(uint32 scene, const Common::String &m
 	dispatchWithScopeChain(scopes, _set->sceneName(scene), Common::String(), message, args, "scene");
 }
 
+bool CyberflixEngine::closeCurrentSceneForNavigation() {
+	if (!_set || !_set->isOpen() || _setScene < 0)
+		return false;
+
+	// FUN_00430c70 calls FUN_00430f30 before FUN_00442140 starts movement, and
+	// aborts if the set archive changed while the current scene handled close.
+	Common::String openedName = _set->setName();
+	uint32 openedCount = _set->sceneCount();
+	Common::Array<Value> noArgs;
+	dispatchSceneMessage((uint32)_setScene, "closescene", noArgs);
+	return _set && _set->isOpen() && _set->setName() == openedName &&
+			_set->sceneCount() == openedCount;
+}
+
 void CyberflixEngine::openShopFile(const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
@@ -1829,6 +1843,8 @@ void CyberflixEngine::navigateSet(const Common::String &action) {
 					action.c_str(), _setView.c_str());
 			return;
 		}
+		if (!closeCurrentSceneForNavigation())
+			return;
 		FrameImage frame;
 		if (!_set->applyPanoramaFrame((uint32)_setScene, (uint32)table, (uint32)startAngle,
 				_setFrameSequence, frame)) {
@@ -1853,6 +1869,8 @@ void CyberflixEngine::navigateSet(const Common::String &action) {
 					_set->name().c_str(), transitionId, count);
 			return;
 		}
+		if (!closeCurrentSceneForNavigation())
+			return;
 		FrameImage frame;
 		if (!_set->applyTransitionFrame(transitionId, 0, _setFrameSequence, frame)) {
 			warning("Cyberflix: set '%s' failed to start forward transition %u",

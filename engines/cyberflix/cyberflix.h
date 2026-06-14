@@ -287,6 +287,7 @@ private:
 	void dispatchSetMessage(const Common::String &message, const Common::Array<Value> &args);
 	void dispatchSceneMessage(uint32 scene, const Common::String &message,
 			const Common::Array<Value> &args);
+	bool closeCurrentSceneForNavigation();
 	/** Repaint the current set scene if prop state changed (post-dispatch). */
 	void refreshPropsIfDirty();
 
