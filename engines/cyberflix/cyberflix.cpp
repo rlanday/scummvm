@@ -649,6 +649,11 @@ Shop::Prop *CyberflixEngine::findProp(const Common::String &name, Shop **shopOut
 void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw,
 		Common::Array<const Shop *> &drawShop) {
 	for (uint32 s = 0; s < _shops.size(); ++s) {
+		// BOOTFILE transtoflat() hides HOUSE.SHP's main-stage interface props
+		// before opening closeup stages; do not let stale state hit-test through.
+		if (_stage && _stage->isOpen() && !_stage->name().equalsIgnoreCase("main.stg") &&
+				_shops[s]->name().equalsIgnoreCase("house.shp"))
+			continue;
 		for (uint32 i = 0; i < _shops[s]->propCount(); ++i) {
 			const Shop::Prop &p = _shops[s]->prop(i);
 			if (p.visible && p.mode == 0) {
