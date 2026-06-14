@@ -126,6 +126,7 @@ public:
 	Common::String currentTheme(int which) override;
 	Common::String currentSound(int which) override;
 	Common::String currentVoice() override;
+	Common::String pathSlot(int slot, const Common::String *newPath) override;
 	void openShopFile(const Common::String &name) override;
 	void sendToShop(const Common::String &shop, const Common::String &message,
 			const Common::Array<Value> &args) override;
@@ -355,6 +356,10 @@ private:
 	};
 	SoundSlot _soundSlots[2]; ///< Normal sound slots (TI.EXE DAT_00460a58/70).
 	SoundSlot _voiceSlot;     ///< Voice slot (TI.EXE DAT_00460aa0).
+
+	Common::String _pathSlots[9];        ///< Native path slots 0..8 (FUN_00438450).
+	Common::String _pathSlotArchives[9]; ///< SearchMan archive names for slots 1..8.
+	void registerPathSlotDirectory(int slot);
 
 	/**
 	 * Resolve the named CLUT to 256 RGB triplets, mirroring TI.EXE's clut

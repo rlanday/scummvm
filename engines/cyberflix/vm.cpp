@@ -569,6 +569,11 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return Value::makeString(_host->currentSound(args.empty() ? 1 : args[0].intValue));
 		case 0x4e6e: // currentvoice() -> FUN_00412ff0: active voice cue or 'None'
 			return Value::makeString(_host->currentVoice());
+		case 0x3e89: { // path(slot[, value]) -> FUN_004462a0/FUN_00438450
+			int slot = args.empty() ? 0 : args[0].intValue;
+			const Common::String *newPath = args.size() >= 2 ? &args[1].strValue : nullptr;
+			return Value::makeString(_host->pathSlot(slot, newPath));
+		}
 		case 0x4e32: // countpaintings(scene, view) -> FUN_00431fe0
 			if (args.size() >= 2)
 				return Value::makeInt(_host->countPaintings(args[0].strValue, args[1].strValue));

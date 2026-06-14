@@ -244,6 +244,9 @@ public:
 	/** currentvoice(): active voice cue name, or "None" when silent. */
 	virtual Common::String currentVoice() { return "None"; }
 
+	/** path(slot[, value]) (0x3e89 FUN_004462a0): get or set a native path slot. */
+	virtual Common::String pathSlot(int slot, const Common::String *newPath) { return Common::String(); }
+
 	/** openshopfile('name.shp'): load a .SHP prop container and dispatch its
 	 *  openshop()/openprop() messages (TI.EXE 0x2f18 FUN_00428450). */
 	virtual void openShopFile(const Common::String &name) {}

@@ -87,6 +87,86 @@ static Common::String readPascalString(const byte *p, const Common::Array<byte> 
 	return Common::String((const char *)s, len);
 }
 
+static bool findCaselessChildDir(const Common::FSNode &root, const Common::String &name,
+		Common::FSNode &out) {
+	Common::FSList children;
+	if (!root.getChildren(children, Common::FSNode::kListDirectoriesOnly, true))
+		return false;
+	for (Common::FSList::const_iterator it = children.begin(); it != children.end(); ++it) {
+		if (it->getName().equalsIgnoreCase(name)) {
+			out = *it;
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool findCaselessPathDir(const Common::FSNode &root,
+		const Common::Array<Common::String> &components, Common::FSNode &out) {
+	if (!root.exists() || !root.isDirectory() || components.empty())
+		return false;
+
+	Common::FSNode node = root;
+	for (uint i = 0; i < components.size(); ++i) {
+		Common::FSNode child;
+		if (!findCaselessChildDir(node, components[i], child))
+			return false;
+		node = child;
+	}
+
+	out = node;
+	return out.exists() && out.isDirectory();
+}
+
+static Common::Array<Common::String> splitCyberflixPath(const Common::String &path) {
+	Common::Array<Common::String> components;
+	Common::String token;
+	for (uint i = 0; i < path.size(); ++i) {
+		if (path[i] == ':') {
+			if (!token.empty()) {
+				token.toLowercase();
+				components.push_back(token);
+				token.clear();
+			}
+		} else {
+			token += path[i];
+		}
+	}
+	if (!token.empty()) {
+		token.toLowercase();
+		components.push_back(token);
+	}
+	return components;
+}
+
+static bool resolveCyberflixPathDir(const Common::String &path, Common::FSNode &out) {
+	Common::Array<Common::String> components = splitCyberflixPath(path);
+	if (components.empty())
+		return false;
+
+	Common::Array<Common::Array<Common::String> > patterns;
+	patterns.push_back(components);
+	if (components.size() > 1) {
+		Common::Array<Common::String> tail;
+		for (uint i = 1; i < components.size(); ++i)
+			tail.push_back(components[i]);
+		patterns.push_back(tail);
+	}
+	Common::Array<Common::String> finalComponent;
+	finalComponent.push_back(components[components.size() - 1]);
+	patterns.push_back(finalComponent);
+
+	const Common::FSNode gameDir(ConfMan.getPath("path"));
+	Common::FSNode roots[2] = { gameDir, gameDir.getParent() };
+	for (uint r = 0; r < ARRAYSIZE(roots); ++r) {
+		for (uint p = 0; p < patterns.size(); ++p) {
+			if (findCaselessPathDir(roots[r], patterns[p], out))
+				return true;
+		}
+	}
+	return false;
+}
+
 // Sample-add an 8-bit unsigned mono SFX buffer into the music track at the given
 // sample offset, extending the track with silence (0x80) if needed and clamping.
 static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, uint32 atSample) {
@@ -1336,6 +1416,45 @@ Common::String CyberflixEngine::currentVoice() {
 	return "None";
 }
 
+Common::String CyberflixEngine::pathSlot(int slot, const Common::String *newPath) {
+	if (slot < 0 || slot > 8) {
+		warning("Cyberflix: path(%d): invalid slot", slot);
+		return Common::String();
+	}
+
+	if (newPath) {
+		_pathSlots[slot] = *newPath;
+		registerPathSlotDirectory(slot);
+	}
+
+	return _pathSlots[slot];
+}
+
+void CyberflixEngine::registerPathSlotDirectory(int slot) {
+	if (slot < 1 || slot > 8)
+		return;
+
+	if (!_pathSlotArchives[slot].empty()) {
+		SearchMan.remove(_pathSlotArchives[slot]);
+		_pathSlotArchives[slot].clear();
+	}
+
+	if (_pathSlots[slot].empty())
+		return;
+
+	Common::FSNode dir;
+	if (!resolveCyberflixPathDir(_pathSlots[slot], dir)) {
+		debug(1, "Cyberflix: path slot %d '%s' did not resolve to a directory",
+				slot, _pathSlots[slot].c_str());
+		return;
+	}
+
+	_pathSlotArchives[slot] = Common::String::format("cyberflix-path%d", slot);
+	SearchMan.addDirectory(_pathSlotArchives[slot], dir, 10, 1, false);
+	debug(1, "Cyberflix: path slot %d '%s' -> '%s'", slot, _pathSlots[slot].c_str(),
+			dir.getPath().toString(Common::Path::kNativeSeparator).c_str());
+}
+
 // Resolve a clut name the way TI.EXE's registry lookup does (FUN_004470b0):
 // the built-in names "black"/"current", and "set"/"stage" which alias the
 // palette embedded in the currently open file of that kind ("puppet" lands
@@ -1801,6 +1920,9 @@ Common::Error CyberflixEngine::run() {
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	SearchMan.addSubDirectoryMatching(gameDataDir, "data");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "movies");
+	if (gameDataDir.getName().equalsIgnoreCase("titanic1") ||
+			gameDataDir.getName().equalsIgnoreCase("titanic2"))
+		_pathSlots[0] = gameDataDir.getName() + ":";
 
 	// Clear to black before the boot script paints anything.
 	byte palette[3 * 256];
