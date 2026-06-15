@@ -106,6 +106,20 @@ static bool findCaselessChildDir(const Common::FSNode &root, const Common::Strin
 	return false;
 }
 
+static bool findCaselessChildFile(const Common::FSNode &root, const Common::String &name,
+		Common::FSNode &out) {
+	Common::FSList children;
+	if (!root.getChildren(children, Common::FSNode::kListFilesOnly, true))
+		return false;
+	for (Common::FSList::const_iterator it = children.begin(); it != children.end(); ++it) {
+		if (it->getName().equalsIgnoreCase(name)) {
+			out = *it;
+			return true;
+		}
+	}
+	return false;
+}
+
 static bool findCaselessPathDir(const Common::FSNode &root,
 		const Common::Array<Common::String> &components, Common::FSNode &out) {
 	if (!root.exists() || !root.isDirectory() || components.empty())
@@ -144,6 +158,10 @@ static Common::Array<Common::String> splitCyberflixPath(const Common::String &pa
 	return components;
 }
 
+static bool isTitanicCDLabel(const Common::String &label) {
+	return label.equalsIgnoreCase("Titanic1") || label.equalsIgnoreCase("Titanic2");
+}
+
 static bool resolveCyberflixPathDir(const Common::String &path, Common::FSNode &out) {
 	Common::Array<Common::String> components = splitCyberflixPath(path);
 	if (components.empty())
@@ -151,20 +169,22 @@ static bool resolveCyberflixPathDir(const Common::String &path, Common::FSNode &
 
 	Common::Array<Common::Array<Common::String> > patterns;
 	patterns.push_back(components);
-	if (components.size() > 1) {
+	if (components.size() > 1 && !isTitanicCDLabel(components[0])) {
 		Common::Array<Common::String> tail;
 		for (uint i = 1; i < components.size(); ++i)
 			tail.push_back(components[i]);
 		patterns.push_back(tail);
 	}
-	Common::Array<Common::String> finalComponent;
-	finalComponent.push_back(components[components.size() - 1]);
-	patterns.push_back(finalComponent);
+	if (!isTitanicCDLabel(components[0])) {
+		Common::Array<Common::String> finalComponent;
+		finalComponent.push_back(components[components.size() - 1]);
+		patterns.push_back(finalComponent);
+	}
 
 	const Common::FSNode gameDir(ConfMan.getPath("path"));
-	Common::FSNode roots[2] = { gameDir, gameDir.getParent() };
-	for (uint r = 0; r < ARRAYSIZE(roots); ++r) {
-		for (uint p = 0; p < patterns.size(); ++p) {
+	Common::FSNode roots[3] = { gameDir, gameDir.getParent(), gameDir.getParent().getParent() };
+	for (uint p = 0; p < patterns.size(); ++p) {
+		for (uint r = 0; r < ARRAYSIZE(roots); ++r) {
 			if (findCaselessPathDir(roots[r], patterns[p], out))
 				return true;
 		}
@@ -200,12 +220,89 @@ static bool findExtractedCDRoot(const Common::String &label, Common::FSNode &out
 		return true;
 	}
 
+	Common::FSNode child;
+	if (findCaselessChildDir(gameDir, label, child)) {
+		out = child;
+		return true;
+	}
+
+	Common::FSNode parent = gameDir.getParent();
+	if (parent.exists() && parent.isDirectory() &&
+			parent.getName().equalsIgnoreCase(label)) {
+		out = parent;
+		return true;
+	}
+
 	Common::FSNode sibling;
-	if (findCaselessChildDir(gameDir.getParent(), label, sibling)) {
+	if (findCaselessChildDir(parent, label, sibling)) {
 		out = sibling;
 		return true;
 	}
 
+	Common::FSNode grandparent = parent.getParent();
+	if (findCaselessChildDir(grandparent, label, sibling)) {
+		out = sibling;
+		return true;
+	}
+
+	return false;
+}
+
+static bool hasDiscFile(const Common::FSNode &discRoot, const char *dirName, const char *fileName) {
+	Common::FSNode dir;
+	if (!findCaselessChildDir(discRoot, dirName, dir))
+		return false;
+	Common::FSNode file;
+	return findCaselessChildFile(dir, fileName, file);
+}
+
+static void addMissingTitanicFile(Common::String &missing, const char *path) {
+	missing += "\n  - ";
+	missing += path;
+}
+
+static bool validateTitanicDiscLayout() {
+	Common::String missing;
+	Common::FSNode cd1Root, cd2Root;
+
+	if (!findExtractedCDRoot("Titanic1", cd1Root)) {
+		addMissingTitanicFile(missing, "TITANIC1/");
+	} else {
+		if (!hasDiscFile(cd1Root, "DATA", "BOOTFILE"))
+			addMissingTitanicFile(missing, "TITANIC1/DATA/BOOTFILE");
+		if (!hasDiscFile(cd1Root, "MOVIES", "PLAYMODE.MOV"))
+			addMissingTitanicFile(missing, "TITANIC1/MOVIES/PLAYMODE.MOV");
+	}
+
+	if (!findExtractedCDRoot("Titanic2", cd2Root)) {
+		addMissingTitanicFile(missing, "TITANIC2/");
+	} else {
+		if (!hasDiscFile(cd2Root, "DATA", "DECKC.TRK"))
+			addMissingTitanicFile(missing, "TITANIC2/DATA/DECKC.TRK");
+		if (!hasDiscFile(cd2Root, "MOVIES", "DATECAB.MOV"))
+			addMissingTitanicFile(missing, "TITANIC2/MOVIES/DATECAB.MOV");
+		if (!hasDiscFile(cd2Root, "PUPPETS1", "SMETH1.PUP"))
+			addMissingTitanicFile(missing, "TITANIC2/PUPPETS1/SMETH1.PUP");
+	}
+
+	if (missing.empty())
+		return true;
+
+	Common::String message =
+			"Titanic: Adventure Out of Time requires data from both Windows CDs.\n\n"
+			"Extract each CD into a sibling folder named TITANIC1 and TITANIC2, without merging them. "
+			"Then add/select TITANIC1 or their parent folder in ScummVM.\n\n"
+			"Expected layout examples:\n"
+			"  TITANIC1/DATA/BOOTFILE\n"
+			"  TITANIC1/MOVIES/PLAYMODE.MOV\n"
+			"  TITANIC2/DATA/DECKC.TRK\n"
+			"  TITANIC2/MOVIES/DATECAB.MOV\n"
+			"  TITANIC2/PUPPETS1/SMETH1.PUP\n\n"
+			"Missing:";
+	message += missing;
+
+	GUIErrorMessage(message);
+	warning("Cyberflix: missing Titanic two-disc data:%s", missing.c_str());
 	return false;
 }
 
@@ -2817,13 +2914,26 @@ Common::Error CyberflixEngine::run() {
 	// Assets live in the DATA subdirectory of the installed game; the intro and
 	// other full-screen movies live alongside it in MOVIES.
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
-	SearchMan.addSubDirectoryMatching(gameDataDir, "data");
-	SearchMan.addSubDirectoryMatching(gameDataDir, "movies");
-	if (gameDataDir.getName().equalsIgnoreCase("titanic1") ||
-			gameDataDir.getName().equalsIgnoreCase("titanic2")) {
-		_pathSlots[0] = gameDataDir.getName() + ":";
-		_currentCD = canonicalCDLabel(gameDataDir.getName());
+	if (getGameType() == GType_Titanic) {
+		Common::FSNode cd1Root;
+		if (findExtractedCDRoot("Titanic1", cd1Root)) {
+			SearchMan.addSubDirectoryMatching(cd1Root, "data");
+			SearchMan.addSubDirectoryMatching(cd1Root, "movies");
+			_pathSlots[0] = canonicalCDLabel(cd1Root.getName()) + ":";
+			_currentCD = canonicalCDLabel(cd1Root.getName());
+		}
+	} else {
+		SearchMan.addSubDirectoryMatching(gameDataDir, "data");
+		SearchMan.addSubDirectoryMatching(gameDataDir, "movies");
+		if (gameDataDir.getName().equalsIgnoreCase("titanic1") ||
+				gameDataDir.getName().equalsIgnoreCase("titanic2")) {
+			_pathSlots[0] = gameDataDir.getName() + ":";
+			_currentCD = canonicalCDLabel(gameDataDir.getName());
+		}
 	}
+
+	if (getGameType() == GType_Titanic && !validateTitanicDiscLayout())
+		return Common::kNoGameDataFoundError;
 
 	// Clear to black before the boot script paints anything.
 	byte palette[3 * 256];

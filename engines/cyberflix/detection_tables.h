@@ -26,7 +26,8 @@ namespace Cyberflix {
 
 static const CyberflixGameDescription gameDescriptions[] = {
 	// Titanic: Adventure Out of Time - English Windows (2-CD retail)
-	// Detected via DATA/BOOTFILE on the installed copy / either CD.
+	// Detected via DATA/BOOTFILE; the engine validates the extracted
+	// TITANIC1/TITANIC2 sibling-disc layout at startup.
 	{
 		{
 			"titanicaoot",
