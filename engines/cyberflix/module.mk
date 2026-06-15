@@ -2,10 +2,12 @@ MODULE := engines/cyberflix
 
 MODULE_OBJS = \
 	archive.o \
+	cast.o \
 	console.o \
 	cyberflix.o \
 	image.o \
 	metaengine.o \
+	puppet.o \
 	saveload.o \
 	script.o \
 	set.o \

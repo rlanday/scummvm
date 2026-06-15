@@ -49,6 +49,7 @@
 #include "graphics/surface.h"
 #include "graphics/wincursor.h"
 
+#include "cyberflix/cast.h"
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/archive.h"
 #include "cyberflix/console.h"
@@ -965,7 +966,628 @@ bool CyberflixEngine::setVisible(const bool *newVisible) {
 }
 
 Common::String CyberflixEngine::currentPuppet() {
-	return "none";
+	return (_puppet && _puppet->isOpen()) ? _puppet->sourceName() : Common::String("none");
+}
+
+// ---- Puppet subsystem (TI.EXE FUN_004473c0 and friends) --------------------
+// RE notes: files/decomp/stage-notes.md. This models the verified PUP archive
+// lifetime, script table, and palette state used by C73 Smethels. The native
+// compositor branch (FUN_00448a60), speech runner (FUN_00447ce0/FUN_00448b60),
+// and bevel queue/event path (FUN_00447b30/FUN_00449370/FUN_00449e40).
+
+void CyberflixEngine::openPuppetFile(const Common::String &name) {
+	if (name.empty())
+		return;
+	if (_puppet && _puppet->isOpen()) {
+		warning("Cyberflix: openpuppetfile('%s'): puppet already open", name.c_str());
+		return;
+	}
+
+	Common::String key = name;
+	key.toLowercase();
+	Common::SharedPtr<Puppet> puppet(new Puppet());
+	if (!puppet->open(key))
+		return;
+
+	_puppet = puppet;
+	_puppetVisible = true; // FUN_00447470 sets DAT_00461202 = 1.
+	_puppetCurrentAction.clear();
+	_puppetCurrentFrame = 0;
+	_puppetBevels.clear();
+	for (uint32 i = 0; i < ARRAYSIZE(_puppetParams); ++i)
+		_puppetParams[i] = 0;
+	debug(1, "Cyberflix: puppet '%s' open", _puppet->sourceName().c_str());
+}
+
+void CyberflixEngine::closePuppetFile() {
+	if (!_puppet || !_puppet->isOpen()) {
+		warning("Cyberflix: closepuppetfile(): no puppet open");
+		return;
+	}
+	debug(1, "Cyberflix: puppet '%s' closed", _puppet->sourceName().c_str());
+	_mixer->stopHandle(_puppetSpeechHandle);
+	_puppet.reset();
+	_puppetVisible = false;
+	_puppetBase.clear();
+	_puppetCurrentAction.clear();
+	_puppetCurrentFrame = 0;
+	_puppetBevels.clear();
+	for (uint32 i = 0; i < ARRAYSIZE(_puppetParams); ++i)
+		_puppetParams[i] = 0;
+}
+
+void CyberflixEngine::sendToPuppet(const Common::String &puppetName,
+		const Common::String &message, const Common::Array<Value> &args) {
+	debug(1, "Cyberflix: sendtopuppet('%s') -> %s(%u args)", puppetName.c_str(),
+			message.c_str(), args.size());
+	if (!_puppet || !_puppet->isOpen()) {
+		warning("Cyberflix: sendtopuppet('%s'): no puppet open", puppetName.c_str());
+		return;
+	}
+
+	Common::SharedPtr<Script> script = _puppet->scriptByName(puppetName);
+	if (!script) {
+		warning("Cyberflix: sendtopuppet('%s'): no such puppet script", puppetName.c_str());
+		return;
+	}
+
+	Common::Array<const Script *> scopes;
+	scopes.push_back(script.get());
+	dispatchWithScopeChain(scopes, _puppet->sourceName(), Common::String(), message, args, "puppet");
+	refreshPropsIfDirty();
+}
+
+void CyberflixEngine::puppetScript(const Common::String &name) {
+	if (!_puppet || !_puppet->isOpen()) {
+		warning("Cyberflix: puppetscript('%s'): no puppet open", name.c_str());
+		return;
+	}
+	if (!_puppet->scriptByName(name)) {
+		warning("Cyberflix: puppetscript('%s'): no such puppet script", name.c_str());
+		return;
+	}
+	debug(1, "Cyberflix: puppetscript('%s')", name.c_str());
+}
+
+void CyberflixEngine::puppetClear() {
+	if (!_puppet || !_puppet->isOpen()) {
+		warning("Cyberflix: puppetclear(): no puppet open");
+		return;
+	}
+	_puppetBevels.clear();
+	renderCurrentPuppetFrame(true);
+	debug(1, "Cyberflix: puppetclear()");
+}
+
+void CyberflixEngine::puppetSpeak(const Common::String &name, int mode) {
+	if (!_puppet || !_puppet->isOpen() || !_puppetVisible) {
+		warning("Cyberflix: puppetspeak('%s'): no visible puppet", name.c_str());
+		return;
+	}
+	const Puppet::ActionEntry *action = _puppet->actionByName(name);
+	if (!action) {
+		warning("Cyberflix: puppetspeak('%s'): no such action", name.c_str());
+		return;
+	}
+	debug(1, "Cyberflix: puppetspeak('%s', %d)", name.c_str(), mode);
+	playPuppetAction(*action);
+}
+
+void CyberflixEngine::puppetBevel(const Common::String &name, int mode) {
+	if (!_puppet || !_puppet->isOpen() || !_puppetVisible) {
+		warning("Cyberflix: puppetbevel('%s'): no visible puppet", name.c_str());
+		return;
+	}
+	PuppetBevelOption option;
+	option.text = name;
+	option.id = mode;
+	const int top = kScreenHeight + ((int)_puppetBevels.size() - 5) * 24;
+	option.rect = Common::Rect(0, top, kScreenWidth, top + 24);
+	_puppetBevels.push_back(option);
+	renderPuppetBevels(true);
+	debug(1, "Cyberflix: puppetbevel('%s', %d)", name.c_str(), mode);
+}
+
+int CyberflixEngine::puppetEvent(int timeout) {
+	if (!_puppet || !_puppet->isOpen() || !_puppetVisible) {
+		warning("Cyberflix: puppetevent(%d): no visible puppet", timeout);
+		return -1;
+	}
+	renderCurrentPuppetFrame(true);
+	if (_puppetBevels.empty())
+		return -1;
+
+	setGameCursor("CURS.ARROW");
+	CursorMan.showMouse(true);
+	int hoverState = -1;
+	const uint32 start = _system->getMillis();
+	Common::Event event;
+	for (;;) {
+		if (shouldQuit())
+			return -1;
+		if (timeout >= 0 && _system->getMillis() - start >= (uint32)timeout)
+			return -1;
+
+		Common::Point mouse = _eventMan->getMousePos();
+		int hover = 0;
+		for (uint i = 0; i < _puppetBevels.size(); ++i) {
+			if (_puppetBevels[i].rect.contains(mouse)) {
+				hover = 1;
+				break;
+			}
+		}
+		if (hover != hoverState) {
+			setGameCursor(hover ? "CURS131" : "CURS.ARROW");
+			hoverState = hover;
+		}
+
+		while (_eventMan->pollEvent(event)) {
+			if (event.type == Common::EVENT_KEYDOWN &&
+					event.kbd.keycode == Common::KEYCODE_ESCAPE)
+				return -1;
+			if (event.type != Common::EVENT_LBUTTONDOWN)
+				continue;
+			mouse = _eventMan->getMousePos();
+			for (uint i = 0; i < _puppetBevels.size(); ++i) {
+				if (!_puppetBevels[i].rect.contains(mouse))
+					continue;
+				const int id = _puppetBevels[i].id;
+				debug(1, "Cyberflix: puppetevent(%d) click (%d,%d) -> %d",
+						timeout, mouse.x, mouse.y, id);
+				_puppetBevels.clear();
+				renderCurrentPuppetFrame(true);
+				return id;
+			}
+		}
+		_system->updateScreen();
+		_system->delayMillis(10);
+	}
+}
+
+Common::String CyberflixEngine::puppetBase(const Common::String *newBase) {
+	if (!_puppet || !_puppet->isOpen()) {
+		warning("Cyberflix: puppetbase(): no puppet open");
+		return Common::String();
+	}
+	if (newBase) {
+		if (newBase->size() > 31) {
+			warning("Cyberflix: puppetbase('%s'): name too long", newBase->c_str());
+			return _puppetBase;
+		}
+		_puppetBase = *newBase;
+		_puppetBase.toLowercase();
+		_puppetCurrentAction = _puppetBase;
+		_puppetCurrentFrame = 0;
+		debug(1, "Cyberflix: puppetbase('%s')", _puppetBase.c_str());
+	}
+	return _puppetBase;
+}
+
+bool CyberflixEngine::puppetVisible(const bool *newVisible) {
+	if (!_puppet || !_puppet->isOpen())
+		return false;
+	if (newVisible) {
+		_puppetVisible = *newVisible;
+		if (_puppetVisible)
+			renderCurrentPuppetFrame(true);
+		debug(1, "Cyberflix: puppetvisible(%s)", _puppetVisible ? "true" : "false");
+	}
+	return _puppetVisible;
+}
+
+const Puppet::ActionEntry *CyberflixEngine::currentPuppetAction() const {
+	if (!_puppet || !_puppet->isOpen())
+		return nullptr;
+	if (!_puppetCurrentAction.empty()) {
+		if (const Puppet::ActionEntry *action = _puppet->actionByName(_puppetCurrentAction))
+			return action;
+	}
+	if (!_puppetBase.empty()) {
+		if (const Puppet::ActionEntry *action = _puppet->actionByName(_puppetBase))
+			return action;
+	}
+	return _puppet->actionAt(0);
+}
+
+bool CyberflixEngine::renderPuppetFrame(const Puppet::ActionEntry &action,
+		uint32 frameIndex, bool present) {
+	Graphics::Surface *screen = _system->lockScreen();
+	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	const bool drew = _puppet->renderActionFrame(action, frameIndex, *screen);
+	_system->unlockScreen();
+	renderPuppetBevels(false);
+	if (present)
+		_system->updateScreen();
+	return drew;
+}
+
+bool CyberflixEngine::renderCurrentPuppetFrame(bool present) {
+	const Puppet::ActionEntry *action = currentPuppetAction();
+	if (!action)
+		return false;
+	return renderPuppetFrame(*action, _puppetCurrentFrame, present);
+}
+
+void CyberflixEngine::renderPuppetBevels(bool present) {
+	if (_puppetBevels.empty())
+		return;
+
+	const Graphics::Font *font = FontMan.getFontByUsage(Graphics::FontManager::kGUIFont);
+	if (!font)
+		font = FontMan.getFontByUsage(Graphics::FontManager::kConsoleFont);
+	if (!font)
+		return;
+
+	Graphics::Surface *screen = _system->lockScreen();
+	for (uint i = 0; i < _puppetBevels.size(); ++i) {
+		const Common::Rect &rect = _puppetBevels[i].rect;
+		Common::Rect clipped = rect;
+		clipped.clip(Common::Rect(kScreenWidth, kScreenHeight));
+		if (clipped.isEmpty())
+			continue;
+		screen->fillRect(clipped, 0);
+		const int y = clipped.top + (clipped.height() - font->getFontHeight()) / 2;
+		font->drawString(screen, _puppetBevels[i].text, clipped.left + 16, y,
+				clipped.width() - 32, 255);
+	}
+	_system->unlockScreen();
+	if (present)
+		_system->updateScreen();
+}
+
+void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
+	_puppetCurrentAction = action.name;
+	_puppetCurrentFrame = 0;
+	_puppetBevels.clear();
+	_mixer->stopHandle(_puppetSpeechHandle);
+
+	Common::Array<byte> pcm;
+	_puppet->decodeActionAudio(action, pcm);
+	if (!pcm.empty()) {
+		byte *buf = (byte *)malloc(pcm.size());
+		if (buf) {
+			memcpy(buf, pcm.begin(), pcm.size());
+			Audio::SeekableAudioStream *stream = Audio::makeRawStream(
+					buf, pcm.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED,
+					DisposeAfterUse::YES);
+			if (stream) {
+				_mixer->playStream(Audio::Mixer::kSpeechSoundType, &_puppetSpeechHandle, stream);
+				_mixer->setChannelVolume(_puppetSpeechHandle, effectiveAudioVolume(255));
+			} else {
+				free(buf);
+			}
+		}
+	}
+
+	const uint32 frameCount = action.frameCount ? action.frameCount : 1;
+	uint32 lastFrame = (uint32)-1;
+	const uint32 wallStart = _system->getMillis();
+	Common::Event event;
+	for (;;) {
+		if (shouldQuit())
+			break;
+		uint32 elapsed = _mixer->isSoundHandleActive(_puppetSpeechHandle)
+				? _mixer->getSoundElapsedTime(_puppetSpeechHandle)
+				: (_system->getMillis() - wallStart);
+		uint32 frame = (uint32)((uint64)elapsed * 60 / 1000 / 2);
+		if (frame >= frameCount)
+			frame = frameCount - 1;
+		if (frame != lastFrame) {
+			_puppetCurrentFrame = frame;
+			renderPuppetFrame(action, frame, true);
+			lastFrame = frame;
+		}
+		bool aborted = false;
+		while (_eventMan->pollEvent(event)) {
+			if (event.type == Common::EVENT_KEYDOWN &&
+					event.kbd.keycode == Common::KEYCODE_ESCAPE) {
+				_mixer->stopHandle(_puppetSpeechHandle);
+				aborted = true;
+				break;
+			}
+		}
+		if (aborted)
+			break;
+		if (!_mixer->isSoundHandleActive(_puppetSpeechHandle)) {
+			if (pcm.empty() && frame + 1 < frameCount) {
+				_system->delayMillis(5);
+				continue;
+			}
+			break;
+		}
+		_system->delayMillis(5);
+	}
+	_puppetCurrentFrame = frameCount - 1;
+	renderPuppetFrame(action, _puppetCurrentFrame, true);
+}
+
+int CyberflixEngine::puppetParam(int selector, const int *newValue) {
+	if (selector < 1 || selector > (int)ARRAYSIZE(_puppetParams)) {
+		warning("Cyberflix: puppetparam(%d): selector out of range", selector);
+		return 0;
+	}
+	int16 &slot = _puppetParams[selector - 1];
+	if (newValue) {
+		slot = (int16)*newValue;
+		debug(1, "Cyberflix: puppetparam(%d, %d)", selector, *newValue);
+	}
+	return slot;
+}
+
+int CyberflixEngine::countPuppets() {
+	if (!_puppet || !_puppet->isOpen()) {
+		warning("Cyberflix: countpuppets(): no puppet open");
+		return 0;
+	}
+	return (int)_puppet->scriptCount();
+}
+
+Common::String CyberflixEngine::indexToPuppet(int index) {
+	if (!_puppet || !_puppet->isOpen()) {
+		warning("Cyberflix: indextopuppet(%d): no puppet open", index);
+		return Common::String();
+	}
+	if (index < 1 || (uint32)index > _puppet->scriptCount()) {
+		warning("Cyberflix: indextopuppet(%d): index out of range", index);
+		return Common::String();
+	}
+	return _puppet->scriptName((uint32)index - 1);
+}
+
+// ---- Cast/actor subsystem (TI.EXE FUN_0041f1c0 and friends) ---------------
+// RE notes: files/decomp/stage-notes.md. The original keeps one global actor
+// array (DAT_0046112c/DAT_00461130) across all open casts; lookups and
+// countactors/indextoactor therefore span _casts in open order.
+
+Common::SharedPtr<Cast> CyberflixEngine::findCastShared(const Common::String &name) {
+	Common::String key = name;
+	key.toLowercase();
+	for (uint32 i = 0; i < _casts.size(); ++i)
+		if (_casts[i]->name() == key)
+			return _casts[i];
+	return Common::SharedPtr<Cast>();
+}
+
+CyberflixEngine::ActorRef CyberflixEngine::findActorRef(const Common::String &name) {
+	ActorRef ref;
+	for (uint32 i = 0; i < _casts.size(); ++i) {
+		Common::SharedPtr<Cast::Actor> actor = _casts[i]->findActor(name);
+		if (actor) {
+			ref.cast = _casts[i];
+			ref.actor = actor;
+			return ref;
+		}
+	}
+	return ref;
+}
+
+void CyberflixEngine::openCastFile(const Common::String &name) {
+	Common::String key = name;
+	key.toLowercase();
+	if (findCastShared(key)) {
+		debug(1, "Cyberflix: cast '%s' already open", key.c_str());
+		return;
+	}
+
+	Common::SharedPtr<Cast> cast(new Cast());
+	if (!cast->open(key))
+		return;
+	_casts.push_back(cast);
+}
+
+void CyberflixEngine::closeCastFile(const Common::String &name) {
+	Common::String key = name;
+	key.toLowercase();
+	for (uint32 i = 0; i < _casts.size(); ++i) {
+		if (_casts[i]->name() == key) {
+			debug(1, "Cyberflix: cast '%s' closed", key.c_str());
+			_casts.remove_at(i);
+			return;
+		}
+	}
+	debug(1, "Cyberflix: closecastfile('%s'): cast not open", key.c_str());
+}
+
+void CyberflixEngine::sendToCast(const Common::String &castName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	debug(1, "Cyberflix: sendtocast('%s') -> %s(%u args)", castName.c_str(),
+			message.c_str(), args.size());
+	Common::SharedPtr<Cast> cast = findCastShared(castName);
+	if (!cast) {
+		warning("Cyberflix: sendtocast('%s'): cast not open", castName.c_str());
+		return;
+	}
+	Common::Array<const Script *> scopes;
+	scopes.push_back(cast->castScript());
+	dispatchWithScopeChain(scopes, cast->name(), Common::String(), message, args, "cast");
+}
+
+void CyberflixEngine::sendToActor(const Common::String &actorName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	debug(1, "Cyberflix: sendtoactor('%s') -> %s(%u args)", actorName.c_str(),
+			message.c_str(), args.size());
+	ActorRef ref = findActorRef(actorName);
+	if (!ref.actor) {
+		warning("Cyberflix: sendtoactor('%s'): no such actor", actorName.c_str());
+		return;
+	}
+
+	Common::Array<const Script *> scopes;
+	scopes.push_back(ref.actor->script.get());
+	scopes.push_back(ref.cast->castScript());
+	dispatchWithScopeChain(scopes, ref.actor->name, ref.actor->name, message, args, "actor");
+}
+
+int CyberflixEngine::countActors() {
+	uint32 count = 0;
+	for (uint32 i = 0; i < _casts.size(); ++i)
+		count += _casts[i]->actorCount();
+	return (int)count;
+}
+
+Common::String CyberflixEngine::indexToActor(int index) {
+	if (index < 1)
+		return Common::String();
+	uint32 remaining = (uint32)index;
+	for (uint32 i = 0; i < _casts.size(); ++i) {
+		if (remaining <= _casts[i]->actorCount())
+			return _casts[i]->actor(remaining - 1).name;
+		remaining -= _casts[i]->actorCount();
+	}
+	return Common::String();
+}
+
+bool CyberflixEngine::actorVisible(const Common::String &name, const bool *newVisible) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorvisible('%s'): no such actor", name.c_str());
+		return false;
+	}
+	if (newVisible)
+		ref.actor->visible = *newVisible;
+	return ref.actor->visible;
+}
+
+Common::String CyberflixEngine::actorSet(const Common::String &name, const Common::String *newSet) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorset('%s'): no such actor", name.c_str());
+		return Common::String();
+	}
+	if (newSet) {
+		ref.actor->setName = *newSet;
+		ref.actor->setName.toLowercase();
+	}
+	return ref.actor->setName;
+}
+
+Common::String CyberflixEngine::actorStar(const Common::String &name, const Common::String *newStar) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorstar('%s'): no such actor", name.c_str());
+		return Common::String();
+	}
+	if (newStar) {
+		ref.actor->sceneName = *newStar;
+		ref.actor->sceneName.toLowercase();
+	}
+	return ref.actor->sceneName;
+}
+
+Common::String CyberflixEngine::actorPose(const Common::String &name, const Common::String *newPose) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorpose('%s'): no such actor", name.c_str());
+		return Common::String();
+	}
+	if (newPose) {
+		ref.actor->shapeName = *newPose;
+		ref.actor->shapeName.toLowercase();
+	}
+	return ref.actor->shapeName;
+}
+
+void CyberflixEngine::actorXYZ(const Common::String &name, int x, int y, int z) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorxyz('%s'): no such actor", name.c_str());
+		return;
+	}
+	ref.actor->x = (int16)x;
+	ref.actor->y = (int16)y;
+	ref.actor->z = (int16)z;
+}
+
+int CyberflixEngine::actorXYZ(const Common::String &name, int selector) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorxyz('%s'): no such actor", name.c_str());
+		return 0;
+	}
+	switch (selector) {
+	case 1:
+		return ref.actor->x;
+	case 2:
+		return ref.actor->y;
+	case 3:
+		return ref.actor->z;
+	case 4:
+		return makePoint(ref.actor->x, ref.actor->y);
+	default:
+		return 0;
+	}
+}
+
+int CyberflixEngine::actorDeg(const Common::String &name, const int *newDeg) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actordeg('%s'): no such actor", name.c_str());
+		return 0;
+	}
+	if (newDeg)
+		ref.actor->angle = (int16)(*newDeg & 0xff);
+	return ref.actor->angle;
+}
+
+int CyberflixEngine::actorValue(const Common::String &name, const int *newValue) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorvalue('%s'): no such actor", name.c_str());
+		return 0;
+	}
+	if (newValue)
+		ref.actor->value = *newValue;
+	return ref.actor->value;
+}
+
+Common::String CyberflixEngine::actorOwner(const Common::String &name,
+		const Common::String *newOwner) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorowner('%s'): no such actor", name.c_str());
+		return Common::String();
+	}
+	if (newOwner) {
+		ref.actor->owner = *newOwner;
+		ref.actor->owner.toLowercase();
+	}
+	return ref.actor->owner;
+}
+
+void CyberflixEngine::actorZClip(const Common::String &name, int zClip) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorzclip('%s'): no such actor", name.c_str());
+		return;
+	}
+	ref.actor->zClip = zClip;
+}
+
+void CyberflixEngine::actorSpeed(const Common::String &name, int speed) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorspeed('%s'): no such actor", name.c_str());
+		return;
+	}
+	ref.actor->speed = speed;
+}
+
+void CyberflixEngine::actorScale(const Common::String &name, int scale) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorscale('%s'): no such actor", name.c_str());
+		return;
+	}
+	ref.actor->scale = MAX(1, scale);
+}
+
+void CyberflixEngine::actorTurn(const Common::String &name, int turn) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorturn('%s'): no such actor", name.c_str());
+		return;
+	}
+	ref.actor->turn = turn;
 }
 
 // ---- Shop/prop subsystem (TI.EXE FUN_00428450 and friends) ----------------
@@ -1725,6 +2347,12 @@ int CyberflixEngine::randomNumber(int n) {
 	return (int)_rnd.getRandomNumber((uint)n - 1) + 1;
 }
 
+int CyberflixEngine::frameRate(const int *newRate) {
+	if (newRate)
+		_frameRate = CLIP(*newRate, 0, 60);
+	return _frameRate;
+}
+
 CyberflixEngine::ThemeTrack *CyberflixEngine::findTrack(const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
@@ -2312,9 +2940,9 @@ void CyberflixEngine::registerPathSlotDirectory(int slot) {
 }
 
 // Resolve a clut name the way TI.EXE's registry lookup does (FUN_004470b0):
-// the built-in names "black"/"current", and "set"/"stage" which alias the
-// palette embedded in the currently open file of that kind ("puppet" lands
-// with the puppet subsystem). Named cluts registered by scripts land later.
+// the built-in names "black"/"current", and "set"/"stage"/"puppet" which alias
+// the palette embedded in the currently open file of that kind. Named cluts
+// registered by scripts land later.
 bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 3]) {
 	Common::String key = name;
 	key.toLowercase();
@@ -2329,6 +2957,8 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 		return _set && _set->isOpen() && _set->loadSetPalette(rgb);
 	if (key == "stage")
 		return _stage && _stage->isOpen() && _stage->loadStagePalette(rgb);
+	if (key == "puppet")
+		return _puppet && _puppet->isOpen() && _puppet->loadPuppetPalette(rgb);
 	warning("Cyberflix: clut '%s' not resolvable yet", name.c_str());
 	return false;
 }
@@ -2391,9 +3021,20 @@ void CyberflixEngine::forceUpdate() {
 	// forceupdate() (TI.EXE 0x2f14 -> FUN_00446910 -> FUN_00423a60): rebuild the
 	// display list from LIVE prop visibility, step active SET transitions through
 	// FUN_004420b0, composite, and present.
+	processScheduledLoops();
 	refreshPropsIfDirty();
-	advanceSetTransition();
-	_system->updateScreen();
+	if (_puppet && _puppet->isOpen() && _puppetVisible)
+		renderCurrentPuppetFrame(true);
+	else {
+		advanceSetTransition();
+		_system->updateScreen();
+	}
+	if (_frameRate > 0) {
+		const int deadline = _lastFrameTick + _frameRate;
+		while (!shouldQuit() && tick() < deadline)
+			_system->delayMillis(1);
+	}
+	_lastFrameTick = tick();
 	debug(1, "Cyberflix: forceupdate()");
 }
 
@@ -2493,7 +3134,9 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 		duration = 1000;
 
 	refreshPropsIfDirty();
-	if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
+	if (_puppet && _puppet->isOpen() && _puppetVisible) {
+		renderCurrentPuppetFrame(false);
+	} else if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
 		if (_setTransitionType != kSetTransitionNone)
 			advanceSetTransition();
 		else
@@ -2523,12 +3166,10 @@ void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String 
 	loop.kind.toLowercase();
 	loop.target = target;
 	loop.message = message;
-	const uint32 delayMs = delay <= 0 ? 0 :
-			(delay < 1000 ? (uint32)((uint64)delay * 1000 / 60) : (uint32)delay);
-	loop.dueMillis = _system->getMillis() + delayMs;
+	loop.remainingPasses = delay;
 	_scheduledLoops.push_back(loop);
-	debug(2, "Cyberflix: makeloop('%s', '%s', '%s', %d) due in %u ms",
-			kind.c_str(), target.c_str(), message.c_str(), delay, delayMs);
+	debug(2, "Cyberflix: makeloop('%s', '%s', '%s', %d)",
+			kind.c_str(), target.c_str(), message.c_str(), delay);
 }
 
 void CyberflixEngine::stopLoop(const Common::String &kind, const Common::String &target) {
@@ -2594,9 +3235,9 @@ void CyberflixEngine::processScheduledLoops() {
 	if (_loopsPaused || _scheduledLoops.empty())
 		return;
 
-	const uint32 now = _system->getMillis();
 	for (uint32 i = 0; i < _scheduledLoops.size();) {
-		if ((int32)(now - _scheduledLoops[i].dueMillis) < 0) {
+		--_scheduledLoops[i].remainingPasses;
+		if (_scheduledLoops[i].remainingPasses > 0) {
 			++i;
 			continue;
 		}
@@ -3074,12 +3715,11 @@ Common::Error CyberflixEngine::run() {
 		}
 		if (processPendingLoad())
 			continue;
-		processScheduledLoops();
 		bool handled = false;
 		_vm.callFunction("idle", Common::Array<Value>(), &handled);
 		refreshPropsIfDirty();
 		_system->updateScreen();
-		if (_setTransitionType == kSetTransitionNone)
+		if (_frameRate == 0 && _setTransitionType == kSetTransitionNone)
 			_system->delayMillis(10);
 	}
 

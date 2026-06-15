@@ -158,6 +158,21 @@ public:
 	/** currentpuppet() (0x4e51), or "none" while the puppet subsystem is absent. */
 	virtual Common::String currentPuppet() { return "none"; }
 
+	virtual void openPuppetFile(const Common::String &name) {}
+	virtual void closePuppetFile() {}
+	virtual void sendToPuppet(const Common::String &puppet, const Common::String &message,
+			const Common::Array<Value> &args) {}
+	virtual void puppetScript(const Common::String &name) {}
+	virtual void puppetClear() {}
+	virtual void puppetSpeak(const Common::String &name, int mode) {}
+	virtual void puppetBevel(const Common::String &name, int mode) {}
+	virtual int puppetEvent(int timeout) { return -1; }
+	virtual Common::String puppetBase(const Common::String *newBase) { return Common::String(); }
+	virtual bool puppetVisible(const bool *newVisible) { return false; }
+	virtual int puppetParam(int selector, const int *newValue) { return 0; }
+	virtual int countPuppets() { return 0; }
+	virtual Common::String indexToPuppet(int index) { return Common::String(); }
+
 	/** Dispatch a scene message. The native sendtoscene() does not switch the
 	 *  current rendered scene; current scene changes are driven by currentscene()
 	 *  / SET navigation. */
@@ -191,6 +206,9 @@ public:
 
 	/** random(n) (0x4e21): script-visible range is 1..n. */
 	virtual int randomNumber(int n) { return 0; }
+
+	/** framerate([n]) (0x3e96): native compositor pacing in 60 Hz timer units. */
+	virtual int frameRate(const int *newRate) { return 3; }
 
 	/**
 	 * clut(name): snap the hardware palette to the named CLUT instantly
@@ -318,6 +336,38 @@ public:
 
 	/** currentcd([name]) (0x3ea2 FUN_00439df0/FUN_0043a290): switch/query current CD label. */
 	virtual Common::String currentCD(const Common::String *requested) { return Common::String(); }
+
+	/** opencastfile('name.cst') (0x2eed FUN_0041f1c0): load actor records. */
+	virtual void openCastFile(const Common::String &name) {}
+
+	/** closecastfile('name.cst') (0x2eee FUN_004211b0): remove a cast and actors. */
+	virtual void closeCastFile(const Common::String &name) {}
+
+	/** sendtocast('file.cst', message(args)): dispatch against the cast script. */
+	virtual void sendToCast(const Common::String &cast, const Common::String &message,
+			const Common::Array<Value> &args) {}
+
+	/** sendtoactor(actor, message(args)): dispatch [actor script, cast script]. */
+	virtual void sendToActor(const Common::String &actor, const Common::String &message,
+			const Common::Array<Value> &args) {}
+
+	/** countactors() / indextoactor(i): native global actor list. */
+	virtual int countActors() { return 0; }
+	virtual Common::String indexToActor(int index) { return Common::String(); }
+
+	virtual bool actorVisible(const Common::String &name, const bool *newVisible) { return false; }
+	virtual Common::String actorSet(const Common::String &name, const Common::String *newSet) { return Common::String(); }
+	virtual Common::String actorStar(const Common::String &name, const Common::String *newStar) { return Common::String(); }
+	virtual Common::String actorPose(const Common::String &name, const Common::String *newPose) { return Common::String(); }
+	virtual void actorXYZ(const Common::String &name, int x, int y, int z) {}
+	virtual int actorXYZ(const Common::String &name, int selector) { return 0; }
+	virtual int actorDeg(const Common::String &name, const int *newDeg) { return 0; }
+	virtual int actorValue(const Common::String &name, const int *newValue) { return 0; }
+	virtual Common::String actorOwner(const Common::String &name, const Common::String *newOwner) { return Common::String(); }
+	virtual void actorZClip(const Common::String &name, int zClip) {}
+	virtual void actorSpeed(const Common::String &name, int speed) {}
+	virtual void actorScale(const Common::String &name, int scale) {}
+	virtual void actorTurn(const Common::String &name, int turn) {}
 
 	/** openshopfile('name.shp'): load a .SHP prop container and dispatch its
 	 *  openshop()/openprop() messages (TI.EXE 0x2f18 FUN_00428450). */

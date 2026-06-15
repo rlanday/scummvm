@@ -27,13 +27,16 @@
 #include "common/hashmap.h"
 #include "common/hash-str.h"
 #include "common/ptr.h"
+#include "common/rect.h"
 
 #include "engines/engine.h"
 
 #include "audio/mixer.h"
 
+#include "cyberflix/cast.h"
 #include "cyberflix/detection.h"
 #include "cyberflix/image.h"
+#include "cyberflix/puppet.h"
 #include "cyberflix/shop.h"
 #include "cyberflix/vm.h"
 
@@ -109,6 +112,20 @@ public:
 	Common::String currentScene(const Common::String *target) override;
 	bool setVisible(const bool *newVisible) override;
 	Common::String currentPuppet() override;
+	void openPuppetFile(const Common::String &name) override;
+	void closePuppetFile() override;
+	void sendToPuppet(const Common::String &puppet, const Common::String &message,
+			const Common::Array<Value> &args) override;
+	void puppetScript(const Common::String &name) override;
+	void puppetClear() override;
+	void puppetSpeak(const Common::String &name, int mode) override;
+	void puppetBevel(const Common::String &name, int mode) override;
+	int puppetEvent(int timeout) override;
+	Common::String puppetBase(const Common::String *newBase) override;
+	bool puppetVisible(const bool *newVisible) override;
+	int puppetParam(int selector, const int *newValue) override;
+	int countPuppets() override;
+	Common::String indexToPuppet(int index) override;
 	void sendToScene(const Common::String &scene, const Common::String &message = Common::String(),
 			const Common::Array<Value> &args = Common::Array<Value>()) override;
 	void sendToPainting(const Common::String &scene, const Common::String &view,
@@ -120,6 +137,7 @@ public:
 	bool roadAhead(const Common::String &scene, const Common::String &view) override;
 	bool actionFrame(int n) override;
 	int randomNumber(int n) override;
+	int frameRate(const int *newRate) override;
 	void setClut(const Common::String &name) override;
 	void blackScreen() override;
 	void forceUpdate() override;
@@ -154,6 +172,27 @@ public:
 	bool optionKey() override;
 	Common::String pathSlot(int slot, const Common::String *newPath) override;
 	Common::String currentCD(const Common::String *requested) override;
+	void openCastFile(const Common::String &name) override;
+	void closeCastFile(const Common::String &name) override;
+	void sendToCast(const Common::String &cast, const Common::String &message,
+			const Common::Array<Value> &args) override;
+	void sendToActor(const Common::String &actor, const Common::String &message,
+			const Common::Array<Value> &args) override;
+	int countActors() override;
+	Common::String indexToActor(int index) override;
+	bool actorVisible(const Common::String &name, const bool *newVisible) override;
+	Common::String actorSet(const Common::String &name, const Common::String *newSet) override;
+	Common::String actorStar(const Common::String &name, const Common::String *newStar) override;
+	Common::String actorPose(const Common::String &name, const Common::String *newPose) override;
+	void actorXYZ(const Common::String &name, int x, int y, int z) override;
+	int actorXYZ(const Common::String &name, int selector) override;
+	int actorDeg(const Common::String &name, const int *newDeg) override;
+	int actorValue(const Common::String &name, const int *newValue) override;
+	Common::String actorOwner(const Common::String &name, const Common::String *newOwner) override;
+	void actorZClip(const Common::String &name, int zClip) override;
+	void actorSpeed(const Common::String &name, int speed) override;
+	void actorScale(const Common::String &name, int scale) override;
+	void actorTurn(const Common::String &name, int turn) override;
 	void openShopFile(const Common::String &name) override;
 	void closeShopFile(const Common::String &name) override;
 	void sendToShop(const Common::String &shop, const Common::String &message,
@@ -302,6 +341,35 @@ private:
 	bool _propsDirty = false; ///< Prop state changed; re-render before idling.
 	Common::Array<Common::Rect> _dirtyRects; ///< Native-style dirty screen rectangles for prop changes.
 
+	/** Open cast files and the global actor list they contribute. */
+	Common::Array<Common::SharedPtr<Cast> > _casts;
+	Common::SharedPtr<Cast> findCastShared(const Common::String &name);
+	struct ActorRef {
+		Common::SharedPtr<Cast> cast;
+		Common::SharedPtr<Cast::Actor> actor;
+	};
+	ActorRef findActorRef(const Common::String &name);
+
+	/** Currently open puppet archive (TI.EXE DAT_00461200 cluster). */
+	Common::SharedPtr<Puppet> _puppet;
+	Common::String _puppetBase;
+	Common::String _puppetCurrentAction;
+	uint32 _puppetCurrentFrame = 0;
+	bool _puppetVisible = false;
+	int16 _puppetParams[10] = {};
+	Audio::SoundHandle _puppetSpeechHandle;
+	struct PuppetBevelOption {
+		Common::String text;
+		int id = 0;
+		Common::Rect rect;
+	};
+	Common::Array<PuppetBevelOption> _puppetBevels;
+	const Puppet::ActionEntry *currentPuppetAction() const;
+	bool renderPuppetFrame(const Puppet::ActionEntry &action, uint32 frameIndex, bool present);
+	bool renderCurrentPuppetFrame(bool present);
+	void renderPuppetBevels(bool present);
+	void playPuppetAction(const Puppet::ActionEntry &action);
+
 	/** Find an open shop by (case-insensitive) file name, or nullptr. */
 	Shop *findShop(const Common::String &name);
 	Common::SharedPtr<Shop> findShopShared(const Common::String &name);
@@ -427,11 +495,13 @@ private:
 		Common::String kind;
 		Common::String target;
 		Common::String message;
-		uint32 dueMillis = 0;
+		int32 remainingPasses = 0;
 	};
 	Common::Array<ScheduledLoop> _scheduledLoops;
 	bool _loopsPaused = false;
 	void processScheduledLoops();
+	int _frameRate = 3;       ///< DAT_00461126, scaled 60 Hz units between compositor passes.
+	int _lastFrameTick = 0;   ///< DAT_00486788, last completed compositor tick.
 
 	struct CricketState {
 		Common::String name;

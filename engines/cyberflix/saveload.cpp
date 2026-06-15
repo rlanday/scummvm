@@ -246,7 +246,7 @@ struct LoopState {
 	Common::String kind;
 	Common::String target;
 	Common::String message;
-	uint32 remainingMillis = 0;
+	int32 remainingPasses = 0;
 };
 
 struct CricketStateSave {
@@ -499,7 +499,7 @@ static bool parseLoopChunk(Common::SeekableReadStream &in, int64 end,
 				!readSaveString(in, end, loop.message) ||
 				in.pos() + 4 > end)
 			return false;
-		loop.remainingMillis = in.readUint32LE();
+		loop.remainingPasses = (int32)in.readUint32LE();
 		loops.push_back(loop);
 	}
 	return !in.err();
@@ -860,13 +860,12 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	}
 
 	_loopsPaused = loopsPaused;
-	const uint32 now = _system->getMillis();
 	for (uint i = 0; i < loopStates.size(); ++i) {
 		ScheduledLoop loop;
 		loop.kind = loopStates[i].kind;
 		loop.target = loopStates[i].target;
 		loop.message = loopStates[i].message;
-		loop.dueMillis = now + loopStates[i].remainingMillis;
+		loop.remainingPasses = loopStates[i].remainingPasses;
 		_scheduledLoops.push_back(loop);
 	}
 
@@ -947,7 +946,6 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 
 	const Common::String signature = !_saveSignature.empty()
 			? _saveSignature : defaultSaveSignature(getGameType());
-	const uint32 now = _system->getMillis();
 
 	saveFile->write("CFXS", 4);
 	saveFile->writeUint32LE(kCyberflixSaveVersion);
@@ -1147,8 +1145,7 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 			writeSaveString(payload, loop.kind);
 			writeSaveString(payload, loop.target);
 			writeSaveString(payload, loop.message);
-			const uint32 remaining = ((int32)(loop.dueMillis - now) > 0) ? loop.dueMillis - now : 0;
-			payload.writeUint32LE(remaining);
+			payload.writeUint32LE(loop.remainingPasses > 0 ? (uint32)loop.remainingPasses : 0);
 		}
 		writeChunk(*saveFile, "LOOP", payload);
 	}

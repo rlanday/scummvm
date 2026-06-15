@@ -335,7 +335,8 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 		pc++;
 		if (pc < count && script.getInstruction(pc).opcode == Script::kOpOpenParen) {
 			// The message-carrying builtins sendtoactor (0x2ef0), sendtoscene
-			// (0x2f02), sendtocast (0x2f10), sendtoprop (0x2f17), sendtoshop
+			// (0x2f02), sendtopuppet (0x2f0d), sendtocast (0x2f10),
+			// sendtoprop (0x2f17), sendtoshop
 			// (0x2f1b), sendtopainting (0x2f22), sendtobutton (0x2f24),
 			// sendtoflat (0x2f25), sendtostage (0x2f26) and sendtoboot
 			// (0x2f31) pass their final
@@ -346,10 +347,10 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 			// evaluated normally. Evaluating the message instead recurses:
 			// boot res1's mousedown sends mousedown(thepoint) to the hit
 			// scene/flat/button, which would re-enter itself.
-			if (headOp == 0x2ef0 || headOp == 0x2f02 || headOp == 0x2f10 ||
-					headOp == 0x2f17 || headOp == 0x2f1b || headOp == 0x2f22 ||
-					headOp == 0x2f24 || headOp == 0x2f25 || headOp == 0x2f26 ||
-					headOp == 0x2f31)
+			if (headOp == 0x2ef0 || headOp == 0x2f02 || headOp == 0x2f0d ||
+					headOp == 0x2f10 || headOp == 0x2f17 || headOp == 0x2f1b ||
+					headOp == 0x2f22 || headOp == 0x2f24 || headOp == 0x2f25 ||
+					headOp == 0x2f26 || headOp == 0x2f31)
 				return dispatchMessageBuiltin(script, pc, headOp);
 			Common::Array<Value> args;
 			parseCallArgs(script, pc, args);
@@ -423,12 +424,20 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 			_host->sendToProp(targets.empty() ? Common::String() : targets[0].strValue,
 					message, msgArgs);
 		break;
-	case 0x2ef0: // sendtoactor(actor, message) -> dispatch against the actor's
-	             // cast script (TI.EXE 0x2ef0 handler). Cast subsystem not yet
-	             // implemented; no-op so initactors()-style loops run dry.
+	case 0x2ef0: // sendtoactor(actor, message) -> actor script, then cast script.
+		if (_host)
+			_host->sendToActor(targets.empty() ? Common::String() : targets[0].strValue,
+					message, msgArgs);
+		break;
 	case 0x2f10: // sendtocast('file.cst', message) -> per-cast script dispatch.
-		if (_trace)
-			debug(0, "    (cast message '%s' ignored: subsystem pending)", message.c_str());
+		if (_host)
+			_host->sendToCast(targets.empty() ? Common::String() : targets[0].strValue,
+					message, msgArgs);
+		break;
+	case 0x2f0d: // sendtopuppet(target, message) -> [PUP script, BOOTFILE res2].
+		if (_host)
+			_host->sendToPuppet(targets.empty() ? Common::String() : targets[0].strValue,
+					message, msgArgs);
 		break;
 	case 0x2f02: // sendtoscene(scene, message) -> TI.EXE FUN_004311e0/
 	             // FUN_00431200: dispatch against the scene's script chain.
@@ -539,8 +548,17 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x2ee1: // message(text) -> FUN_00446240
 			_host->message(args.empty() ? Common::String() : args[0].strValue);
 			break;
+		case 0x2eed: // opencastfile('name.cst') -> FUN_0041f1c0
+			_host->openCastFile(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x2eee: // closecastfile('name.cst') -> FUN_004211b0
+			_host->closeCastFile(args.empty() ? Common::String() : args[0].strValue);
+			break;
 		case 0x2ef1: // playmovie('name.mov')
 			_host->playMovie(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x2ef2: // openpuppetfile('name.pup') -> FUN_004473c0/FUN_00447470
+			_host->openPuppetFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
 		case 0x2f1c: // openstagefile('name.stg')
 			_host->openStageFile(args.empty() ? Common::String() : args[0].strValue);
@@ -564,6 +582,23 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		// parenthesised message and routes through dispatchMessageBuiltin.)
 		case 0x2f06: // clut(name): snap the hardware palette (FUN_00446500)
 			_host->setClut(args.empty() ? Common::String() : args[0].strValue);
+			break;
+		case 0x2f09: // puppetclear(): native display-list clear, rendering pending
+			_host->puppetClear();
+			break;
+		case 0x2f0a: // closepuppetfile() -> FUN_00447880
+			_host->closePuppetFile();
+			break;
+		case 0x2f0b: // puppetspeak(name[, mode]) -> FUN_00447ce0/FUN_00448b60
+			_host->puppetSpeak(args.empty() ? Common::String() : args[0].strValue,
+					args.size() > 1 ? args[1].intValue : 0);
+			break;
+		case 0x2f0c: // puppetbevel(name[, mode]) -> FUN_00447b30
+			_host->puppetBevel(args.empty() ? Common::String() : args[0].strValue,
+					args.size() > 1 ? args[1].intValue : 0);
+			break;
+		case 0x2f0e: // puppetscript(name) -> FUN_004482c0
+			_host->puppetScript(args.empty() ? Common::String() : args[0].strValue);
 			break;
 		case 0x2f13: // blackscreen(): fill the window with black pixels (FUN_00446b80)
 			_host->blackScreen();
@@ -643,6 +678,24 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		}
 		case 0x4e51: // currentpuppet() -> current puppet name or 'none'
 			return Value::makeString(_host->currentPuppet());
+		case 0x3eb1: { // puppetparam(selector[, value]) -> FUN_00448730/FUN_004485f0
+			if (args.empty())
+				return Value::makeInt(0);
+			if (args.size() >= 2) {
+				int value = args[1].intValue;
+				return Value::makeInt(_host->puppetParam(args[0].intValue, &value));
+			}
+			return Value::makeInt(_host->puppetParam(args[0].intValue, nullptr));
+		}
+		case 0x3eb2: { // puppetvisible([flag]) -> FUN_00448550/FUN_004485b0
+			bool visible = !args.empty() && args[0].intValue != 0;
+			const bool *newVisible = args.empty() ? nullptr : &visible;
+			return Value::makeBool(_host->puppetVisible(newVisible));
+		}
+		case 0x3eb5: { // puppetbase([name]) -> FUN_00447ee0
+			const Common::String *base = args.empty() ? nullptr : &args[0].strValue;
+			return Value::makeString(_host->puppetBase(base));
+		}
 		case 0x3e87: { // setvisible([flag]) -> current SET visibility flag
 			bool visible = args.empty() ? false : (args[0].intValue != 0);
 			const bool *newVisible = args.empty() ? nullptr : &visible;
@@ -650,10 +703,11 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		}
 		case 0x4e73: // actionframe(n) -> bool, FUN_004362c0 (n must be 1 or 2)
 			return Value::makeBool(_host->actionFrame(args.empty() ? 0 : args[0].intValue));
-		case 0x3e96: // framerate(n): sets the global frame pacing (TI.EXE
-		             // dispatch A case 0x15). Engine paces from per-frame
-		             // authored holds instead; accept and ignore.
-			break;
+		case 0x3e96: { // framerate([n]) -> DAT_00461126
+			int rate = args.empty() ? 0 : args[0].intValue;
+			const int *newRate = args.empty() ? nullptr : &rate;
+			return Value::makeInt(_host->frameRate(newRate));
+		}
 		case 0x2ef3: // opentrackfile('name.trk') -> FUN_00411be0/FUN_00411cc0
 			_host->openTrackFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
@@ -753,9 +807,90 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() >= 2)
 				return Value::makeBool(_host->roadAhead(args[0].strValue, args[1].strValue));
 			return Value::makeBool(false);
-		case 0x4e2c: // countactors(): cast subsystem pending -> 0, so the
-		             // initall()/advanceday() actor loops run dry.
+		case 0x4e2c: // countactors() -> FUN_00420a70
+			return Value::makeInt(_host->countActors());
+		case 0x4e2d: // indextoactor(i) -> native 1-based actor lookup
+			return Value::makeString(_host->indexToActor(args.empty() ? 0 : args[0].intValue));
+		case 0x3e81: { // actorvisible(name[, flag]) -> FUN_00420f10/FUN_00420d30
+			bool visible = args.size() > 1 && args[1].intValue != 0;
+			const bool *newVisible = args.size() > 1 ? &visible : nullptr;
+			if (!args.empty())
+				return Value::makeBool(_host->actorVisible(args[0].strValue, newVisible));
+			return Value::makeBool(false);
+		}
+		case 0x3e82: { // actordeg(name[, deg]) -> FUN_0041fef0 / getter
+			if (args.size() >= 2) {
+				int deg = args[1].intValue;
+				return Value::makeInt(_host->actorDeg(args[0].strValue, &deg));
+			}
+			if (args.size() == 1)
+				return Value::makeInt(_host->actorDeg(args[0].strValue, nullptr));
 			return Value::makeInt(0);
+		}
+		case 0x3e83: // actorxyz(name, x, y, z) or actorxyz(name, selector)
+			if (args.size() >= 4) {
+				_host->actorXYZ(args[0].strValue, args[1].intValue,
+						args[2].intValue, args[3].intValue);
+				break;
+			}
+			if (args.size() == 2)
+				return Value::makeInt(_host->actorXYZ(args[0].strValue, args[1].intValue));
+			return Value::makeInt(0);
+		case 0x3e86: // actorstar(name[, scene]) -> FUN_0041fbb0
+			if (args.size() >= 2)
+				return Value::makeString(_host->actorStar(args[0].strValue, &args[1].strValue));
+			if (args.size() == 1)
+				return Value::makeString(_host->actorStar(args[0].strValue, nullptr));
+			return Value::makeString(Common::String());
+		case 0x3e8e: // actorpose(name[, pose]) -> FUN_0041fd70
+			if (args.size() >= 2)
+				return Value::makeString(_host->actorPose(args[0].strValue, &args[1].strValue));
+			if (args.size() == 1)
+				return Value::makeString(_host->actorPose(args[0].strValue, nullptr));
+			return Value::makeString(Common::String());
+		case 0x3e95: // actorset(name[, set]) -> FUN_0041f970
+			if (args.size() >= 2)
+				return Value::makeString(_host->actorSet(args[0].strValue, &args[1].strValue));
+			if (args.size() == 1)
+				return Value::makeString(_host->actorSet(args[0].strValue, nullptr));
+			return Value::makeString(Common::String());
+		case 0x3e97: // actorspeed(name, speed)
+			if (args.size() >= 2)
+				_host->actorSpeed(args[0].strValue, args[1].intValue);
+			break;
+		case 0x3e98: // actorscale(name, scale)
+			if (args.size() >= 2)
+				_host->actorScale(args[0].strValue, args[1].intValue);
+			break;
+		case 0x3ea4: // actorturn(name, turn)
+			if (args.size() >= 2)
+				_host->actorTurn(args[0].strValue, args[1].intValue);
+			break;
+		case 0x3eab: // actorowner(name[, owner]) -> FUN_00422210
+			if (args.size() >= 2)
+				return Value::makeString(_host->actorOwner(args[0].strValue, &args[1].strValue));
+			if (args.size() == 1)
+				return Value::makeString(_host->actorOwner(args[0].strValue, nullptr));
+			return Value::makeString(Common::String());
+		case 0x3eac: { // actorvalue(name[, value]) -> FUN_004222d0
+			if (args.size() >= 2) {
+				int value = args[1].intValue;
+				return Value::makeInt(_host->actorValue(args[0].strValue, &value));
+			}
+			if (args.size() == 1)
+				return Value::makeInt(_host->actorValue(args[0].strValue, nullptr));
+			return Value::makeInt(0);
+		}
+		case 0x3eb3: // actorzclip(name, zclip)
+			if (args.size() >= 2)
+				_host->actorZClip(args[0].strValue, args[1].intValue);
+			break;
+		case 0x4e4e: // countpuppets() -> FUN_00448380: PUP resource-2 script count
+			return Value::makeInt(_host->countPuppets());
+		case 0x4e4f: // indextopuppet(i) -> FUN_004483f0, 1-based
+			return Value::makeString(_host->indexToPuppet(args.empty() ? 0 : args[0].intValue));
+		case 0x4e3c: // puppetevent(timeout) -> FUN_00449e40 waits for a clicked bevel id
+			return Value::makeInt(_host->puppetEvent(args.empty() ? -1 : args[0].intValue));
 		case 0x2f18: // openshopfile('name.shp') -> FUN_00428450: parse the .SHP,
 		             // then dispatch openshop() and per-prop openprop().
 			_host->openShopFile(args.empty() ? Common::String() : args[0].strValue);
