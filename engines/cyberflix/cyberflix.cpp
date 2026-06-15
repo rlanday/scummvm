@@ -672,10 +672,15 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 	if (_set && _set->setName() == openedName && !useScene.empty()) {
 		int sceneIdx = _set->findScene(useScene);
 		if (sceneIdx < 0) {
-			warning("Cyberflix: set '%s' has no scene named '%s'",
-					_set->name().c_str(), useScene.c_str());
-			return;
+			if (_set->sceneCount() == 0) {
+				warning("Cyberflix: set '%s' has no scenes", _set->name().c_str());
+				return;
+			}
+			debug(1, "Cyberflix: set '%s' scene '%s' not found, using first scene '%s'",
+					_set->name().c_str(), useScene.c_str(), _set->sceneName(0).c_str());
+			sceneIdx = 0;
 		}
+		Common::String actualScene = _set->sceneName((uint32)sceneIdx);
 		// View select (TI.EXE FUN_00433960 stores the view, FUN_004425e0 aims
 		// the camera at the panorama record tagged with the view's index).
 		int angle = 0;
@@ -688,7 +693,7 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 				activeView = _set->viewName((uint32)sceneIdx, (uint32)viewIdx);
 			} else {
 				warning("Cyberflix: opensetfile view '%s' not found in scene '%s'",
-						useView.c_str(), useScene.c_str());
+						useView.c_str(), actualScene.c_str());
 			}
 		}
 		renderSetScene(sceneIdx, 0, angle, activeView);
