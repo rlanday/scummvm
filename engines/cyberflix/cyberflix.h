@@ -153,6 +153,7 @@ public:
 			const bool *enabled) override;
 	bool optionKey() override;
 	Common::String pathSlot(int slot, const Common::String *newPath) override;
+	Common::String currentCD(const Common::String *requested) override;
 	void openShopFile(const Common::String &name) override;
 	void closeShopFile(const Common::String &name) override;
 	void sendToShop(const Common::String &shop, const Common::String &message,
@@ -441,6 +442,7 @@ private:
 
 	Common::String _pathSlots[9];        ///< Native path slots 0..8 (FUN_00438450).
 	Common::String _pathSlotArchives[9]; ///< SearchMan archive names for slots 1..8.
+	Common::String _currentCD;           ///< Native current CD Pascal string (DAT_00460d60).
 	void registerPathSlotDirectory(int slot);
 
 	/**

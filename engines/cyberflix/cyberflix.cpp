@@ -172,6 +172,43 @@ static bool resolveCyberflixPathDir(const Common::String &path, Common::FSNode &
 	return false;
 }
 
+static Common::String canonicalCDLabel(const Common::String &label) {
+	if (label.equalsIgnoreCase("Titanic1"))
+		return "Titanic1";
+	if (label.equalsIgnoreCase("Titanic2"))
+		return "Titanic2";
+	return label;
+}
+
+static bool validNativeCDLabel(const Common::String &label) {
+	if (label.size() > 11)
+		return false;
+	for (uint i = 0; i < label.size(); ++i) {
+		const char c = label[i];
+		if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+				(c >= '0' && c <= '9')))
+			return false;
+	}
+	return true;
+}
+
+static bool findExtractedCDRoot(const Common::String &label, Common::FSNode &out) {
+	const Common::FSNode gameDir(ConfMan.getPath("path"));
+	if (gameDir.exists() && gameDir.isDirectory() &&
+			gameDir.getName().equalsIgnoreCase(label)) {
+		out = gameDir;
+		return true;
+	}
+
+	Common::FSNode sibling;
+	if (findCaselessChildDir(gameDir.getParent(), label, sibling)) {
+		out = sibling;
+		return true;
+	}
+
+	return false;
+}
+
 // Sample-add an 8-bit unsigned mono SFX buffer into the music track at the given
 // sample offset, extending the track with silence (0x80) if needed and clamping.
 static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, uint32 atSample) {
@@ -2115,6 +2152,27 @@ Common::String CyberflixEngine::pathSlot(int slot, const Common::String *newPath
 	return _pathSlots[slot];
 }
 
+Common::String CyberflixEngine::currentCD(const Common::String *requested) {
+	if (requested) {
+		if (requested->empty()) {
+			_currentCD.clear();
+		} else if (!validNativeCDLabel(*requested)) {
+			warning("Cyberflix: currentcd('%s'): invalid CD label", requested->c_str());
+		} else {
+			Common::FSNode cdRoot;
+			if (findExtractedCDRoot(*requested, cdRoot)) {
+				_currentCD = canonicalCDLabel(cdRoot.getName());
+			} else {
+				_currentCD.clear();
+				debug(1, "Cyberflix: currentcd('%s') did not find an extracted disc directory",
+						requested->c_str());
+			}
+		}
+	}
+
+	return _currentCD;
+}
+
 void CyberflixEngine::registerPathSlotDirectory(int slot) {
 	if (slot < 1 || slot > 8)
 		return;
@@ -2763,8 +2821,10 @@ Common::Error CyberflixEngine::run() {
 	SearchMan.addSubDirectoryMatching(gameDataDir, "data");
 	SearchMan.addSubDirectoryMatching(gameDataDir, "movies");
 	if (gameDataDir.getName().equalsIgnoreCase("titanic1") ||
-			gameDataDir.getName().equalsIgnoreCase("titanic2"))
+			gameDataDir.getName().equalsIgnoreCase("titanic2")) {
 		_pathSlots[0] = gameDataDir.getName() + ":";
+		_currentCD = canonicalCDLabel(gameDataDir.getName());
+	}
 
 	// Clear to black before the boot script paints anything.
 	byte palette[3 * 256];
