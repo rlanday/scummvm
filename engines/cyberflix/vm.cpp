@@ -534,6 +534,9 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 
 	if (_host) {
 		switch (opcode) {
+		case 0x2ee1: // message(text) -> FUN_00446240
+			_host->message(args.empty() ? Common::String() : args[0].strValue);
+			break;
 		case 0x2ef1: // playmovie('name.mov')
 			_host->playMovie(args.empty() ? Common::String() : args[0].strValue);
 			break;
@@ -565,6 +568,15 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			break;
 		case 0x2f14: // forceupdate() -> FUN_00446910 -> FUN_00423a60
 			_host->forceUpdate();
+			break;
+		case 0x2f29: // flushevents() -> FUN_00446cb0/FUN_00405110
+			_host->flushEvents();
+			break;
+		case 0x2f30: // drawstring(text, point, color, size) -> FUN_004460c0
+			if (args.size() >= 2)
+				_host->drawString(args[0].strValue, args[1].intValue,
+						args.size() > 2 ? args[2].intValue : 0,
+						args.size() > 3 ? args[3].intValue : 12);
 			break;
 		case 0x2f27: // quit() -> FUN_00446c80: restore cursor, set native quit flag
 			_host->requestQuit();
@@ -614,6 +626,11 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return Value::makeString(_host->currentSet());
 		case 0x4e50: // currentstage() -> open stage name or native 'None'
 			return Value::makeString(_host->currentStage());
+		case 0x3e88: { // stagevisible([flag]) -> DAT_00461156
+			bool visible = args.empty() ? false : (args[0].intValue != 0);
+			const bool *newVisible = args.empty() ? nullptr : &visible;
+			return Value::makeBool(_host->stageVisible(newVisible));
+		}
 		case 0x4e46: // currentflat() -> current stage node name or native 'None'
 			return Value::makeString(_host->currentFlat());
 		case 0x3e8b: // currentview() -> current SET view name
@@ -668,6 +685,25 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			_host->themeVolume(args.size() > 0 ? args[0].strValue : Common::String(),
 					args.size() > 1 ? args[1].intValue : 255);
 			break;
+		case 0x3ea1: { // wavevolume([level 0..9]) -> FUN_00436670/FUN_00439df0
+			int level = args.empty() ? 0 : args[0].intValue;
+			const int *newLevel = args.empty() ? nullptr : &level;
+			return Value::makeInt(_host->waveVolume(newLevel));
+		}
+		case 0x3ea8: { // soundvol(name[, volume 0..255]) -> FUN_00412ad0/FUN_004125c0
+			if (args.empty())
+				return Value::makeInt(0);
+			int volume = args.size() > 1 ? args[1].intValue : 0;
+			const int *newVolume = args.size() > 1 ? &volume : nullptr;
+			return Value::makeInt(_host->soundVolume(args[0].strValue, newVolume));
+		}
+		case 0x3ead: { // keyaborts([resource, key, flag]) -> FUN_00435a00/FUN_00446e10
+			bool enabled = args.size() > 2 && args[2].intValue != 0;
+			return Value::makeBool(_host->keyAborts(
+					args.size() > 0 ? &args[0].strValue : nullptr,
+					args.size() > 1 ? &args[1].strValue : nullptr,
+					args.size() > 2 ? &enabled : nullptr));
+		}
 		case 0x4e6f: // currenttheme(1|2) -> FUN_00412f20: 1 = playing cue name,
 		             // 2 = its track file name; 'none' if silent
 			return Value::makeString(_host->currentTheme(args.empty() ? 1 : args[0].intValue));
@@ -696,6 +732,8 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case 0x4e64: // questiondialog(text) -> FUN_004363f0/FUN_00409030
 			return Value::makeBool(_host->questionDialog(
 					args.empty() ? Common::String() : args[0].strValue));
+		case 0x4e5a: // optionkey() -> FUN_004376e0/GetAsyncKeyState(VK_SHIFT)
+			return Value::makeBool(_host->optionKey());
 		case 0x4e32: // countpaintings(scene, view) -> FUN_00431fe0
 			if (args.size() >= 2)
 				return Value::makeInt(_host->countPaintings(args[0].strValue, args[1].strValue));

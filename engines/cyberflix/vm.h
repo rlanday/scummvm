@@ -88,6 +88,9 @@ public:
 	/** currentstage() (0x4e50): open stage name, or native "None". */
 	virtual Common::String currentStage() { return "None"; }
 
+	/** stagevisible([flag]) (0x3e88): current stage visibility flag. */
+	virtual bool stageVisible(const bool *newVisible) { return false; }
+
 	/** currentflat() (0x4e46): current stage node name, or native "None". */
 	virtual Common::String currentFlat() { return "None"; }
 
@@ -204,6 +207,15 @@ public:
 	 */
 	virtual void forceUpdate() {}
 
+	/** message(text) (0x2ee1): copy/log a script diagnostic message. */
+	virtual void message(const Common::String &text) {}
+
+	/** flushevents() (0x2f29): purge queued input events. */
+	virtual void flushEvents() {}
+
+	/** drawstring(text, point, color, size) (0x2f30): draw text to the current port. */
+	virtual void drawString(const Common::String &text, int32 packedPoint, int color, int size) {}
+
 	/**
 	 * blacktoscreen(target, n) / screentoblack(target, n) (0x2f11/0x2f12,
 	 * FUN_00446b00/FUN_00446a80 -> FUN_0041b3f0/FUN_0041b3a0): fade the
@@ -270,6 +282,12 @@ public:
 	/** themevol('name.trk', 0-255): set the track's theme volume (FUN_004125c0). */
 	virtual void themeVolume(const Common::String &name, int volume) {}
 
+	/** wavevolume([0..9]) (0x3ea1): get or set the global wave volume level. */
+	virtual int waveVolume(const int *newLevel) { return 9; }
+
+	/** soundvol(name[, 0..255]) (0x3ea8): get or set a named SFX cue volume. */
+	virtual int soundVolume(const Common::String &name, const int *newVolume) { return 255; }
+
 	/**
 	 * currenttheme(which): which==1 -> playing cue name, which==2 -> its track
 	 * file name; 'none' when silent (TI.EXE FUN_00412f20).
@@ -284,6 +302,13 @@ public:
 
 	/** currentvoice(): active voice cue name, or "None" when silent. */
 	virtual Common::String currentVoice() { return "None"; }
+
+	/** keyaborts([res, key, flag]) (0x3ead): key-abort table toggle/global state. */
+	virtual bool keyAborts(const Common::String *resource, const Common::String *key,
+			const bool *enabled) { return false; }
+
+	/** optionkey() (0x4e5a): true while the native Option/Shift key is down. */
+	virtual bool optionKey() { return false; }
 
 	/** path(slot[, value]) (0x3e89 FUN_004462a0): get or set a native path slot. */
 	virtual Common::String pathSlot(int slot, const Common::String *newPath) { return Common::String(); }

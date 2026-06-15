@@ -230,6 +230,18 @@ struct AudioState {
 	SoundSlotState voiceSlot;
 };
 
+struct RuntimeSettingsState {
+	bool seen = false;
+	int32 waveVolumeLevel = 9;
+	bool keyAborts = false;
+};
+
+struct CueVolumeState {
+	Common::String trackName;
+	Common::String cueName;
+	int32 volume = 255;
+};
+
 struct LoopState {
 	Common::String kind;
 	Common::String target;
@@ -429,6 +441,34 @@ static bool parseAudioChunk(Common::SeekableReadStream &in, int64 end, AudioStat
 			parseSoundSlot(in, end, audio.voiceSlot);
 }
 
+static bool parseSettingsChunk(Common::SeekableReadStream &in, int64 end,
+		RuntimeSettingsState &settings) {
+	settings.seen = true;
+	if (in.pos() + 5 > end)
+		return false;
+	settings.waveVolumeLevel = in.readSint32LE();
+	settings.keyAborts = in.readByte() != 0;
+	return !in.err();
+}
+
+static bool parseCueVolumeChunk(Common::SeekableReadStream &in, int64 end,
+		Common::Array<CueVolumeState> &cueVolumes) {
+	if (in.pos() + 4 > end)
+		return false;
+	uint32 count = in.readUint32LE();
+	cueVolumes.clear();
+	for (uint32 i = 0; i < count; ++i) {
+		CueVolumeState cueVolume;
+		if (!readSaveString(in, end, cueVolume.trackName) ||
+				!readSaveString(in, end, cueVolume.cueName) ||
+				in.pos() + 4 > end)
+			return false;
+		cueVolume.volume = in.readSint32LE();
+		cueVolumes.push_back(cueVolume);
+	}
+	return !in.err();
+}
+
 static bool parseVarsChunk(Common::SeekableReadStream &in, int64 end,
 		Common::HashMap<Common::String, Value> &vars) {
 	if (in.pos() + 4 > end)
@@ -560,6 +600,8 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	Common::Array<ShopState> shopStates;
 	Common::Array<TrackState> trackStates;
 	AudioState audioState;
+	RuntimeSettingsState settingsState;
+	Common::Array<CueVolumeState> cueVolumeStates;
 	Common::HashMap<Common::String, Value> vars;
 	bool varsSeen = false;
 	bool loopsPaused = false;
@@ -587,6 +629,10 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 			ok = parseTrackChunk(*saveFile, end, trackStates);
 		} else if (!strcmp(tag, "AUDI")) {
 			ok = parseAudioChunk(*saveFile, end, audioState);
+		} else if (!strcmp(tag, "SETT")) {
+			ok = parseSettingsChunk(*saveFile, end, settingsState);
+		} else if (!strcmp(tag, "SVOL")) {
+			ok = parseCueVolumeChunk(*saveFile, end, cueVolumeStates);
 		} else if (!strcmp(tag, "VARS")) {
 			ok = parseVarsChunk(*saveFile, end, vars);
 			varsSeen = ok;
@@ -623,6 +669,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	_scheduledLoops.clear();
 	_crickets.clear();
 	_stage.reset();
+	_stageVisible = false;
 	_stageNode = 0;
 	_set.reset();
 	_setScene = -1;
@@ -712,6 +759,27 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		_tracks.push_back(track);
 	}
 
+	if (settingsState.seen) {
+		_waveVolumeLevel = CLIP(settingsState.waveVolumeLevel, 0, 9);
+		_keyAborts = settingsState.keyAborts;
+	} else {
+		_waveVolumeLevel = 9;
+		_keyAborts = false;
+	}
+
+	for (uint i = 0; i < cueVolumeStates.size(); ++i) {
+		for (uint t = 0; t < _tracks.size(); ++t) {
+			if (!cueVolumeStates[i].trackName.empty() &&
+					!_tracks[t]->name.equalsIgnoreCase(cueVolumeStates[i].trackName) &&
+					!_tracks[t]->sourceName.equalsIgnoreCase(cueVolumeStates[i].trackName))
+				continue;
+			for (uint c = 0; c < _tracks[t]->sfxCues.size(); ++c) {
+				if (_tracks[t]->sfxCues[c].name.equalsIgnoreCase(cueVolumeStates[i].cueName))
+					_tracks[t]->sfxCues[c].volume = CLIP(cueVolumeStates[i].volume, 0, 255);
+			}
+		}
+	}
+
 	auto restoreTheme = [&](const Common::String &name, uint32 elapsedMillis) {
 		ThemeTrack *track = findTrack(name);
 		if (!track || track->playlist.empty())
@@ -780,7 +848,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		}
 		queue->finish();
 		_mixer->playStream(Audio::Mixer::kMusicSoundType, &_themeHandle, queue);
-		_mixer->setChannelVolume(_themeHandle, (byte)CLIP(track->volume, 0, 255));
+		_mixer->setChannelVolume(_themeHandle, effectiveAudioVolume(track->volume));
 		_themeTrackName = track->name;
 	};
 
@@ -814,6 +882,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		Common::SharedPtr<Stage> stage(new Stage());
 		if (stage->open(header.stageName)) {
 			_stage = stage;
+			_stageVisible = true;
 			_stageNode = header.stageNode;
 			if (_stageNode < 0 || (uint32)_stageNode >= _stage->nodeCount()) {
 				int node = _stage->findNode(header.flatName);
@@ -933,6 +1002,13 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
+		payload.writeSint32LE(_waveVolumeLevel);
+		payload.writeByte(_keyAborts ? 1 : 0);
+		writeChunk(*saveFile, "SETT", payload);
+	}
+
+	{
+		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
 		payload.writeUint32LE((uint32)_shops.size());
 		for (uint s = 0; s < _shops.size(); ++s) {
 			const Shop &shop = *_shops[s];
@@ -995,6 +1071,23 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 			writeCueArray(track.sfxCues);
 		}
 		writeChunk(*saveFile, "TRAK", payload);
+	}
+
+	{
+		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
+		uint32 count = 0;
+		for (uint t = 0; t < _tracks.size(); ++t)
+			count += _tracks[t]->sfxCues.size();
+		payload.writeUint32LE(count);
+		for (uint t = 0; t < _tracks.size(); ++t) {
+			const ThemeTrack &track = *_tracks[t];
+			for (uint c = 0; c < track.sfxCues.size(); ++c) {
+				writeSaveString(payload, track.name);
+				writeSaveString(payload, track.sfxCues[c].name);
+				payload.writeSint32LE(track.sfxCues[c].volume);
+			}
+		}
+		writeChunk(*saveFile, "SVOL", payload);
 	}
 
 	{

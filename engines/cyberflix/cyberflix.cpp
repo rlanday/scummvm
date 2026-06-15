@@ -26,6 +26,7 @@
 #include "common/file.h"
 #include "common/fs.h"
 #include "common/endian.h"
+#include "common/keyboard.h"
 #include "common/memstream.h"
 #include "common/system.h"
 #include "common/util.h"
@@ -41,6 +42,8 @@
 #include "common/formats/winexe_pe.h"
 
 #include "graphics/cursorman.h"
+#include "graphics/font.h"
+#include "graphics/fontman.h"
 #include "graphics/palette.h"
 #include "graphics/paletteman.h"
 #include "graphics/surface.h"
@@ -321,6 +324,7 @@ void CyberflixEngine::openStageFile(const Common::String &name) {
 		return;
 	}
 	_stage = stage;
+	_stageVisible = true;
 	debug(1, "Cyberflix: stage '%s' open (%u nodes)", name.c_str(), _stage->nodeCount());
 
 	// The original renders the stage's current node immediately on open:
@@ -344,6 +348,7 @@ void CyberflixEngine::closeStageFile() {
 	sendToStage("closestage", noArgs);
 	_stage.reset();
 	_stageNode = 0;
+	_stageVisible = false;
 	blackScreen();
 }
 
@@ -382,6 +387,14 @@ Common::String CyberflixEngine::currentStage() {
 	if (_stage && _stage->isOpen())
 		return _stage->name();
 	return "None";
+}
+
+bool CyberflixEngine::stageVisible(const bool *newVisible) {
+	if (!_stage || !_stage->isOpen())
+		return false;
+	if (newVisible)
+		_stageVisible = *newVisible;
+	return _stageVisible;
 }
 
 Common::String CyberflixEngine::currentFlat() {
@@ -529,10 +542,68 @@ void CyberflixEngine::renderStageNode(int node) {
 	// hit-testing (directional cursors) is implemented.
 	if (setGameCursor("CURS.ARROW"))
 		CursorMan.showMouse(true);
+	_dirtyRects.clear();
+	_propsDirty = false;
 	_system->updateScreen();
 
 	debug(1, "Cyberflix: rendered stage '%s' node %d (%ux%u)",
 			_stage->name().c_str(), node, frame.width, frame.height);
+}
+
+void CyberflixEngine::repaintDirtyStageRects() {
+	if (!_stage || !_stage->isOpen() || _dirtyRects.empty())
+		return;
+
+	FrameImage frame;
+	if (!_stage->renderNode((uint32)_stageNode, frame)) {
+		renderStageNode(_stageNode);
+		return;
+	}
+
+	Common::Array<const Shop::Prop *> draw;
+	Common::Array<const Shop *> drawShop;
+	collectScreenProps(draw, drawShop);
+
+	Graphics::Surface *screen = _system->lockScreen();
+	for (uint32 r = 0; r < _dirtyRects.size(); ++r) {
+		Common::Rect dirty = _dirtyRects[r];
+		dirty.clip(Common::Rect(kScreenWidth, kScreenHeight));
+		if (dirty.isEmpty())
+			continue;
+
+		for (int y = dirty.top; y < dirty.bottom; ++y) {
+			for (int x = dirty.left; x < dirty.right; ++x) {
+				if (x < frame.width && y < frame.height)
+					*((byte *)screen->getBasePtr(x, y)) = frame.pixels[(uint)y * frame.width + x];
+				else
+					*((byte *)screen->getBasePtr(x, y)) = 0;
+			}
+		}
+
+		for (uint32 i = 0; i < draw.size(); ++i) {
+			CelImage cel;
+			Common::Rect propRect;
+			if (!drawShop[i]->renderProp(*draw[i], cel, propRect))
+				continue;
+			if (!dirty.intersects(propRect))
+				continue;
+			Common::Rect paint = dirty.findIntersectingRect(propRect);
+			for (int y = paint.top; y < paint.bottom; ++y) {
+				for (int x = paint.left; x < paint.right; ++x) {
+					if (cel.isOpaque(x - propRect.left, y - propRect.top))
+						*((byte *)screen->getBasePtr(x, y)) =
+								cel.pixels[(uint)(y - propRect.top) * cel.width + (x - propRect.left)];
+				}
+			}
+		}
+	}
+	_system->unlockScreen();
+
+	if (setGameCursor("CURS.ARROW"))
+		CursorMan.showMouse(true);
+	_dirtyRects.clear();
+	_propsDirty = false;
+	_system->updateScreen();
 }
 
 // opensetfile(name[, scene[, view]]): open a DATA/*.SET room file and make the
@@ -795,6 +866,54 @@ void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw
 	}
 }
 
+bool CyberflixEngine::screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const {
+	if (!prop.visible || prop.mode != 0)
+		return false;
+	if (_stage && _stage->isOpen() && !_stage->name().equalsIgnoreCase("main.stg") &&
+			!_stage->name().equalsIgnoreCase("ctl.stg") &&
+			shop.name().equalsIgnoreCase("house.shp"))
+		return false;
+
+	CelImage cel;
+	if (!shop.renderProp(prop, cel, rect))
+		return false;
+	rect.clip(Common::Rect(kScreenWidth, kScreenHeight));
+	return !rect.isEmpty();
+}
+
+void CyberflixEngine::queueDirtyRect(const Common::Rect &rect) {
+	Common::Rect clipped = rect;
+	clipped.clip(Common::Rect(kScreenWidth, kScreenHeight));
+	if (clipped.isEmpty())
+		return;
+
+	for (uint32 i = 0; i < _dirtyRects.size(); ++i) {
+		if (_dirtyRects[i].intersects(clipped)) {
+			_dirtyRects[i].extend(clipped);
+			return;
+		}
+	}
+	_dirtyRects.push_back(clipped);
+}
+
+void CyberflixEngine::markPropDirty(const Shop &shop, const Shop::Prop &prop, const Common::Rect *oldRect) {
+	if (oldRect)
+		queueDirtyRect(*oldRect);
+	Common::Rect newRect;
+	if (screenPropRect(shop, prop, newRect))
+		queueDirtyRect(newRect);
+	_propsDirty = true;
+}
+
+void CyberflixEngine::markShopDirty(const Shop &shop) {
+	for (uint32 i = 0; i < shop.propCount(); ++i) {
+		Common::Rect rect;
+		if (screenPropRect(shop, shop.prop(i), rect))
+			queueDirtyRect(rect);
+	}
+	_propsDirty = true;
+}
+
 static bool isReplacementStage(const Common::SharedPtr<Stage> &stage) {
 	return stage && stage->isOpen() && !stage->name().equalsIgnoreCase("main.stg");
 }
@@ -836,7 +955,7 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 		return draw[i]->name;
 	}
 
-	if (isReplacementStage(_stage)) {
+	if (_stageVisible && isReplacementStage(_stage)) {
 		Common::String button = _stage->hitTestButton((uint32)_stageNode, x, y);
 		if (!button.empty()) {
 			_hitKind = "button";
@@ -861,7 +980,7 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 		}
 	}
 
-	if (_stage && _stage->isOpen()) {
+	if (_stageVisible && _stage && _stage->isOpen()) {
 		Common::String button = _stage->hitTestButton((uint32)_stageNode, x, y);
 		if (!button.empty()) {
 			_hitKind = "button";
@@ -1082,8 +1201,8 @@ void CyberflixEngine::closeShopFile(const Common::String &name) {
 	for (uint32 i = 0; i < _shops.size(); ++i) {
 		if (_shops[i]->name() == key) {
 			debug(1, "Cyberflix: shop '%s' closed", key.c_str());
+			markShopDirty(*_shops[i]);
 			_shops.remove_at(i);
-			_propsDirty = true;
 			refreshPropsIfDirty();
 			return;
 		}
@@ -1143,7 +1262,8 @@ bool CyberflixEngine::propVisible(const Common::String &name) {
 }
 
 void CyberflixEngine::propVisible(const Common::String &name, bool visible) {
-	Shop::Prop *prop = findProp(name);
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
 		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
 		return;
@@ -1152,8 +1272,10 @@ void CyberflixEngine::propVisible(const Common::String &name, bool visible) {
 		debug(1, "Cyberflix: propvisible('%s', %s) old=%s", name.c_str(),
 				visible ? "true" : "false", prop->visible ? "true" : "false");
 	if (prop->visible != visible) {
+		Common::Rect oldRect;
+		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 		prop->visible = visible;
-		_propsDirty = true;
+		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 	}
 }
 
@@ -1189,8 +1311,10 @@ void CyberflixEngine::propView(const Common::String &name, const Common::String 
 		debug(1, "Cyberflix: propview('%s', '%s') old='%s'", name.c_str(),
 				key.c_str(), prop->shapeName.c_str());
 	if (prop->shapeName != key) {
+		Common::Rect oldRect;
+		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 		prop->shapeName = key;
-		_propsDirty = true;
+		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 	}
 }
 
@@ -1214,23 +1338,27 @@ int CyberflixEngine::propXY(const Common::String &name, int selector) {
 }
 
 void CyberflixEngine::setPropXY(const Common::String &name, int x, int y) {
-	Shop::Prop *prop = findProp(name);
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
 		warning("Cyberflix: propxy('%s'): no such prop", name.c_str());
 		return;
 	}
 	// FUN_0042a370: screen-space placement — mode = 0, depth = -1 when the
 	// prop was world-space (>= 0), anchor = (x, y) (record +0x16/+0x14).
+	Common::Rect oldRect;
+	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 	prop->mode = 0;
 	if (prop->depth >= 0)
 		prop->depth = -1;
 	prop->x = (int16)x;
 	prop->y = (int16)y;
-	_propsDirty = true;
+	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
 void CyberflixEngine::propSet(const Common::String &name, const Common::String &setName) {
-	Shop::Prop *prop = findProp(name);
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
 		warning("Cyberflix: propset('%s'): no such prop", name.c_str());
 		return;
@@ -1240,13 +1368,16 @@ void CyberflixEngine::propSet(const Common::String &name, const Common::String &
 	if (shouldLogInterfaceProp(name))
 		debug(1, "Cyberflix: propset('%s', '%s') mode %u -> 1", name.c_str(),
 				key.c_str(), prop->mode);
+	Common::Rect oldRect;
+	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 	prop->setName = key;
 	prop->mode = 1; // FUN_00428c20 writes record +0x12 = 1 for SET placement.
-	_propsDirty = true;
+	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
 void CyberflixEngine::propXYZ(const Common::String &name, int x, int y, int z) {
-	Shop::Prop *prop = findProp(name);
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
 		warning("Cyberflix: propxyz('%s'): no such prop", name.c_str());
 		return;
@@ -1254,35 +1385,44 @@ void CyberflixEngine::propXYZ(const Common::String &name, int x, int y, int z) {
 	if (shouldLogInterfaceProp(name))
 		debug(1, "Cyberflix: propxyz('%s', %d, %d, %d) mode %u -> 1",
 				name.c_str(), x, y, z, prop->mode);
+	Common::Rect oldRect;
+	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 	prop->mode = 1; // FUN_0042a140: world/SET-space placement.
 	prop->x = (int16)x;
 	prop->y = (int16)y;
 	prop->z = (int16)z;
-	_propsDirty = true;
+	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
 void CyberflixEngine::propScale(const Common::String &name, int scale) {
-	Shop::Prop *prop = findProp(name);
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
 		warning("Cyberflix: propscale('%s'): no such prop", name.c_str());
 		return;
 	}
+	Common::Rect oldRect;
+	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 	prop->scale = scale < 0 ? 0 : scale;
-	_propsDirty = true;
+	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
 void CyberflixEngine::propZClip(const Common::String &name, int dist) {
-	Shop::Prop *prop = findProp(name);
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
 		warning("Cyberflix: propzclip('%s'): no such prop", name.c_str());
 		return;
 	}
+	Common::Rect oldRect;
+	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 	prop->zClip = dist;
-	_propsDirty = true;
+	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
 void CyberflixEngine::propDist(const Common::String &name, int dist) {
-	Shop::Prop *prop = findProp(name);
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
 		warning("Cyberflix: propdist('%s'): no such prop", name.c_str());
 		return;
@@ -1291,20 +1431,25 @@ void CyberflixEngine::propDist(const Common::String &name, int dist) {
 	if (prop->mode == 0 && dist < 0) {
 		debug(1, "Cyberflix: propdist('%s', %d) depth %d -> %d",
 				name.c_str(), dist, prop->depth, dist);
+		Common::Rect oldRect;
+		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 		prop->depth = (int16)dist;
-		_propsDirty = true;
+		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 	}
 }
 
 int CyberflixEngine::propDeg(const Common::String &name, const int *newDeg) {
-	Shop::Prop *prop = findProp(name);
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
 		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
 		return 0;
 	}
 	if (newDeg && prop->angle != (int16)(*newDeg & 0xff)) {
+		Common::Rect oldRect;
+		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 		prop->angle = (int16)(*newDeg & 0xff);
-		_propsDirty = true;
+		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 	}
 	return prop->angle;
 }
@@ -1362,13 +1507,19 @@ void CyberflixEngine::refreshPropsIfDirty() {
 	if (!_propsDirty)
 		return;
 	if (!_setVisible || isReplacementStage(_stage)) {
-		if (_stage && _stage->isOpen())
-			renderStageNode(_stageNode);
+		if (_stage && _stage->isOpen()) {
+			if (!_dirtyRects.empty())
+				repaintDirtyStageRects();
+			else
+				renderStageNode(_stageNode);
+		}
+		_dirtyRects.clear();
 		_propsDirty = false;
 		return;
 	}
 	if (_set && _set->isOpen() && _setScene >= 0)
 		renderSetScene(_setScene, _setAngle);
+	_dirtyRects.clear();
 }
 
 // actionframe(n): did the last movie display its n'th action-cue frame?
@@ -1400,6 +1551,45 @@ const CyberflixEngine::ThemeTrack::Cue *CyberflixEngine::findSfxCue(const Common
 		}
 	}
 	return nullptr;
+}
+
+CyberflixEngine::ThemeTrack::Cue *CyberflixEngine::findMutableSfxCue(const Common::String &name,
+		ThemeTrack **trackOut) {
+	for (uint i = 0; i < _tracks.size(); ++i) {
+		for (uint j = 0; j < _tracks[i]->sfxCues.size(); ++j) {
+			if (_tracks[i]->sfxCues[j].name.equalsIgnoreCase(name)) {
+				if (trackOut)
+					*trackOut = _tracks[i].get();
+				return &_tracks[i]->sfxCues[j];
+			}
+		}
+	}
+	return nullptr;
+}
+
+byte CyberflixEngine::effectiveAudioVolume(int baseVolume) const {
+	return (byte)CLIP(baseVolume, 0, 255) * CLIP(_waveVolumeLevel, 0, 9) / 9;
+}
+
+void CyberflixEngine::applyLiveAudioVolumes() {
+	if (!_themeTrackName.empty() && _mixer->isSoundHandleActive(_themeHandle)) {
+		ThemeTrack *track = findTrack(_themeTrackName);
+		_mixer->setChannelVolume(_themeHandle,
+				effectiveAudioVolume(track ? track->volume : 255));
+	}
+
+	for (uint i = 0; i < ARRAYSIZE(_soundSlots); ++i) {
+		if (_mixer->isSoundHandleActive(_soundSlots[i].handle)) {
+			const ThemeTrack::Cue *cue = findSfxCue(_soundSlots[i].cueName);
+			_mixer->setChannelVolume(_soundSlots[i].handle,
+					effectiveAudioVolume(cue ? cue->volume : 255));
+		}
+	}
+	if (_mixer->isSoundHandleActive(_voiceSlot.handle)) {
+		const ThemeTrack::Cue *cue = findSfxCue(_voiceSlot.cueName);
+		_mixer->setChannelVolume(_voiceSlot.handle,
+				effectiveAudioVolume(cue ? cue->volume : 255));
+	}
 }
 
 // opentrackfile('name.trk'): load and parse a track file, appending it to the
@@ -1589,7 +1779,7 @@ void CyberflixEngine::playTheme(const Common::String &name) {
 	queue->finish();
 
 	_mixer->playStream(Audio::Mixer::kMusicSoundType, &_themeHandle, queue);
-	_mixer->setChannelVolume(_themeHandle, (byte)CLIP(track->volume, 0, 255));
+	_mixer->setChannelVolume(_themeHandle, effectiveAudioVolume(track->volume));
 	_themeTrackName = track->name;
 	debug(1, "Cyberflix: playtheme '%s' (intro %u + loop %u samples, vol %d)",
 			name.c_str(), _themeIntroSamples, _themeLoopSamples, track->volume);
@@ -1624,7 +1814,7 @@ bool CyberflixEngine::playSoundCue(const Common::String &name, Audio::SoundHandl
 			buf, pcm.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED, DisposeAfterUse::YES);
 	_mixer->stopHandle(handle);
 	_mixer->playStream(Audio::Mixer::kSFXSoundType, &handle, stream);
-	_mixer->setChannelVolume(handle, (byte)CLIP(track->volume, 0, 255));
+	_mixer->setChannelVolume(handle, effectiveAudioVolume(cue->volume));
 	currentCue = cue->name;
 	currentResId = cue->resId;
 	return true;
@@ -1738,7 +1928,45 @@ void CyberflixEngine::themeVolume(const Common::String &name, int volume) {
 	Common::String key = name;
 	key.toLowercase();
 	if (key == _themeTrackName && _mixer->isSoundHandleActive(_themeHandle))
-		_mixer->setChannelVolume(_themeHandle, (byte)CLIP(volume, 0, 255));
+		_mixer->setChannelVolume(_themeHandle, effectiveAudioVolume(volume));
+}
+
+int CyberflixEngine::waveVolume(const int *newLevel) {
+	if (newLevel) {
+		_waveVolumeLevel = CLIP(*newLevel, 0, 9);
+		applyLiveAudioVolumes();
+	}
+	return _waveVolumeLevel;
+}
+
+int CyberflixEngine::soundVolume(const Common::String &name, const int *newVolume) {
+	ThemeTrack::Cue *cue = findMutableSfxCue(name);
+	if (!cue) {
+		ThemeTrack *track = findTrack(name);
+		if (track) {
+			if (newVolume)
+				for (uint i = 0; i < track->sfxCues.size(); ++i)
+					track->sfxCues[i].volume = CLIP(*newVolume, 0, 255);
+			applyLiveAudioVolumes();
+			return track->sfxCues.empty() ? track->volume : track->sfxCues[0].volume;
+		}
+		warning("Cyberflix: soundvol('%s'): cue/track not found", name.c_str());
+		return 0;
+	}
+
+	if (newVolume) {
+		cue->volume = CLIP(*newVolume, 0, 255);
+		for (uint i = 0; i < ARRAYSIZE(_soundSlots); ++i)
+			if (_soundSlots[i].cueName.equalsIgnoreCase(cue->name) &&
+					_mixer->isSoundHandleActive(_soundSlots[i].handle))
+				_mixer->setChannelVolume(_soundSlots[i].handle,
+						effectiveAudioVolume(cue->volume));
+		if (_voiceSlot.cueName.equalsIgnoreCase(cue->name) &&
+				_mixer->isSoundHandleActive(_voiceSlot.handle))
+			_mixer->setChannelVolume(_voiceSlot.handle,
+					effectiveAudioVolume(cue->volume));
+	}
+	return cue->volume;
 }
 
 // currenttheme(which): which==1 -> the name of the cue now playing on the
@@ -1800,6 +2028,17 @@ Common::String CyberflixEngine::currentVoice() {
 	_voiceSlot.cueName.clear();
 	_voiceSlot.resId = 0;
 	return "None";
+}
+
+bool CyberflixEngine::keyAborts(const Common::String *resource, const Common::String *key,
+		const bool *enabled) {
+	if (enabled)
+		_keyAborts = *enabled;
+	return _keyAborts;
+}
+
+bool CyberflixEngine::optionKey() {
+	return (_eventMan->getModifierState() & Common::KBD_SHIFT) != 0;
 }
 
 Common::String CyberflixEngine::pathSlot(int slot, const Common::String *newPath) {
@@ -1925,6 +2164,34 @@ void CyberflixEngine::forceUpdate() {
 	advanceSetTransition();
 	_system->updateScreen();
 	debug(1, "Cyberflix: forceupdate()");
+}
+
+void CyberflixEngine::message(const Common::String &text) {
+	debug(1, "Cyberflix message: %s", text.c_str());
+}
+
+void CyberflixEngine::flushEvents() {
+	_eventMan->purgeMouseEvents();
+	_eventMan->purgeKeyboardEvents();
+}
+
+void CyberflixEngine::drawString(const Common::String &text, int32 packedPoint, int color, int size) {
+	const Graphics::Font *font = size >= 12
+			? FontMan.getFontByUsage(Graphics::FontManager::kGUIFont)
+			: FontMan.getFontByUsage(Graphics::FontManager::kConsoleFont);
+	if (!font)
+		return;
+
+	const int16 x = (int16)(packedPoint >> 16);
+	const int16 baselineY = (int16)(packedPoint & 0xffff);
+	if (x >= kScreenWidth || baselineY >= kScreenHeight)
+		return;
+
+	Graphics::Surface *screen = _system->lockScreen();
+	font->drawString(screen, text, x, baselineY - font->getFontAscent(),
+			kScreenWidth - x, (uint32)CLIP(color, 0, 255));
+	_system->unlockScreen();
+	_system->updateScreen();
 }
 
 // blacktoscreen(target, n) / screentoblack(target, n): palette-only fade
@@ -2408,6 +2675,7 @@ void CyberflixEngine::displaySetFrame(const FrameImage &frame) {
 		}
 	}
 	_propsDirty = false;
+	_dirtyRects.clear();
 	_system->unlockScreen();
 
 	// Default arrow until per-view hotspot hit-testing (directional cursors) is

@@ -92,6 +92,7 @@ public:
 	void closeStageFile() override;
 	void gotoFlat(const Value &flat) override;
 	Common::String currentStage() override;
+	bool stageVisible(const bool *newVisible) override;
 	Common::String currentFlat() override;
 	void sendToStage(const Common::String &message, const Common::Array<Value> &args) override;
 	void sendToBoot(const Common::String &message, const Common::Array<Value> &args) override;
@@ -121,6 +122,9 @@ public:
 	void setClut(const Common::String &name) override;
 	void blackScreen() override;
 	void forceUpdate() override;
+	void message(const Common::String &text) override;
+	void flushEvents() override;
+	void drawString(const Common::String &text, int32 packedPoint, int color, int size) override;
 	void fadePalette(const Common::String &target, int steps, bool toBlack) override;
 	void setVisualEffect(uint16 effect, int duration) override;
 	void makeLoop(const Common::String &kind, const Common::String &target,
@@ -139,9 +143,14 @@ public:
 	void haltSound(int which) override;
 	void haltVoice() override;
 	void themeVolume(const Common::String &name, int volume) override;
+	int waveVolume(const int *newLevel) override;
+	int soundVolume(const Common::String &name, const int *newVolume) override;
 	Common::String currentTheme(int which) override;
 	Common::String currentSound(int which) override;
 	Common::String currentVoice() override;
+	bool keyAborts(const Common::String *resource, const Common::String *key,
+			const bool *enabled) override;
+	bool optionKey() override;
 	Common::String pathSlot(int slot, const Common::String *newPath) override;
 	void openShopFile(const Common::String &name) override;
 	void closeShopFile(const Common::String &name) override;
@@ -259,6 +268,7 @@ private:
 	Common::String _activeCursor;
 
 	Common::SharedPtr<Stage> _stage; ///< Currently open stage (DATA/*.STG), or null.
+	bool _stageVisible = false;      ///< DAT_00461156, queried by stagevisible().
 	Common::ScopedPtr<Set> _set;     ///< Currently open set (DATA/*.SET), or null.
 	enum SetTransitionType {
 		kSetTransitionNone,
@@ -288,6 +298,7 @@ private:
 	 */
 	Common::Array<Common::SharedPtr<Shop> > _shops;
 	bool _propsDirty = false; ///< Prop state changed; re-render before idling.
+	Common::Array<Common::Rect> _dirtyRects; ///< Native-style dirty screen rectangles for prop changes.
 
 	/** Find an open shop by (case-insensitive) file name, or nullptr. */
 	Shop *findShop(const Common::String &name);
@@ -303,6 +314,11 @@ private:
 	 */
 	void collectScreenProps(Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop);
+	bool screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const;
+	void queueDirtyRect(const Common::Rect &rect);
+	void markPropDirty(const Shop &shop, const Shop::Prop &prop, const Common::Rect *oldRect);
+	void markShopDirty(const Shop &shop);
+	void repaintDirtyStageRects();
 	/**
 	 * Dispatch `message(args)` with temporary scope-chain entries pushed on
 	 * the VM (newest searched first), mirroring the original's per-dispatch
@@ -359,6 +375,7 @@ private:
 			byte flags = 0;           ///< SFX flags byte; theme cues leave this zero.
 			uint32 dataOffset = 0;    ///< Absolute payload offset in fileData.
 			uint32 length = 0;        ///< Payload length.
+			int volume = 255;         ///< soundvol() per-cue volume (0-255).
 		};
 		Common::Array<Cue> cues;        ///< Theme cue directory.
 		Common::Array<Cue> sfxCues;     ///< SFX cue directory.
@@ -373,6 +390,9 @@ private:
 	/** Find an open track by (case-insensitive) file name, or nullptr. */
 	ThemeTrack *findTrack(const Common::String &name);
 	const ThemeTrack::Cue *findSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr);
+	ThemeTrack::Cue *findMutableSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr);
+	byte effectiveAudioVolume(int baseVolume) const;
+	void applyLiveAudioVolumes();
 	bool playSoundCue(const Common::String &name, Audio::SoundHandle &handle,
 			Common::String &currentCue, uint32 &currentResId);
 
@@ -396,6 +416,8 @@ private:
 	};
 	SoundSlot _soundSlots[2]; ///< Normal sound slots (TI.EXE DAT_00460a58/70).
 	SoundSlot _voiceSlot;     ///< Voice slot (TI.EXE DAT_00460aa0).
+	int _waveVolumeLevel = 9; ///< Global wave volume level, native scale 0..9.
+	bool _keyAborts = false;  ///< Global keyaborts() getter state.
 
 	struct ScheduledLoop {
 		Common::String kind;
