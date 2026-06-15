@@ -814,24 +814,40 @@ Common::String CyberflixEngine::currentPuppet() {
 // global-index semantics (shops are only ever appended).
 
 Shop *CyberflixEngine::findShop(const Common::String &name) {
+	Common::SharedPtr<Shop> shop = findShopShared(name);
+	return shop.get();
+}
+
+Common::SharedPtr<Shop> CyberflixEngine::findShopShared(const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
 	for (uint32 i = 0; i < _shops.size(); ++i)
 		if (_shops[i]->name() == key)
-			return _shops[i].get();
-	return nullptr;
+			return _shops[i];
+	return Common::SharedPtr<Shop>();
 }
 
 Shop::Prop *CyberflixEngine::findProp(const Common::String &name, Shop **shopOut) {
+	Shop::Prop *prop = nullptr;
+	Common::SharedPtr<Shop> shop = findPropOwnerShared(name, &prop);
+	if (shopOut)
+		*shopOut = shop.get();
+	return prop;
+}
+
+Common::SharedPtr<Shop> CyberflixEngine::findPropOwnerShared(const Common::String &name,
+		Shop::Prop **propOut) {
 	for (uint32 i = 0; i < _shops.size(); ++i) {
 		Shop::Prop *prop = _shops[i]->findProp(name);
 		if (prop) {
-			if (shopOut)
-				*shopOut = _shops[i].get();
-			return prop;
+			if (propOut)
+				*propOut = prop;
+			return _shops[i];
 		}
 	}
-	return nullptr;
+	if (propOut)
+		*propOut = nullptr;
+	return Common::SharedPtr<Shop>();
 }
 
 void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw,
@@ -1140,8 +1156,10 @@ void CyberflixEngine::dispatchWithScopeChain(const Common::Array<const Script *>
 void CyberflixEngine::dispatchSetMessage(const Common::String &message, const Common::Array<Value> &args) {
 	if (!_set || !_set->isOpen() || message.empty())
 		return;
+	Common::Array<Common::SharedPtr<Script> > keepAlive;
+	keepAlive.push_back(_set->setScriptShared());
 	Common::Array<const Script *> scopes;
-	scopes.push_back(_set->setScript());
+	scopes.push_back(keepAlive[0].get());
 	dispatchWithScopeChain(scopes, _set->setName(), Common::String(), message, args, "set");
 }
 
@@ -1149,9 +1167,12 @@ void CyberflixEngine::dispatchSceneMessage(uint32 scene, const Common::String &m
 		const Common::Array<Value> &args) {
 	if (!_set || !_set->isOpen() || message.empty())
 		return;
+	Common::Array<Common::SharedPtr<Script> > keepAlive;
+	keepAlive.push_back(_set->sceneScriptShared(scene));
+	keepAlive.push_back(_set->setScriptShared());
 	Common::Array<const Script *> scopes;
-	scopes.push_back(_set->sceneScript(scene));
-	scopes.push_back(_set->setScript());
+	scopes.push_back(keepAlive[0].get());
+	scopes.push_back(keepAlive[1].get());
 	dispatchWithScopeChain(scopes, _set->sceneName(scene), Common::String(), message, args, "scene");
 }
 
@@ -1214,7 +1235,7 @@ void CyberflixEngine::sendToShop(const Common::String &shopName, const Common::S
 		const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtoshop('%s') -> %s(%u args)", shopName.c_str(),
 			message.c_str(), args.size());
-	Shop *shop = findShop(shopName);
+	Common::SharedPtr<Shop> shop = findShopShared(shopName);
 	if (!shop) {
 		warning("Cyberflix: sendtoshop('%s'): shop not open", shopName.c_str());
 		return;
@@ -1228,13 +1249,13 @@ void CyberflixEngine::sendToProp(const Common::String &propName, const Common::S
 		const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtoprop('%s') -> %s(%u args)", propName.c_str(),
 			message.c_str(), args.size());
-	Shop *shop = nullptr;
-	Shop::Prop *prop = findProp(propName, &shop);
+	Shop::Prop *prop = nullptr;
+	Common::SharedPtr<Shop> shopOwner = findPropOwnerShared(propName, &prop);
 	if (!prop) {
 		warning("Cyberflix: sendtoprop('%s'): no such prop", propName.c_str());
 		return;
 	}
-	dispatchWithScopes(prop->script.get(), shop->shopScript(), prop->name, prop->name,
+	dispatchWithScopes(prop->script.get(), shopOwner->shopScript(), prop->name, prop->name,
 			message, args);
 	refreshPropsIfDirty();
 }
@@ -2445,10 +2466,14 @@ void CyberflixEngine::sendToPainting(const Common::String &sceneName, const Comm
 		return;
 	}
 
+	Common::Array<Common::SharedPtr<Script> > keepAlive;
+	keepAlive.push_back(_set->paintingScriptShared((uint32)scene, view, painting));
+	keepAlive.push_back(_set->sceneScriptShared((uint32)scene));
+	keepAlive.push_back(_set->setScriptShared());
 	Common::Array<const Script *> scopes;
-	scopes.push_back(_set->paintingScript((uint32)scene, view, painting));
-	scopes.push_back(_set->sceneScript((uint32)scene));
-	scopes.push_back(_set->setScript());
+	scopes.push_back(keepAlive[0].get());
+	scopes.push_back(keepAlive[1].get());
+	scopes.push_back(keepAlive[2].get());
 	dispatchWithScopeChain(scopes, painting, painting, message, args, "painting");
 	refreshPropsIfDirty();
 }

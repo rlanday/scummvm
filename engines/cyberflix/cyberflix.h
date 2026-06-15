@@ -303,9 +303,11 @@ private:
 
 	/** Find an open shop by (case-insensitive) file name, or nullptr. */
 	Shop *findShop(const Common::String &name);
+	Common::SharedPtr<Shop> findShopShared(const Common::String &name);
 	/** Find a prop by name across all open shops (global array semantics).
 	 *  Optionally returns the owning shop. */
 	Shop::Prop *findProp(const Common::String &name, Shop **shopOut = nullptr);
+	Common::SharedPtr<Shop> findPropOwnerShared(const Common::String &name, Shop::Prop **propOut);
 	/**
 	 * Collect the visible screen-space props in paint order (most negative
 	 * depth first, stable) — the same display-item list the compositor builds

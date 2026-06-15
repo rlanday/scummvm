@@ -199,9 +199,11 @@ public:
 
 	/** The set-wide behavior script resource, or null if this set has none. */
 	const Script *setScript() const;
+	Common::SharedPtr<Script> setScriptShared() const;
 
 	/** Scene @p scene's behavior script resource, or null if unavailable. */
 	const Script *sceneScript(uint32 scene) const;
+	Common::SharedPtr<Script> sceneScriptShared(uint32 scene) const;
 
 	/**
 	 * Back-to-front painting hit-test for the named view of @p scene. Returns
@@ -215,6 +217,8 @@ public:
 
 	/** Painting @p painting's behavior script in @p scene/@p view, or null. */
 	const Script *paintingScript(uint32 scene, const Common::String &view,
+			const Common::String &painting) const;
+	Common::SharedPtr<Script> paintingScriptShared(uint32 scene, const Common::String &view,
 			const Common::String &painting) const;
 
 	/** Number of painting records in @p scene/@p view, or 0 if none. */
@@ -279,7 +283,8 @@ private:
 	/** Read the Pascal string at @p p (bounded by the file buffer). */
 	Common::String pascalString(const byte *p) const;
 	/** Parsed script resource @p id, or null if missing/not a script. */
-	const Script *scriptById(uint32 id) const;
+	Common::SharedPtr<Script> scriptByIdShared(uint32 id) const;
+	const Script *scriptById(uint32 id) const { return scriptByIdShared(id).get(); }
 
 	Common::String _name;
 	Common::String _setName;      ///< Embedded master-header name (+0x070).

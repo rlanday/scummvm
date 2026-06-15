@@ -69,11 +69,11 @@ Common::String Set::pascalString(const byte *p) const {
 	return Common::String((const char *)p + 1, len);
 }
 
-const Script *Set::scriptById(uint32 id) const {
+Common::SharedPtr<Script> Set::scriptByIdShared(uint32 id) const {
 	int idx = resourceIndexById(id);
 	if (idx < 0 || (uint32)idx >= _scripts.size())
-		return nullptr;
-	return _scripts[(uint32)idx].get();
+		return Common::SharedPtr<Script>();
+	return _scripts[(uint32)idx];
 }
 
 const byte *Set::sceneRecord(uint32 scene) const {
@@ -457,11 +457,22 @@ const Script *Set::setScript() const {
 	return scriptById(_setScriptId);
 }
 
+Common::SharedPtr<Script> Set::setScriptShared() const {
+	return scriptByIdShared(_setScriptId);
+}
+
 const Script *Set::sceneScript(uint32 scene) const {
 	const byte *rec = sceneRecord(scene);
 	if (!rec)
 		return nullptr;
 	return scriptById(READ_LE_UINT32(rec + kSceneScriptOffset));
+}
+
+Common::SharedPtr<Script> Set::sceneScriptShared(uint32 scene) const {
+	const byte *rec = sceneRecord(scene);
+	if (!rec)
+		return Common::SharedPtr<Script>();
+	return scriptByIdShared(READ_LE_UINT32(rec + kSceneScriptOffset));
 }
 
 Common::String Set::hitTestPainting(uint32 scene, const Common::String &view, int16 x, int16 y) const {
@@ -508,19 +519,24 @@ bool Set::pointInPainting(uint32 scene, const Common::String &view,
 
 const Script *Set::paintingScript(uint32 scene, const Common::String &view,
 		const Common::String &painting) const {
+	return paintingScriptShared(scene, view, painting).get();
+}
+
+Common::SharedPtr<Script> Set::paintingScriptShared(uint32 scene, const Common::String &view,
+		const Common::String &painting) const {
 	const byte *v = viewRecord(scene, view);
 	uint32 count = 0, length = 0;
 	const byte *table = paintingTable(v, count, length);
 	if (!table)
-		return nullptr;
+		return Common::SharedPtr<Script>();
 	for (uint32 i = 0; i < count; ++i) {
 		const byte *rec = table + 8 + i * 0x24;
 		if (8 + i * 0x24 + 0x24 > length)
 			break;
 		if (painting.equalsIgnoreCase(pascalString(rec + 0x14)))
-			return scriptById(READ_LE_UINT32(rec + 0x10));
+			return scriptByIdShared(READ_LE_UINT32(rec + 0x10));
 	}
-	return nullptr;
+	return Common::SharedPtr<Script>();
 }
 
 uint32 Set::paintingCount(uint32 scene, const Common::String &view) const {
