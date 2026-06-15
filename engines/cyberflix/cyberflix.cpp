@@ -2805,7 +2805,6 @@ void CyberflixEngine::displaySetFrame(const FrameImage &frame) {
 	// files/decomp/stage-notes.md.
 	if (setGameCursor("CURS.ARROW"))
 		CursorMan.showMouse(true);
-	_system->updateScreen();
 }
 
 Common::Error CyberflixEngine::run() {
