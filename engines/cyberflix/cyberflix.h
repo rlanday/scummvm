@@ -119,6 +119,7 @@ public:
 			const Common::String &view, int index) override;
 	bool roadAhead(const Common::String &scene, const Common::String &view) override;
 	bool actionFrame(int n) override;
+	int randomNumber(int n) override;
 	void setClut(const Common::String &name) override;
 	void blackScreen() override;
 	void forceUpdate() override;

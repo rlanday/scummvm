@@ -1530,6 +1530,19 @@ bool CyberflixEngine::actionFrame(int n) {
 	return (_actionFrameMask & (1 << (n - 1))) != 0;
 }
 
+int CyberflixEngine::randomNumber(int n) {
+	if (n < 1)
+		return 0;
+
+	// Native startup FUN_0041a990 seeds FUN_0041b010 from timer helper
+	// FUN_00405130(), fills 55 words as state[0] = seed % 0xffff;
+	// state[i] = (state[i - 1] * 31 + 1) % 0xffff, then FUN_0041b080
+	// advances the lagged-XOR table twice per draw. Use ScummVM's registered
+	// RNG for recorder/TAS replayability, but preserve the script contract
+	// from FUN_0041b060: random(n) returns 1..n inclusive.
+	return (int)_rnd.getRandomNumber((uint)n - 1) + 1;
+}
+
 CyberflixEngine::ThemeTrack *CyberflixEngine::findTrack(const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();

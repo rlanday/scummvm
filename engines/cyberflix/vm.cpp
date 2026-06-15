@@ -518,6 +518,8 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 	// (The message-carrying send* builtins never reach this path; they are
 	// routed through dispatchMessageBuiltin with the message unevaluated.)
 	switch (opcode) {
+	case 0x4e21: // random(n) -> FUN_004366c0/FUN_0041b060
+		return Value::makeInt(_host ? _host->randomNumber(args.empty() ? 0 : args[0].intValue) : 0);
 	case 0x4e39: // stringtonum(str) -> FUN_00436ee0
 		return Value::makeInt(stringToNum(args.empty() ? Common::String() : args[0].strValue));
 	case 0x4e3a: // numtostring(n) -> FUN_00436f60

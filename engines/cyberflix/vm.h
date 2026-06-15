@@ -189,6 +189,9 @@ public:
 	 */
 	virtual bool actionFrame(int n) { return false; }
 
+	/** random(n) (0x4e21): script-visible range is 1..n. */
+	virtual int randomNumber(int n) { return 0; }
+
 	/**
 	 * clut(name): snap the hardware palette to the named CLUT instantly
 	 * (TI.EXE 0x2f06 FUN_00446500 -> FUN_0041ba80). Built-in names include
