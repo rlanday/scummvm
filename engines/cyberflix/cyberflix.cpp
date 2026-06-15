@@ -187,6 +187,27 @@ static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, u
 	}
 }
 
+static void playMovieFrameSfx(Audio::Mixer *mixer, Common::Array<Audio::SoundHandle> &handles,
+		const Common::Array<byte> &pcm) {
+	if (!mixer || pcm.empty())
+		return;
+
+	byte *buf = (byte *)malloc(pcm.size());
+	if (!buf)
+		return;
+	memcpy(buf, pcm.begin(), pcm.size());
+
+	Audio::SoundHandle handle;
+	Audio::SeekableAudioStream *stream = Audio::makeRawStream(
+			buf, pcm.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED, DisposeAfterUse::YES);
+	if (!stream) {
+		free(buf);
+		return;
+	}
+	mixer->playStream(Audio::Mixer::kSFXSoundType, &handle, stream);
+	handles.push_back(handle);
+}
+
 // A clickable region on an interactive movie frame. The original player reads
 // the count at event chunk +0x442 and 0x40-byte records at +0x446;
 // FUN_0040d710 hit-tests the rect against the click point and runs the action.
@@ -3116,13 +3137,12 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// Build the soundtrack. A linear movie's master header (info==0x40000)
 	// references two cue tables: a MUSIC table (the continuous score, played from
 	// t=0) and an SFX/event table (named one-shots triggered by individual video
-	// frames). The video runs at a fixed 20 fps (50 ms/frame, from the scaled
-	// timer FUN_00405130 * 0.06 and the masterHdr[+0x1c]=3 floor), so 318 frames
-	// == 15.9 s == the music duration: video and music are co-terminous. We
-	// therefore decode the MUSIC cues into one track and MIX each frame-triggered
-	// SFX into it at that frame's time (frame f -> f/frameCount of the track).
-	// This reproduces the original A/V sync (e.g. LOGO.MOV's gunshots land on the
-	// "INCORPORATED" frame). See files/decomp/movie-playback.md.
+	// frames). For linear movies with music, decode the MUSIC cues into one track
+	// and mix frame-triggered SFX into it at their frame start. For interactive
+	// movies or movies with no music track, keep those SFX separate and play them
+	// live when their frame is reached. This preserves LOGO.MOV's sample-locked
+	// gunshots while allowing BEDCARDS.MOV's silent interactive stopwatch frames
+	// to fire their voice cues. See files/decomp/movie-playback.md.
 	//
 	// NB: do NOT concatenate the SFX resources onto the music track. Doing so
 	// lengthened the track (so frames played too slowly) and made the effects
@@ -3145,6 +3165,10 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	Common::Array<Common::String> pfName;
 	Common::Array<Common::String> pfNavTarget;
 	Common::Array<Common::Array<MovieButton> > pfButtons;
+	// Decoded SFX named by each frame's event chunk. Linear movies with a music
+	// buffer premix these at frame start; interactive or otherwise-silent movies
+	// play them live when the frame is reached.
+	Common::Array<Common::Array<byte> > pfFrameSfx;
 	// Per-frame hold duration in ms (event chunk +2 in scaled timer units,
 	// floored by masterHdr[+0x1c]). Used to pace interactive movies frame by
 	// frame (the menu and its pressed-button frames), independent of the audio
@@ -3298,8 +3322,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				}
 				pfButtons.push_back(buttons);
 
-				// Mix this frame's SFX (if it names a cue and we have a track).
-				if (eb && !pcmBuf.empty()) {
+				Common::Array<byte> frameSfx;
+				if (eb) {
 					Common::String cue = readPascalString(eb + 0x12, fileData);
 					if (!cue.empty()) {
 						uint32 sfxResId = (uint32)-1;
@@ -3315,14 +3339,12 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 						if (sfxResId < archive.getResourceCount()) {
 							const Archive::Resource &sr = archive.getResource(sfxResId);
 							if (!sr.empty && sr.info == kAudioResourceInfoTag && sr.dataOffset >= 4) {
-								Common::Array<byte> sfx;
-								decodeCbxAudio(fileData.begin() + sr.dataOffset, sr.length, sfx);
-								uint32 atSample = (uint32)((uint64)cumMs * kAudioSampleRate / 1000);
-								mixSfx(pcmBuf, sfx, atSample);
+								decodeCbxAudio(fileData.begin() + sr.dataOffset, sr.length, frameSfx);
 							}
 						}
 					}
 				}
+				pfFrameSfx.push_back(frameSfx);
 
 				// Advance the timeline by this frame's hold (scaled units -> ms).
 				uint32 units = frameFloorUnits;
@@ -3342,6 +3364,29 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			//    FUN_0040ca80). Missing names resolve to -1 (never matched).
 			actionCue1 = resolveFrameName(pfName, readPascalString(hdr + 0x40, fileData));
 			actionCue2 = resolveFrameName(pfName, readPascalString(hdr + 0x50, fileData));
+		}
+	}
+
+	// A movie is interactive if any frame carries buttons (the main menu,
+	// BEDCARDS, BEDCAB, ...). Such movies loop their soundtrack while they wait
+	// for the user; linear movies (the logo) play their track once.
+	bool hasInteractive = false;
+	for (uint i = 0; i < pfButtons.size(); ++i)
+		if (!pfButtons[i].empty()) {
+			hasInteractive = true;
+			break;
+		}
+	const bool playFrameSfxLive = hasInteractive || pcmBuf.empty();
+	uint32 frameSfxBytes = 0;
+	for (uint i = 0; i < pfFrameSfx.size(); ++i)
+		frameSfxBytes += pfFrameSfx[i].size();
+	if (!playFrameSfxLive) {
+		for (uint i = 0; i < pfFrameSfx.size(); ++i) {
+			if (pfFrameSfx[i].empty())
+				continue;
+			uint32 atMs = (i < frameStartMs.size()) ? frameStartMs[i] : 0;
+			uint32 atSample = (uint32)((uint64)atMs * kAudioSampleRate / 1000);
+			mixSfx(pcmBuf, pfFrameSfx[i], atSample);
 		}
 	}
 
@@ -3387,16 +3432,6 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	bool skip = false;
 	Common::Event event;
 
-	// A movie is interactive if any frame carries buttons (the main menu). Such
-	// movies loop their soundtrack while they wait for the user; linear movies
-	// (the logo) play their track once.
-	bool hasInteractive = false;
-	for (uint i = 0; i < pfButtons.size(); ++i)
-		if (!pfButtons[i].empty()) {
-			hasInteractive = true;
-			break;
-		}
-
 	// The original movie player shows the Windows arrow cursor while an
 	// interactive frame (the menu) is up and hides it during linear playback
 	// (FUN_004051b0/FUN_00405210, gated by movie flag bit 0x10). Mirror that:
@@ -3407,6 +3442,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		CursorMan.showMouse(false);
 
 	Audio::SoundHandle audioHandle;
+	Common::Array<Audio::SoundHandle> frameSfxHandles;
 	if (pcm && pcmLen) {
 		Audio::SeekableAudioStream *stream = Audio::makeRawStream(
 				pcm, pcmLen, kAudioSampleRate, Audio::FLAG_UNSIGNED,
@@ -3422,8 +3458,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		pcm = nullptr;
 	}
 
-	debug(0, "Cyberflix: movie '%s' frames=%u audioBytes=%u audioMs=%u",
-			name.c_str(), pfVideoRes.empty() ? frames.size() : pfVideoRes.size(), pcmLen,
+	debug(0, "Cyberflix: movie '%s' frames=%u audioBytes=%u frameSfxBytes=%u audioMs=%u",
+			name.c_str(), pfVideoRes.empty() ? frames.size() : pfVideoRes.size(), pcmLen, frameSfxBytes,
 			pcm ? (uint32)((uint64)pcmLen * 1000 / kAudioSampleRate) : 0);
 
 	// Composite frames in order into a persistent surface (frames are
@@ -3435,16 +3471,16 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// (timeGetTime * 0.06, i.e. 1 unit == 1000/60 ms). We precompute the
 	// cumulative start time of every frame into frameStartMs above.
 	//
-	// SYNC: the SFX (e.g. LOGO.MOV's gunshots) are mixed into the soundtrack at
-	// their exact frame time, so they are locked to the music sample-for-sample.
-	// To keep the *picture* locked to those sounds even when frame decoding/blit
-	// lags, we clock the video off the real audio position (the mixer's elapsed
-	// time) rather than a free-running wall clock, and DROP the present of any
-	// frame whose slot has already passed (still decoding it, since frames are
-	// inter-coded). This mirrors the original's adaptive frame-drop in
-	// FUN_0040e8b0. Once the music ends (the video timeline can run ~0.75 s
-	// longer than the music, e.g. LOGO's trailing fade) we continue on the wall
-	// clock so the fade still plays out.
+	// SYNC: linear-movie SFX (e.g. LOGO.MOV's gunshots) are mixed into the
+	// soundtrack at their exact frame time, so they are locked to the music
+	// sample-for-sample. To keep the *picture* locked to those sounds even when
+	// frame decoding/blit lags, we clock the video off the real audio position
+	// (the mixer's elapsed time) rather than a free-running wall clock, and DROP
+	// the present of any frame whose slot has already passed (still decoding it,
+	// since frames are inter-coded). This mirrors the original's adaptive
+	// frame-drop in FUN_0040e8b0. Once the music ends (the video timeline can run
+	// ~0.75 s longer than the music, e.g. LOGO's trailing fade) we continue on the
+	// wall clock so the fade still plays out.
 	const bool usePF = !pfVideoRes.empty();
 	const uint32 frameCount = usePF ? pfVideoRes.size() : frames.size();
 	if (frameCount == 0)
@@ -3472,6 +3508,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			_actionFrameMask |= 1;
 		if ((int)fi == actionCue2)
 			_actionFrameMask |= 2;
+		if (playFrameSfxLive && fi < pfFrameSfx.size())
+			playMovieFrameSfx(_mixer, frameSfxHandles, pfFrameSfx[fi]);
 
 		// Current playback clock: real audio position while the track plays,
 		// else elapsed wall time (covers the post-music fade and silent movies).
@@ -3686,6 +3724,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	}
 
 	_mixer->stopHandle(audioHandle);
+	for (uint i = 0; i < frameSfxHandles.size(); ++i)
+		_mixer->stopHandle(frameSfxHandles[i]);
 	_eventMan->purgeKeyboardEvents();
 
 	// Leave the cursor hidden when we hand control back; the next interactive
