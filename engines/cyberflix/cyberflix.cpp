@@ -322,7 +322,7 @@ static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, u
 }
 
 static void playMovieFrameSfx(Audio::Mixer *mixer, Common::Array<Audio::SoundHandle> &handles,
-		const Common::Array<byte> &pcm) {
+		const Common::Array<byte> &pcm, byte volume) {
 	if (!mixer || pcm.empty())
 		return;
 
@@ -339,6 +339,7 @@ static void playMovieFrameSfx(Audio::Mixer *mixer, Common::Array<Audio::SoundHan
 		return;
 	}
 	mixer->playStream(Audio::Mixer::kSFXSoundType, &handle, stream);
+	mixer->setChannelVolume(handle, volume);
 	handles.push_back(handle);
 }
 
@@ -1761,8 +1762,23 @@ CyberflixEngine::ThemeTrack::Cue *CyberflixEngine::findMutableSfxCue(const Commo
 	return nullptr;
 }
 
+static byte nativeDirectSoundVolumeToMixerVolume(int volume) {
+	volume = CLIP(volume, 0, 255);
+	if (volume <= 0)
+		return 0;
+	if (volume >= 255)
+		return Audio::Mixer::kMaxChannelVolume;
+
+	// TI.EXE FUN_0042f100 converts cue volume to DirectSound attenuation as
+	// -1000 * ln(255 / volume) millibels. ScummVM's mixer wants linear gain.
+	const double dsMillibels = -1000.0 * log(255.0 / volume);
+	const double linear = pow(10.0, dsMillibels / 2000.0);
+	return (byte)CLIP((int)(linear * Audio::Mixer::kMaxChannelVolume + 0.5),
+			0, (int)Audio::Mixer::kMaxChannelVolume);
+}
+
 byte CyberflixEngine::effectiveAudioVolume(int baseVolume) const {
-	return (byte)CLIP(baseVolume, 0, 255) * CLIP(_waveVolumeLevel, 0, 9) / 9;
+	return nativeDirectSoundVolumeToMixerVolume(baseVolume) * CLIP(_waveVolumeLevel, 0, 9) / 9;
 }
 
 void CyberflixEngine::applyLiveAudioVolumes() {
@@ -3627,6 +3643,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		} else {
 			_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, stream);
 		}
+		_mixer->setChannelVolume(audioHandle, effectiveAudioVolume(255));
 	} else {
 		free(pcm);
 		pcm = nullptr;
@@ -3683,7 +3700,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		if ((int)fi == actionCue2)
 			_actionFrameMask |= 2;
 		if (playFrameSfxLive && fi < pfFrameSfx.size())
-			playMovieFrameSfx(_mixer, frameSfxHandles, pfFrameSfx[fi]);
+			playMovieFrameSfx(_mixer, frameSfxHandles, pfFrameSfx[fi], effectiveAudioVolume(255));
 
 		// Current playback clock: real audio position while the track plays,
 		// else elapsed wall time (covers the post-music fade and silent movies).
