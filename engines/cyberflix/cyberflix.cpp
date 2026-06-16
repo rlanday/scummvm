@@ -3229,11 +3229,13 @@ void CyberflixEngine::forceUpdate() {
 	// FUN_004420b0, composite, and present.
 	processScheduledLoops();
 	refreshPropsIfDirty();
-	if (_puppet && _puppet->isOpen() && _puppetVisible)
+	if (_puppet && _puppet->isOpen() && _puppetVisible) {
 		renderCurrentPuppetFrame(true);
-	else {
+		_idleForceUpdatePresented = true;
+	} else {
 		advanceSetTransition();
 		_system->updateScreen();
+		_idleForceUpdatePresented = true;
 	}
 	if (_frameRate > 0) {
 		const int deadline = _lastFrameTick + _frameRate;
@@ -3948,9 +3950,12 @@ Common::Error CyberflixEngine::run() {
 		if (processPendingLoad())
 			continue;
 		bool handled = false;
+		_idleForceUpdatePresented = false;
 		_vm.callFunction("idle", Common::Array<Value>(), &handled);
+		const bool propsDirtyAfterIdle = _propsDirty;
 		refreshPropsIfDirty();
-		_system->updateScreen();
+		if (!_idleForceUpdatePresented || propsDirtyAfterIdle)
+			_system->updateScreen();
 		if (_frameRate == 0 && _setTransitionType == kSetTransitionNone)
 			_system->delayMillis(10);
 	}

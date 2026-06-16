@@ -512,6 +512,7 @@ private:
 	void processScheduledLoops();
 	int _frameRate = 3;       ///< DAT_00461126, scaled 60 Hz units between compositor passes.
 	int _lastFrameTick = 0;   ///< DAT_00486788, last completed compositor tick.
+	bool _idleForceUpdatePresented = false; ///< Current idle() already presented via forceupdate().
 
 	struct CricketState {
 		Common::String name;
