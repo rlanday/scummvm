@@ -578,6 +578,32 @@ public:
 		return prev;
 	}
 
+	/**
+	 * Hot-path variant for fixed native dispatch chains. @p scope1 is searched
+	 * first, then @p scope2, @p scope3, and finally @p tail. The VM stores the
+	 * chain in reverse because callFunction() walks from newest to oldest; this
+	 * helper centralizes that ordering and avoids caller-side temporary arrays.
+	 */
+	Common::Array<const Script *> swapLibrariesFixed(const Script *scope1,
+			const Script *scope2, const Script *scope3, const Script *tail) {
+		Common::Array<const Script *> prev;
+		prev.swap(_libraries);
+		_libraries.reserve(4);
+		if (tail)
+			_libraries.push_back(tail);
+		if (scope3)
+			_libraries.push_back(scope3);
+		if (scope2)
+			_libraries.push_back(scope2);
+		if (scope1)
+			_libraries.push_back(scope1);
+		return prev;
+	}
+
+	void restoreLibraries(Common::Array<const Script *> &libs) {
+		_libraries.swap(libs);
+	}
+
 	/** Remove the most recent registration of @p script from the scope chain
 	 *  (used to pop temporary shop/prop dispatch scopes). */
 	void removeLibrary(const Script *script) {

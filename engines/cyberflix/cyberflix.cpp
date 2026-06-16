@@ -2235,15 +2235,8 @@ Value CyberflixEngine::dispatchWithScopesValue(const Script *scope1, const Scrip
 		const char *debugContext) {
 	Common::String prevSelf = _vm.contextSelf();
 	Common::String prevProp = _vm.contextProp();
-	Common::Array<const Script *> chain;
-	chain.reserve(3);
-	if (_globalLib)
-		chain.push_back(_globalLib.get()); // "System: " tail, searched last
-	if (scope2)
-		chain.push_back(scope2);
-	if (scope1)
-		chain.push_back(scope1);
-	Common::Array<const Script *> prevChain = _vm.swapLibraries(chain);
+	Common::Array<const Script *> prevChain = _vm.swapLibrariesFixed(
+			scope1, scope2, nullptr, _globalLib.get());
 	_vm.setDispatchContext(self, targetProp);
 
 	bool handled = false;
@@ -2252,7 +2245,7 @@ Value CyberflixEngine::dispatchWithScopesValue(const Script *scope1, const Scrip
 		debug(1, "Cyberflix: %s message '%s' unhandled", debugContext, message.c_str());
 
 	_vm.setDispatchContext(prevSelf, prevProp);
-	_vm.swapLibraries(prevChain);
+	_vm.restoreLibraries(prevChain);
 	return result;
 }
 
@@ -2265,17 +2258,8 @@ Value CyberflixEngine::dispatchWithThreeScopesValue(const Script *scope1, const 
 	// caller-side temporary scope array in this sampled hot path.
 	Common::String prevSelf = _vm.contextSelf();
 	Common::String prevProp = _vm.contextProp();
-	Common::Array<const Script *> chain;
-	chain.reserve(4);
-	if (_globalLib)
-		chain.push_back(_globalLib.get()); // "System: " tail, searched last
-	if (scope3)
-		chain.push_back(scope3);
-	if (scope2)
-		chain.push_back(scope2);
-	if (scope1)
-		chain.push_back(scope1);
-	Common::Array<const Script *> prevChain = _vm.swapLibraries(chain);
+	Common::Array<const Script *> prevChain = _vm.swapLibrariesFixed(
+			scope1, scope2, scope3, _globalLib.get());
 	_vm.setDispatchContext(self, targetProp);
 
 	bool handled = false;
@@ -2284,7 +2268,7 @@ Value CyberflixEngine::dispatchWithThreeScopesValue(const Script *scope1, const 
 		debug(1, "Cyberflix: %s message '%s' unhandled", debugContext, message.c_str());
 
 	_vm.setDispatchContext(prevSelf, prevProp);
-	_vm.swapLibraries(prevChain);
+	_vm.restoreLibraries(prevChain);
 	return result;
 }
 
@@ -2317,7 +2301,7 @@ Value CyberflixEngine::dispatchWithScopeChainValue(const Common::Array<const Scr
 		debug(1, "Cyberflix: %s message '%s' unhandled", debugContext, message.c_str());
 
 	_vm.setDispatchContext(prevSelf, prevProp);
-	_vm.swapLibraries(prevChain);
+	_vm.restoreLibraries(prevChain);
 	return result;
 }
 
