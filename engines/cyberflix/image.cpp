@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/intrinsics.h"
 #include "common/stream.h"
 
 #include "cyberflix/image.h"
@@ -151,10 +152,10 @@ static const byte kFrameMagTable[16] = { 8, 8, 8, 8, 8, 8, 8, 7, 6, 5, 4, 3, 2, 
 
 // Index of the most significant set bit of @p v, or -1 if @p v is zero.
 static int highestBit16(uint16 v) {
-	for (int i = 15; i >= 0; --i)
-		if (v & (1u << i))
-			return i;
-	return -1;
+	// DPCM classifies one variable-length code per output pixel, so this is a
+	// hot path. Use ScummVM's portable intrinsic/table wrapper instead of
+	// scanning all 16 bit positions each time.
+	return Common::intLog2(v);
 }
 
 // Decoder state for a single frame. All pointers are byte offsets into @c _dst
