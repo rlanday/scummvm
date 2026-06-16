@@ -283,6 +283,8 @@ private:
 	/** Present retained SET pixels directly, avoiding a full-frame copy per transition frame. */
 	void displaySetFrame(const FrameSequence &frame);
 	void displaySetFramePixels(const byte *pixels, uint16 width, uint16 height);
+	/** Upload composited pixels only when displaySetFramePixels() actually changed them. */
+	bool presentPendingScreenUpdate();
 	/** Run the verified SET navigation actions used by currentscene(). */
 	void navigateSet(const Common::String &action);
 	/** Advance an active SET transition by one native frame. */
@@ -335,6 +337,7 @@ private:
 	FrameSequence _setFrameSequence; ///< Retained SET background buffer (TI.EXE 0x486770).
 	bool _setVisible = false;        ///< TI.EXE DAT_00461182, read by setvisible().
 	int _stageNode = 0;              ///< Current stage node (TI.EXE DAT_00461160).
+	bool _screenUpdatePending = false; ///< Avoid redundant OpenGL uploads when forceupdate() did not draw.
 
 	/** Kind recorded by the last hittest, read back by result() — mirrors the
 	 *  TI.EXE global DAT_00461298. */

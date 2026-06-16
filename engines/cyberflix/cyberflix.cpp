@@ -3401,11 +3401,19 @@ void CyberflixEngine::forceUpdate() {
 	refreshPropsIfDirty();
 	if (_puppet && _puppet->isOpen() && _puppetVisible) {
 		renderCurrentPuppetFrame(true);
+		_screenUpdatePending = false;
 		_idleForceUpdatePresented = true;
 	} else {
 		advanceSetTransition();
-		_system->updateScreen();
-		_idleForceUpdatePresented = true;
+		// Native forceupdate() presents after its compositor pass, but in
+		// ScummVM advanceSetTransition() may be a no-op when a scene script calls
+		// forceupdate() while no movement/dirty repaint is pending. Only upload
+		// to the OpenGL backend if displaySetFramePixels() actually wrote new
+		// pixels; this avoids redundant texture updates without changing the
+		// script-visible timing of forceupdate(). If no pixels changed, leave
+		// _idleForceUpdatePresented false so the main loop still does its cheap
+		// cursor-only updateScreen() and mouse movement stays responsive.
+		_idleForceUpdatePresented = presentPendingScreenUpdate();
 	}
 	if (_frameRate > 0) {
 		const int deadline = _lastFrameTick + _frameRate;
@@ -3969,12 +3977,25 @@ void CyberflixEngine::displaySetFramePixels(const byte *pixels, uint16 width, ui
 	_propsDirty = false;
 	_dirtyRects.clear();
 	_system->unlockScreen();
+	// SET compositing can be driven many times from scene scripts. Mark the
+	// backend upload as pending and let forceupdate()/the main loop present once;
+	// otherwise scripts that call forceupdate() repeatedly pay an OpenGL texture
+	// upload even when no compositor pass drew new pixels.
+	_screenUpdatePending = true;
 
 	// Default arrow until per-view hotspot hit-testing (directional cursors) is
 	// implemented. Views (the scene's hotspot lists) are documented in
 	// files/decomp/stage-notes.md.
 	if (setGameCursor("CURS.ARROW"))
 		CursorMan.showMouse(true);
+}
+
+bool CyberflixEngine::presentPendingScreenUpdate() {
+	if (!_screenUpdatePending)
+		return false;
+	_system->updateScreen();
+	_screenUpdatePending = false;
+	return true;
 }
 
 Common::Error CyberflixEngine::run() {
