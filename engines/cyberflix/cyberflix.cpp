@@ -3738,7 +3738,7 @@ void CyberflixEngine::forceUpdate() {
 		}
 	}
 	_lastFrameTick = tick();
-	debug(1, "Cyberflix: forceupdate()");
+	debug(2, "Cyberflix: forceupdate()");
 }
 
 void CyberflixEngine::message(const Common::String &text) {
