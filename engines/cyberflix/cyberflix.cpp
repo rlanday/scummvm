@@ -5111,16 +5111,9 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				moviePalApplied = true;
 			}
 			Graphics::Surface *screen = _system->lockScreen();
-			for (int y = 0; y < h; ++y) {
-				int sy = y0 + y;
-				if (sy < 0 || sy >= kScreenHeight)
-					continue;
-				for (int x = 0; x < w; ++x) {
-					int sx = x0 + x;
-					if (sx >= 0 && sx < kScreenWidth)
-						*((byte *)screen->getBasePtr(sx, sy)) = pixels[(uint)y * w + x];
-				}
-			}
+			// Movie frames are opaque. Clip once and copy full rows instead of
+			// doing a per-pixel getBasePtr() loop for every presented frame.
+			copyFramePixelsToScreen(*screen, pixels, w, h, x0, y0);
 			_system->unlockScreen();
 			_system->updateScreen();
 
@@ -5156,6 +5149,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			// Hover cursor state: -1 unknown, 0 arrow, 1 hand ("CURS131").
 			int hoverState = -1;
 			while (nextFi < 0 && !shouldQuit() && !skip) {
+				bool cursorDirty = false;
+				const Common::Point oldMouse = _eventMan->getMousePos();
 				// FUN_0040e5b0: every poll, point-in-rect the mouse against the
 				// frame's hover-eligible buttons (flag bit 0x2; plain rect test,
 				// no pixel mask) and show "CURS131" over one, "CURS.ARROW"
@@ -5172,10 +5167,13 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 					}
 					if (hover != hoverState) {
 						setGameCursor(hover ? "CURS131" : "CURS.ARROW");
+						cursorDirty = true;
 						hoverState = hover;
 					}
 				}
 				while (_eventMan->pollEvent(event)) {
+					if (event.type == Common::EVENT_MOUSEMOVE)
+						cursorDirty = true;
 					handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
 					if (event.type == Common::EVENT_LBUTTONDOWN) {
 						// TI.EXE FUN_0040e230 waits for event code 1
@@ -5208,12 +5206,19 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 						}
 					}
 				}
+				const Common::Point newMouse = _eventMan->getMousePos();
+				if (oldMouse.x != newMouse.x || oldMouse.y != newMouse.y)
+					cursorDirty = true;
 				if (nextFi < 0 && !skip) {
 					// Composite the cursor at its new position and keep the
-					// window live. ScummVM draws the mouse during updateScreen,
-					// so without this the cursor would appear frozen.
-					_console->onFrame();
-					_system->updateScreen();
+					// window live. Unlike native's hardware cursor, ScummVM's
+					// software cursor only needs a present when motion or hover
+					// state actually changed; unconditional swaps dominate
+					// blocking interactive movie waits.
+					if (cursorDirty) {
+						_console->onFrame();
+						_system->updateScreen();
+					}
 					_system->delayMillis(10);
 				}
 			}
@@ -5237,11 +5242,18 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 					: ((fi < pfHoldMs.size()) ? pfHoldMs[fi] : kFallbackFrameDelayMs);
 			uint32 holdStart = _system->getMillis();
 			while (!shouldQuit() && !skip) {
-				while (_eventMan->pollEvent(event))
+				bool cursorDirty = false;
+				const Common::Point oldMouse = _eventMan->getMousePos();
+				while (_eventMan->pollEvent(event)) {
+					if (event.type == Common::EVENT_MOUSEMOVE)
+						cursorDirty = true;
 					holdStart += handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
+				}
 				if (_system->getMillis() - holdStart >= holdMs)
 					break;
-				_system->updateScreen();
+				const Common::Point newMouse = _eventMan->getMousePos();
+				if (cursorDirty || oldMouse.x != newMouse.x || oldMouse.y != newMouse.y)
+					_system->updateScreen();
 				_system->delayMillis(5);
 			}
 			if (nav == 1)
