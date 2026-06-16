@@ -44,6 +44,23 @@ static const CyberflixGameDescription gameDescriptions[] = {
 		GType_Titanic
 	},
 
+	// Steam version
+	{
+		{
+			"titanicaoot",
+			"",
+			{
+				{"BOOTFILE", GAME_BOOTFILE, "1d59e1f2109bcbceb7f09767fa3538fb", 95488},
+				AD_LISTEND
+			},
+			Common::EN_ANY,
+			Common::kPlatformWindows,
+			ADGF_UNSTABLE,
+			GUIO2(GUIO_NOMIDI, GAMEOPTION_ENHANCED_PANORAMA_SETTLING)
+		},
+		GType_Titanic
+	},
+
 	{ AD_TABLE_END_MARKER, 0 }
 };
 
