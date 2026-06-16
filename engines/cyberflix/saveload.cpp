@@ -669,6 +669,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	_scheduledLoops.clear();
 	_crickets.clear();
 	_stage.reset();
+	clearStageShellFrame();
 	_stageVisible = false;
 	_stageNode = 0;
 	_set.reset();
@@ -691,6 +692,9 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	memcpy(_screenClut, savedClut, sizeof(_screenClut));
 	for (uint i = 0; i < ARRAYSIZE(_paletteGamma); ++i)
 		_paletteGamma[i] = savedGamma[i];
+	// The palette lookup table is cached for fade performance; after loading
+	// saved gamma values it must be rebuilt before the restored CLUT is applied.
+	_paletteGammaTableDirty = true;
 
 	if (varsSeen) {
 		_vm.globalVars().clear();
@@ -880,6 +884,11 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	if (!header.stageName.empty()) {
 		Common::SharedPtr<Stage> stage(new Stage());
 		if (stage->open(header.stageName)) {
+			// loadGameState() reopens the stage directly rather than going through
+			// openStageFile(), so invalidate any cached MAIN.STG/node-0 shell from
+			// the pre-load room. Otherwise SET redraw after loading can copy stale
+			// inventory-bar pixels and recolor them with the restored cabin palette.
+			clearStageShellFrame();
 			_stage = stage;
 			_stageVisible = true;
 			_stageNode = header.stageNode;
