@@ -3288,8 +3288,15 @@ void CyberflixEngine::forceUpdate() {
 	}
 	if (_frameRate > 0) {
 		const int deadline = _lastFrameTick + _frameRate;
-		while (!shouldQuit() && tick() < deadline)
-			_system->delayMillis(1);
+		while (!shouldQuit()) {
+			const int remainingTicks = deadline - tick();
+			if (remainingTicks <= 0)
+				break;
+			uint32 delay = (uint32)((remainingTicks * 1000 + 59) / 60);
+			if (delay > 17)
+				delay = 17;
+			_system->delayMillis(delay);
+		}
 	}
 	_lastFrameTick = tick();
 	debug(1, "Cyberflix: forceupdate()");
