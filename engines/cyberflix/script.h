@@ -246,6 +246,7 @@ public:
 		kMethodCurrentVoice     = 0x4E6E,
 		kMethodCurrentTheme     = 0x4E6F,
 		kMethodActionFrame      = 0x4E73,
+		kMethodSendToShopFx     = 0x4E79,
 		kMethodRoadAhead        = 0x4E94
 	};
 

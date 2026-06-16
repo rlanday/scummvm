@@ -199,6 +199,8 @@ public:
 	void closeShopFile(const Common::String &name) override;
 	void sendToShop(const Common::String &shop, const Common::String &message,
 			const Common::Array<Value> &args) override;
+	Value sendToShopFx(const Common::String &shop, const Common::String &message,
+			const Common::Array<Value> &args) override;
 	void sendToProp(const Common::String &prop, const Common::String &message,
 			const Common::Array<Value> &args) override;
 	bool propVisible(const Common::String &name) override;
@@ -410,6 +412,10 @@ private:
 			const Common::String &self, const Common::String &targetProp,
 			const Common::String &message, const Common::Array<Value> &args);
 	void dispatchWithScopeChain(const Common::Array<const Script *> &scopes,
+			const Common::String &self, const Common::String &targetProp,
+			const Common::String &message, const Common::Array<Value> &args,
+			const char *debugContext);
+	Value dispatchWithScopeChainValue(const Common::Array<const Script *> &scopes,
 			const Common::String &self, const Common::String &targetProp,
 			const Common::String &message, const Common::Array<Value> &args,
 			const char *debugContext);

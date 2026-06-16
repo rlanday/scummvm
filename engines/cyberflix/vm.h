@@ -385,6 +385,8 @@ public:
 	 */
 	virtual void sendToShop(const Common::String &shop, const Common::String &message,
 			const Common::Array<Value> &args) {}
+	virtual Value sendToShopFx(const Common::String &shop, const Common::String &message,
+			const Common::Array<Value> &args) { return Value(); }
 
 	/**
 	 * sendtoprop('propname', message(args)): dispatch against the prop's own

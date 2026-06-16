@@ -2123,6 +2123,13 @@ void CyberflixEngine::dispatchWithScopeChain(const Common::Array<const Script *>
 		const Common::String &self, const Common::String &targetProp,
 		const Common::String &message, const Common::Array<Value> &args,
 		const char *debugContext) {
+	dispatchWithScopeChainValue(scopes, self, targetProp, message, args, debugContext);
+}
+
+Value CyberflixEngine::dispatchWithScopeChainValue(const Common::Array<const Script *> &scopes,
+		const Common::String &self, const Common::String &targetProp,
+		const Common::String &message, const Common::Array<Value> &args,
+		const char *debugContext) {
 	Common::String prevSelf = _vm.contextSelf();
 	Common::String prevProp = _vm.contextProp();
 	Common::Array<const Script *> chain;
@@ -2135,12 +2142,13 @@ void CyberflixEngine::dispatchWithScopeChain(const Common::Array<const Script *>
 	_vm.setDispatchContext(self, targetProp);
 
 	bool handled = false;
-	_vm.callFunction(message, args, &handled);
+	Value result = _vm.callFunction(message, args, &handled);
 	if (!handled)
 		debug(1, "Cyberflix: %s message '%s' unhandled", debugContext, message.c_str());
 
 	_vm.setDispatchContext(prevSelf, prevProp);
 	_vm.swapLibraries(prevChain);
+	return result;
 }
 
 void CyberflixEngine::dispatchSetMessage(const Common::String &message, const Common::Array<Value> &args) {
@@ -2233,6 +2241,22 @@ void CyberflixEngine::sendToShop(const Common::String &shopName, const Common::S
 	dispatchWithScopes(shop->shopScript(), nullptr, shop->name(), Common::String(),
 			message, args);
 	refreshPropsIfDirty();
+}
+
+Value CyberflixEngine::sendToShopFx(const Common::String &shopName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	debug(1, "Cyberflix: sendtoshopfx('%s') -> %s(%u args)", shopName.c_str(),
+			message.c_str(), args.size());
+	Common::SharedPtr<Shop> shop = findShopShared(shopName);
+	if (!shop) {
+		warning("Cyberflix: sendtoshopfx('%s'): shop not open", shopName.c_str());
+		return Value();
+	}
+
+	Common::Array<const Script *> scopes;
+	scopes.push_back(shop->shopScript());
+	return dispatchWithScopeChainValue(scopes, shop->name(), Common::String(),
+			message, args, "shopfx");
 }
 
 void CyberflixEngine::sendToProp(const Common::String &propName, const Common::String &message,

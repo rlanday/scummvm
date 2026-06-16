@@ -338,8 +338,9 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 			// (0x2f02), sendtopuppet (0x2f0d), sendtocast (0x2f10),
 			// sendtoprop (0x2f17), sendtoshop
 			// (0x2f1b), sendtopainting (0x2f22), sendtobutton (0x2f24),
-			// sendtoflat (0x2f25), sendtostage (0x2f26) and sendtoboot
-			// (0x2f31) pass their final
+			// sendtoflat (0x2f25), sendtostage (0x2f26), sendtoboot
+			// (0x2f31), and the value-returning fx variants used by inventory
+			// (sendtoshopfx 0x4e79) pass their final
 			// argument UNevaluated: it is a message `name(args)` matched
 			// against script definitions (TI.EXE FUN_0040ad80/FUN_0042ae80
 			// hand the raw code span to the dispatcher FUN_0040b690). Leading
@@ -350,7 +351,7 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 			if (headOp == 0x2ef0 || headOp == 0x2f02 || headOp == 0x2f0d ||
 					headOp == 0x2f10 || headOp == 0x2f17 || headOp == 0x2f1b ||
 					headOp == 0x2f22 || headOp == 0x2f24 || headOp == 0x2f25 ||
-					headOp == 0x2f26 || headOp == 0x2f31)
+					headOp == 0x2f26 || headOp == 0x2f31 || headOp == 0x4e79)
 				return dispatchMessageBuiltin(script, pc, headOp);
 			Common::Array<Value> args;
 			parseCallArgs(script, pc, args);
@@ -416,6 +417,11 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	             // dispatch against [shop script, BOOTFILE res2].
 		if (_host)
 			_host->sendToShop(targets.empty() ? Common::String() : targets[0].strValue,
+					message, msgArgs);
+		break;
+	case Script::kMethodSendToShopFx: // sendtoshopfx('file.shp', message) -> return dispatch result.
+		if (_host)
+			return _host->sendToShopFx(targets.empty() ? Common::String() : targets[0].strValue,
 					message, msgArgs);
 		break;
 	case Script::kMethodSendToProp: // sendtoprop('propname', message) -> TI.EXE FUN_0042ae80:
