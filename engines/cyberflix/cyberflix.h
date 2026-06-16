@@ -374,7 +374,10 @@ private:
 	bool _nativeTextFontAntialiasing = false;
 	const Puppet::ActionEntry *currentPuppetAction() const;
 	const Graphics::Font *textFont(int size);
-	bool renderPuppetFrame(const Puppet::ActionEntry &action, uint32 frameIndex, bool present);
+	bool capturePuppetGrabBackdrop(Common::Array<byte> &backdrop);
+	bool paintPuppetGrabBackdrop(Graphics::Surface &screen, const Common::Array<byte> *cachedBackdrop);
+	bool renderPuppetFrame(const Puppet::ActionEntry &action, uint32 frameIndex,
+			bool present, const Common::Array<byte> *cachedBackdrop = nullptr);
 	bool renderCurrentPuppetFrame(bool present);
 	void renderPuppetBevels(bool present);
 	void playPuppetAction(const Puppet::ActionEntry &action);

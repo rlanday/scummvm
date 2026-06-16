@@ -1234,50 +1234,95 @@ const Puppet::ActionEntry *CyberflixEngine::currentPuppetAction() const {
 	return _puppet->actionAt(0);
 }
 
-bool CyberflixEngine::renderPuppetFrame(const Puppet::ActionEntry &action,
-		uint32 frameIndex, bool present) {
-	bool backdropPainted = false;
-	if (_puppetGrab) {
-		if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
-			FrameImage frame;
-			if (_set->renderScene((uint32)_setScene, (uint32)_setTable,
-					(uint32)_setAngle, _setFrameSequence, frame)) {
-				Graphics::Surface *screen = _system->lockScreen();
-				screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
-				// TI.EXE FUN_00449150 copies the SET backing surface rect when a
-				// SET is open; it does not copy the stage/inventory-bar composite.
-				const int x0 = _set->viewLeft();
-				const int y0 = _set->viewTop();
-				for (int y = 0; y < frame.height; ++y) {
-					for (int x = 0; x < frame.width; ++x) {
-						int sx = x0 + x, sy = y0 + y;
-						if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-							*((byte *)screen->getBasePtr(sx, sy)) =
-									frame.pixels[(uint)y * frame.width + x];
-					}
-				}
-				_system->unlockScreen();
-				backdropPainted = true;
+static void copyPuppetGrabBackdropToScreen(const Common::Array<byte> &backdrop,
+		Graphics::Surface &screen) {
+	if (backdrop.size() != kScreenWidth * kScreenHeight)
+		return;
+	const int copyWidth = MIN<int>(screen.w, kScreenWidth);
+	const int copyHeight = MIN<int>(screen.h, kScreenHeight);
+	for (int y = 0; y < copyHeight; ++y) {
+		memcpy(screen.getBasePtr(0, y), backdrop.begin() + (uint)y * kScreenWidth,
+				copyWidth);
+	}
+}
+
+bool CyberflixEngine::capturePuppetGrabBackdrop(Common::Array<byte> &backdrop) {
+	if (!_puppetGrab) {
+		backdrop.clear();
+		return false;
+	}
+
+	backdrop.resize(kScreenWidth * kScreenHeight);
+	memset(backdrop.begin(), 0, backdrop.size());
+
+	if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
+		FrameImage frame;
+		if (_set->renderScene((uint32)_setScene, (uint32)_setTable,
+				(uint32)_setAngle, _setFrameSequence, frame)) {
+			// TI.EXE FUN_00449150 copies the SET backing surface rect when a
+			// SET is open; it does not copy the stage/inventory-bar composite.
+			const int x0 = _set->viewLeft();
+			const int y0 = _set->viewTop();
+			int left = x0;
+			int srcX = 0;
+			int width = frame.width;
+			if (left < 0) {
+				srcX = -left;
+				width -= srcX;
+				left = 0;
 			}
-		} else if (_stage && _stage->isOpen()) {
-			FrameImage frame;
-			if (_stage->renderNode((uint32)_stageNode, frame)) {
-				Graphics::Surface *screen = _system->lockScreen();
-				screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+			if (left + width > kScreenWidth)
+				width = kScreenWidth - left;
+			if (width > 0) {
 				for (int y = 0; y < frame.height; ++y) {
-					for (int x = 0; x < frame.width; ++x) {
-						if (x < kScreenWidth && y < kScreenHeight)
-							*((byte *)screen->getBasePtr(x, y)) =
-									frame.pixels[(uint)y * frame.width + x];
+					const int sy = y0 + y;
+					if (sy >= 0 && sy < kScreenHeight) {
+						memcpy(backdrop.begin() + (uint)sy * kScreenWidth + left,
+								frame.pixels.begin() + (uint)y * frame.width + srcX,
+								width);
 					}
 				}
-				_system->unlockScreen();
-				backdropPainted = true;
+			}
+		}
+		return true;
+	}
+
+	if (_stage && _stage->isOpen()) {
+		FrameImage frame;
+		if (_stage->renderNode((uint32)_stageNode, frame)) {
+			const int width = MIN<int>(frame.width, kScreenWidth);
+			const int height = MIN<int>(frame.height, kScreenHeight);
+			for (int y = 0; y < height; ++y) {
+				memcpy(backdrop.begin() + (uint)y * kScreenWidth,
+						frame.pixels.begin() + (uint)y * frame.width, width);
 			}
 		}
 	}
 
+	return true;
+}
+
+bool CyberflixEngine::paintPuppetGrabBackdrop(Graphics::Surface &screen,
+		const Common::Array<byte> *cachedBackdrop) {
+	if (!_puppetGrab)
+		return false;
+
+	Common::Array<byte> freshBackdrop;
+	const Common::Array<byte> *backdrop = cachedBackdrop;
+	if (!backdrop) {
+		if (!capturePuppetGrabBackdrop(freshBackdrop))
+			return false;
+		backdrop = &freshBackdrop;
+	}
+
+	copyPuppetGrabBackdropToScreen(*backdrop, screen);
+	return true;
+}
+
+bool CyberflixEngine::renderPuppetFrame(const Puppet::ActionEntry &action,
+		uint32 frameIndex, bool present, const Common::Array<byte> *cachedBackdrop) {
 	Graphics::Surface *screen = _system->lockScreen();
+	const bool backdropPainted = paintPuppetGrabBackdrop(*screen, cachedBackdrop);
 	if (!backdropPainted)
 		screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
 	const bool drew = _puppet->renderActionFrame(action, frameIndex, *screen, _puppetGrab);
@@ -1402,6 +1447,13 @@ void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
 	const uint32 frameCount = action.frameCount ? action.frameCount : 1;
 	uint32 lastFrame = (uint32)-1;
 	const uint32 wallStart = _system->getMillis();
+	// Puppet speech redraws animation frames at native 30 fps against the same
+	// puppetgrab backdrop. Cache that grabbed SET/STG image once per action so
+	// each frame only restores a memory copy instead of re-decoding the room
+	// background and locking/unlocking the backend twice.
+	Common::Array<byte> grabBackdrop;
+	const Common::Array<byte> *cachedBackdrop =
+			capturePuppetGrabBackdrop(grabBackdrop) ? &grabBackdrop : nullptr;
 	Common::Event event;
 	for (;;) {
 		if (shouldQuit())
@@ -1414,7 +1466,7 @@ void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
 			frame = frameCount - 1;
 		if (frame != lastFrame) {
 			_puppetCurrentFrame = frame;
-			renderPuppetFrame(action, frame, true);
+			renderPuppetFrame(action, frame, true, cachedBackdrop);
 			lastFrame = frame;
 		}
 		bool aborted = false;
@@ -1438,7 +1490,10 @@ void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
 		_system->delayMillis(5);
 	}
 	_puppetCurrentFrame = frameCount - 1;
-	renderPuppetFrame(action, _puppetCurrentFrame, true);
+	// If playback timing already presented the final frame, avoid one redundant
+	// backend swap at the end of the action.
+	if (lastFrame != _puppetCurrentFrame)
+		renderPuppetFrame(action, _puppetCurrentFrame, true, cachedBackdrop);
 }
 
 int CyberflixEngine::puppetParam(int selector, const int *newValue) {
