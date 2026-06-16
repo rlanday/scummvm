@@ -1304,6 +1304,10 @@ const Graphics::Font *CyberflixEngine::textFont(int size) {
 		nullptr
 	};
 
+	// TI.EXE creates "Arial" with CreateFontA(). For the closest match, place
+	// Microsoft's Arial.ttf in the game directory or set this target's ScummVM
+	// Extra Path to a directory containing it; otherwise we use the bundled
+	// Liberation Sans fallback, as other ScummVM engines do for Arial-like text.
 	for (const char *const *name = arialNames; *name; ++name) {
 		Common::SeekableReadStream *stream = SearchMan.createReadStreamForMember(
 				Common::Path(*name, Common::Path::kNoSeparator));
