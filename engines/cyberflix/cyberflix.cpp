@@ -5310,10 +5310,13 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			if (t >= frameEndMs)
 				break;
 			// Linear movies hide the cursor, so there is no software-cursor
-			// motion to present between frames. Poll often enough for skip/pause
-			// hotkeys to feel instant, but avoid waking the backend event pump
-			// every 5 ms while waiting for an authored frame deadline.
-			_system->delayMillis(MIN<uint32>(frameEndMs - t, 16));
+			// motion to present between frames. Keep skippable movies at ~60 Hz
+			// polling for responsive Esc/Ctrl+Q, but non-skippable movies only
+			// need to notice pause/quit/global keys promptly. Polling those at
+			// ~30 Hz avoids waking SDL/Cocoa's event pump twice as often in the
+			// sampled scripted movie path without affecting cursor responsiveness.
+			const uint32 pollCapMs = movieSkippable ? 16 : 33;
+			_system->delayMillis(MIN<uint32>(frameEndMs - t, pollCapMs));
 		}
 		if (nav == 2 && fi < pfNavTarget.size()) {
 			int idx = resolveFrameName(pfName, pfNavTarget[fi]);
