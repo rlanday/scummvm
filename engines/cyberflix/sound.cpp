@@ -25,52 +25,61 @@
 
 namespace Cyberflix {
 
-// Decode one cbx block to @p outSize bytes of 8-bit PCM, appending to @p out.
-// @p dup is 1 for the 22050 Hz path, 2 for the 11025 Hz path (each decoded
-// sample is emitted @p dup times). Bounds are clamped so malformed input cannot
-// overrun; a short block is padded with silence (0x80). Mirrors FUN_00430480 /
-// FUN_00430590.
-static void decodeCbxBlock(const byte *src, uint32 srcLen, uint32 outSize, int dup,
-		Common::Array<byte> &out) {
+static const int8 kSignedNibble[16] = {
+	 0,  1,  2,  3,  4,  5,  6,  7,
+	-8, -7, -6, -5, -4, -3, -2, -1
+};
+
+static inline void emitCbxSample(byte *dst, uint32 outSize, uint32 &produced,
+		byte sample, bool duplicate) {
+	if (produced >= outSize)
+		return;
+	dst[produced++] = sample;
+	if (duplicate && produced < outSize)
+		dst[produced++] = sample;
+}
+
+// Decode one cbx block to 8-bit PCM. The 22050 Hz path emits one sample; the
+// 11025 Hz path duplicates each sample to the mixer rate. Write literals/DPCM
+// samples directly and reserve memset() for actual repeat runs; the old generic
+// per-sample loop made the compiler emit tiny memset() calls in the hot path.
+static void decodeCbxBlock(const byte *src, uint32 srcLen, uint32 outSize,
+		bool duplicate, byte *dst) {
 	if (srcLen == 0) {
-		for (uint32 k = 0; k < outSize; ++k)
-			out.push_back(0x80);
+		memset(dst, 0x80, outSize);
 		return;
 	}
+
 	uint32 i = 0, produced = 0;
 	byte b = src[i++];
-	for (int k = 0; k < dup && produced < outSize; ++k, ++produced)
-		out.push_back((byte)(b * 2));
+	emitCbxSample(dst, outSize, produced, (byte)(b * 2), duplicate);
 	int pred = b;
 	while (produced < outSize && i < srcLen) {
 		b = src[i++];
 		if (!(b & 0x80)) { // literal
-			for (int k = 0; k < dup && produced < outSize; ++k, ++produced)
-				out.push_back((byte)(b * 2));
+			emitCbxSample(dst, outSize, produced, (byte)(b * 2), duplicate);
 			pred = b;
 		} else if (!(b & 0x40)) { // 4-bit DPCM delta-run
-			int n = (b & 0x3f) + 1;
-			for (int j = 0; j < n && i < srcLen && produced < outSize; ++j) {
+			uint32 n = (b & 0x3f) + 1;
+			for (uint32 j = 0; j < n && i < srcLen && produced < outSize; ++j) {
 				const byte d = src[i++];
-				int hi = d >> 4;   if (hi >= 8) hi -= 16; // signed high nibble
-				int lo = d & 0xf;  if (lo >= 8) lo -= 16; // signed low nibble
-				int s1 = (pred + hi) & 0xff;
-				for (int k = 0; k < dup && produced < outSize; ++k, ++produced)
-					out.push_back((byte)(s1 * 2));
-				pred = (s1 + lo) & 0xff;
-				for (int k = 0; k < dup && produced < outSize; ++k, ++produced)
-					out.push_back((byte)(pred * 2));
+				const int s1 = (pred + kSignedNibble[d >> 4]) & 0xff;
+				emitCbxSample(dst, outSize, produced, (byte)(s1 * 2), duplicate);
+				pred = (s1 + kSignedNibble[d & 0xf]) & 0xff;
+				emitCbxSample(dst, outSize, produced, (byte)(pred * 2), duplicate);
 			}
 		} else { // predictor repeat-run
-			int n = ((b & 0x3f) + 1) * dup;
-			for (int j = 0; j < n && produced < outSize; ++j, ++produced)
-				out.push_back((byte)(pred * 2));
+			uint32 n = (b & 0x3f) + 1;
+			if (duplicate)
+				n *= 2;
+			if (n > outSize - produced)
+				n = outSize - produced;
+			memset(dst + produced, (byte)(pred * 2), n);
+			produced += n;
 		}
 	}
-	while (produced < outSize) { // pad a short/truncated block with silence
-		out.push_back(0x80);
-		++produced;
-	}
+	if (produced < outSize) // pad a short/truncated block with silence
+		memset(dst + produced, 0x80, outSize - produced);
 }
 
 uint32 decodeCbxAudio(const byte *payload, uint32 payloadLen, Common::Array<byte> &out) {
@@ -83,20 +92,33 @@ uint32 decodeCbxAudio(const byte *payload, uint32 payloadLen, Common::Array<byte
 	const uint32 count = READ_LE_UINT32(payload + 0x24);
 	if (blockBytes == 0 || count == 0 || count > 0x10000)
 		return 0;
-	const int dup = (rate == kAudioRate22050) ? 1 : 2;
-	const uint32 outSize = blockBytes * dup;
+	const bool duplicate = rate != kAudioRate22050;
+	if (duplicate && blockBytes > 0x7fffffffU)
+		return 0;
+	const uint32 outSize = blockBytes * (duplicate ? 2 : 1);
 	const uint32 startBytes = out.size();
-	for (uint32 b = 0; b < count; ++b) {
-		const uint32 tableOff = 0x28 + b * 4;
+
+	uint32 validBlocks = 0;
+	for (; validBlocks < count; ++validBlocks) {
+		const uint32 tableOff = 0x28 + validBlocks * 4;
 		if (tableOff + 4 > payloadLen)
 			break;
 		const uint32 off = READ_LE_UINT32(payload + tableOff);
-		// Block offsets are relative to base B (payload-4); >= 4 keeps the
-		// in-payload start non-negative.
 		if (off < 4 || off - 4 >= payloadLen)
 			break;
+	}
+	if (validBlocks == 0 || outSize > (0xffffffffU - startBytes) / validBlocks)
+		return 0;
+
+	out.resize(startBytes + outSize * validBlocks);
+	for (uint32 b = 0; b < validBlocks; ++b) {
+		const uint32 tableOff = 0x28 + b * 4;
+		const uint32 off = READ_LE_UINT32(payload + tableOff);
+		// Block offsets are relative to base B (payload-4); >= 4 keeps the
+		// in-payload start non-negative.
 		const uint32 start = off - 4;
-		decodeCbxBlock(payload + start, payloadLen - start, outSize, dup, out);
+		decodeCbxBlock(payload + start, payloadLen - start, outSize, duplicate,
+				out.begin() + startBytes + b * outSize);
 	}
 	return out.size() - startBytes;
 }

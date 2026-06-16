@@ -4485,7 +4485,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// Decoded SFX named by each frame's event chunk. Linear movies with a music
 	// buffer premix these at frame start; interactive or otherwise-silent movies
 	// play them live when the frame is reached.
-	Common::Array<Common::Array<byte> > pfFrameSfx;
+	Common::Array<Common::SharedPtr<Common::Array<byte> > > pfFrameSfx;
+	Common::HashMap<uint32, Common::SharedPtr<Common::Array<byte> > > decodedFrameSfx;
 	// Per-frame hold duration in ms (event chunk +2 in scaled timer units,
 	// floored by masterHdr[+0x1c]). Used to pace interactive movies frame by
 	// frame (the menu and its pressed-button frames), independent of the audio
@@ -4639,7 +4640,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				}
 				pfButtons.push_back(buttons);
 
-				Common::Array<byte> frameSfx;
+				Common::SharedPtr<Common::Array<byte> > frameSfx;
 				if (eb) {
 					Common::String cue = readPascalString(eb + 0x12, fileData);
 					if (!cue.empty()) {
@@ -4654,9 +4655,22 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 							}
 						}
 						if (sfxResId < archive.getResourceCount()) {
-							const Archive::Resource &sr = archive.getResource(sfxResId);
-							if (!sr.empty && sr.info == kAudioResourceInfoTag && sr.dataOffset >= 4) {
-								decodeCbxAudio(fileData.begin() + sr.dataOffset, sr.length, frameSfx);
+							Common::HashMap<uint32, Common::SharedPtr<Common::Array<byte> > >::const_iterator cached =
+									decodedFrameSfx.find(sfxResId);
+							if (cached != decodedFrameSfx.end()) {
+								frameSfx = cached->_value;
+							} else {
+								Common::SharedPtr<Common::Array<byte> > decoded(new Common::Array<byte>());
+								const Archive::Resource &sr = archive.getResource(sfxResId);
+								if (!sr.empty && sr.info == kAudioResourceInfoTag && sr.dataOffset >= 4) {
+									// Frame-event cue resources are sometimes referenced more than
+									// once in a movie. Cache them only for this playMovie() call:
+									// most movies play once, so a persistent decoded-audio cache would
+									// just retain large one-shot PCM buffers.
+									decodeCbxAudio(fileData.begin() + sr.dataOffset, sr.length, *decoded);
+								}
+								decodedFrameSfx[sfxResId] = decoded;
+								frameSfx = decoded;
 							}
 						}
 					}
@@ -4696,14 +4710,15 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	const bool playFrameSfxLive = hasInteractive || pcmBuf.empty();
 	uint32 frameSfxBytes = 0;
 	for (uint i = 0; i < pfFrameSfx.size(); ++i)
-		frameSfxBytes += pfFrameSfx[i].size();
+		if (pfFrameSfx[i])
+			frameSfxBytes += pfFrameSfx[i]->size();
 	if (!playFrameSfxLive) {
 		for (uint i = 0; i < pfFrameSfx.size(); ++i) {
-			if (pfFrameSfx[i].empty())
+			if (!pfFrameSfx[i] || pfFrameSfx[i]->empty())
 				continue;
 			uint32 atMs = (i < frameStartMs.size()) ? frameStartMs[i] : 0;
 			uint32 atSample = (uint32)((uint64)atMs * kAudioSampleRate / 1000);
-			mixSfx(pcmBuf, pfFrameSfx[i], atSample);
+			mixSfx(pcmBuf, *pfFrameSfx[i], atSample);
 		}
 	}
 
@@ -4826,8 +4841,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			_actionFrameMask |= 1;
 		if ((int)fi == actionCue2)
 			_actionFrameMask |= 2;
-		if (playFrameSfxLive && fi < pfFrameSfx.size())
-			playMovieFrameSfx(_mixer, frameSfxHandles, pfFrameSfx[fi], effectiveAudioVolume(255));
+		if (playFrameSfxLive && fi < pfFrameSfx.size() && pfFrameSfx[fi])
+			playMovieFrameSfx(_mixer, frameSfxHandles, *pfFrameSfx[fi], effectiveAudioVolume(255));
 
 		// Current playback clock: real audio position while the track plays,
 		// else elapsed wall time (covers the post-music fade and silent movies).
