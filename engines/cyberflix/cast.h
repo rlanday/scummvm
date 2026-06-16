@@ -23,6 +23,8 @@
 #define CYBERFLIX_CAST_H
 
 #include "common/array.h"
+#include "common/hash-str.h"
+#include "common/hashmap.h"
 #include "common/ptr.h"
 #include "common/str.h"
 
@@ -107,6 +109,9 @@ private:
 	int _master = -1;
 	Common::ScopedPtr<Script> _script;
 	Common::Array<Common::SharedPtr<Actor> > _actors;
+	// Actor records are immutable while a CST is open; this keeps hot
+	// sendtoactor/property lookups from rescanning the actor table each time.
+	Common::HashMap<Common::String, uint32> _actorIndexByName;
 };
 
 } // End of namespace Cyberflix

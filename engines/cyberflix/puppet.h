@@ -23,6 +23,7 @@
 #define CYBERFLIX_PUPPET_H
 
 #include "common/array.h"
+#include "common/hash-str.h"
 #include "common/hashmap.h"
 #include "common/ptr.h"
 #include "common/str.h"
@@ -161,6 +162,10 @@ private:
 	uint32 _baseDisplayListResources[kBaseControllerStateCount] = {};
 	Common::Array<ScriptEntry> _scripts;
 	Common::Array<ActionEntry> _actions;
+	// PUP script/action tables are immutable while open; these indexes avoid
+	// repeated case-insensitive linear scans during puppet dispatch and playback.
+	Common::HashMap<Common::String, uint32> _scriptIndexByName;
+	Common::HashMap<Common::String, uint32> _actionIndexByName;
 	mutable Common::HashMap<uint32, Common::SharedPtr<CelImage> > _celCache;
 	mutable Common::HashMap<uint32, Common::Array<RenderFrame> > _actionFrameCache;
 };

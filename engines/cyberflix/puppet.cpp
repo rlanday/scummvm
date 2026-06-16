@@ -87,6 +87,8 @@ bool Puppet::open(const Common::String &name) {
 	memset(_baseDisplayListResources, 0, sizeof(_baseDisplayListResources));
 	_scripts.clear();
 	_actions.clear();
+	_scriptIndexByName.clear();
+	_actionIndexByName.clear();
 	_celCache.clear();
 	_actionFrameCache.clear();
 	_puppetName.clear();
@@ -143,7 +145,16 @@ bool Puppet::open(const Common::String &name) {
 		action.text = pascalString(entry + kMasterActionTextOffset);
 		action.name = pascalString(entry + kMasterActionNameOffset);
 		action.cacheIndex = i;
+		const uint32 actionIndex = _actions.size();
 		_actions.push_back(action);
+		Common::String actionName = action.name;
+		actionName.toLowercase();
+		if (!actionName.empty() && !_actionIndexByName.contains(actionName))
+			_actionIndexByName[actionName] = actionIndex;
+		Common::String actionText = action.text;
+		actionText.toLowercase();
+		if (!actionText.empty() && !_actionIndexByName.contains(actionText))
+			_actionIndexByName[actionText] = actionIndex;
 	}
 
 	int baseIdx = resourceIndexById(kBaseControllerResourceId);
@@ -172,8 +183,13 @@ bool Puppet::open(const Common::String &name) {
 		se.resId = READ_LE_UINT32(entry + kScriptEntryResourceOffset);
 		se.name = pascalString(entry + kScriptEntryNameOffset);
 		se.script = parseScriptResource(se.resId);
-		if (!se.name.empty())
+		if (!se.name.empty()) {
+			Common::String key = se.name;
+			key.toLowercase();
+			if (!_scriptIndexByName.contains(key))
+				_scriptIndexByName[key] = _scripts.size();
 			_scripts.push_back(se);
+		}
 	}
 
 	debug(1, "Cyberflix: opened puppet '%s': name '%s', %u script(s), %u action(s)",
@@ -188,9 +204,11 @@ Common::String Puppet::scriptName(uint32 index) const {
 }
 
 Common::SharedPtr<Script> Puppet::scriptByName(const Common::String &name) const {
-	for (uint32 i = 0; i < _scripts.size(); ++i)
-		if (_scripts[i].name.equalsIgnoreCase(name))
-			return _scripts[i].script;
+	Common::String key = name;
+	key.toLowercase();
+	Common::HashMap<Common::String, uint32>::const_iterator it = _scriptIndexByName.find(key);
+	if (it != _scriptIndexByName.end() && it->_value < _scripts.size())
+		return _scripts[it->_value].script;
 	return Common::SharedPtr<Script>();
 }
 
@@ -203,11 +221,11 @@ const Puppet::ActionEntry *Puppet::actionAt(uint32 index) const {
 const Puppet::ActionEntry *Puppet::actionByName(const Common::String &name) const {
 	if (name.empty())
 		return nullptr;
-	for (uint32 i = 0; i < _actions.size(); ++i) {
-		if (_actions[i].name.equalsIgnoreCase(name) ||
-				_actions[i].text.equalsIgnoreCase(name))
-			return &_actions[i];
-	}
+	Common::String key = name;
+	key.toLowercase();
+	Common::HashMap<Common::String, uint32>::const_iterator it = _actionIndexByName.find(key);
+	if (it != _actionIndexByName.end() && it->_value < _actions.size())
+		return &_actions[it->_value];
 	return nullptr;
 }
 

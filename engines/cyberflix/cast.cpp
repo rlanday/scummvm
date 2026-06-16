@@ -58,6 +58,7 @@ Common::String Cast::pascalString(const byte *p) const {
 bool Cast::open(const Common::String &name) {
 	_master = -1;
 	_actors.clear();
+	_actorIndexByName.clear();
 	_script.reset();
 	_name = name;
 
@@ -150,8 +151,11 @@ bool Cast::open(const Common::String &name) {
 			delete s;
 		}
 
-		if (!actor->name.empty())
+		if (!actor->name.empty()) {
+			if (!_actorIndexByName.contains(actor->name))
+				_actorIndexByName[actor->name] = _actors.size();
 			_actors.push_back(actor);
+		}
 	}
 
 	debug(1, "Cyberflix: opened cast '%s': %u actor(s)", name.c_str(), _actors.size());
@@ -161,9 +165,9 @@ bool Cast::open(const Common::String &name) {
 Common::SharedPtr<Cast::Actor> Cast::findActor(const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
-	for (uint32 i = 0; i < _actors.size(); ++i)
-		if (_actors[i]->name == key)
-			return _actors[i];
+	Common::HashMap<Common::String, uint32>::const_iterator it = _actorIndexByName.find(key);
+	if (it != _actorIndexByName.end() && it->_value < _actors.size())
+		return _actors[it->_value];
 	return Common::SharedPtr<Actor>();
 }
 

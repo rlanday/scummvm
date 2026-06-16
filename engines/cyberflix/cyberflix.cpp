@@ -1130,9 +1130,11 @@ void CyberflixEngine::sendToPuppet(const Common::String &puppetName,
 		return;
 	}
 
-	Common::Array<const Script *> scopes;
-	scopes.push_back(script.get());
-	dispatchWithScopeChain(scopes, _puppet->sourceName(), Common::String(), message, args, "puppet");
+	// PUP script lookups are immutable while the puppet file is open. The hot
+	// Smethels path repeatedly dispatches one-scope puppet messages, so use the
+	// fixed helper instead of building a transient scope-chain array each time.
+	dispatchWithScopes(script.get(), nullptr, _puppet->sourceName(), Common::String(),
+			message, args, "puppet");
 	refreshPropsIfDirty();
 }
 
@@ -1648,9 +1650,8 @@ void CyberflixEngine::sendToCast(const Common::String &castName, const Common::S
 		warning("Cyberflix: sendtocast('%s'): cast not open", castName.c_str());
 		return;
 	}
-	Common::Array<const Script *> scopes;
-	scopes.push_back(cast->castScript());
-	dispatchWithScopeChain(scopes, cast->name(), Common::String(), message, args, "cast");
+	dispatchWithScopes(cast->castScript(), nullptr, cast->name(), Common::String(),
+			message, args, "cast");
 }
 
 void CyberflixEngine::sendToActor(const Common::String &actorName, const Common::String &message,
@@ -1663,10 +1664,10 @@ void CyberflixEngine::sendToActor(const Common::String &actorName, const Common:
 		return;
 	}
 
-	Common::Array<const Script *> scopes;
-	scopes.push_back(ref.actor->script.get());
-	scopes.push_back(ref.cast->castScript());
-	dispatchWithScopeChain(scopes, ref.actor->name, ref.actor->name, message, args, "actor");
+	// Actor dispatch always searches [actor script, cast script, BOOTFILE res2].
+	// Avoid the generic scope-chain array in the sampled actor->puppet cascade.
+	dispatchWithScopes(ref.actor->script.get(), ref.cast->castScript(),
+			ref.actor->name, ref.actor->name, message, args, "actor");
 }
 
 int CyberflixEngine::countActors() {
