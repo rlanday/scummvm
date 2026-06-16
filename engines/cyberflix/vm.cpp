@@ -347,8 +347,8 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 			// sendtoprop (0x2f17), sendtoshop
 			// (0x2f1b), sendtopainting (0x2f22), sendtobutton (0x2f24),
 			// sendtoflat (0x2f25), sendtostage (0x2f26), sendtoboot
-			// (0x2f31), and the value-returning fx variants used by inventory
-			// (sendtoshopfx 0x4e79) pass their final
+			// (0x2f31), and the value-returning 0x4e74-0x4e7f fx dispatch
+			// family pass their final
 			// argument UNevaluated: it is a message `name(args)` matched
 			// against script definitions (TI.EXE FUN_0040ad80/FUN_0042ae80
 			// hand the raw code span to the dispatcher FUN_0040b690). Leading
@@ -356,10 +356,18 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 			// evaluated normally. Evaluating the message instead recurses:
 			// boot res1's mousedown sends mousedown(thepoint) to the hit
 			// scene/flat/button, which would re-enter itself.
-			if (headOp == 0x2ef0 || headOp == 0x2f02 || headOp == 0x2f0d ||
-					headOp == 0x2f10 || headOp == 0x2f17 || headOp == 0x2f1b ||
-					headOp == 0x2f22 || headOp == 0x2f24 || headOp == 0x2f25 ||
-					headOp == 0x2f26 || headOp == 0x2f31 || headOp == 0x4e79)
+			if (headOp == Script::kMethodSendToActor || headOp == Script::kMethodSendToScene ||
+					headOp == Script::kMethodSendToPuppet || headOp == Script::kMethodSendToCast ||
+					headOp == Script::kMethodSendToProp || headOp == Script::kMethodSendToShop ||
+					headOp == Script::kMethodSendToPainting || headOp == Script::kMethodSendToButton ||
+					headOp == Script::kMethodSendToFlat || headOp == Script::kMethodSendToStage ||
+					headOp == Script::kMethodSendToBoot || headOp == Script::kMethodSendToActorFx ||
+					headOp == Script::kMethodSendToSceneFx || headOp == Script::kMethodSendToPuppetFx ||
+					headOp == Script::kMethodSendToCastFx || headOp == Script::kMethodSendToPropFx ||
+					headOp == Script::kMethodSendToShopFx || headOp == Script::kMethodSendToPaintingFx ||
+					headOp == Script::kMethodSendToSetFx || headOp == Script::kMethodSendToButtonFx ||
+					headOp == Script::kMethodSendToFlatFx || headOp == Script::kMethodSendToStageFx ||
+					headOp == Script::kMethodSendToBootFx)
 				return dispatchMessageBuiltin(script, pc, headOp);
 			Common::Array<Value> args;
 			parseCallArgs(script, pc, args);
@@ -438,9 +446,17 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 		if (_host)
 			_host->sendToStage(*message, msgArgs);
 		break;
+	case Script::kMethodSendToStageFx:
+		if (_host)
+			return _host->sendToStageFx(*message, msgArgs);
+		break;
 	case Script::kMethodSendToBoot: // sendtoboot(message(...)) -> TI.EXE FUN_00439080/FUN_004390a0
 		if (_host)
 			_host->sendToBoot(*message, msgArgs);
+		break;
+	case Script::kMethodSendToBootFx:
+		if (_host)
+			return _host->sendToBootFx(*message, msgArgs);
 		break;
 	case Script::kMethodSendToShop: // sendtoshop('file.shp', message) -> TI.EXE FUN_0042b2b0:
 	             // dispatch against [shop script, BOOTFILE res2].
@@ -456,35 +472,71 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 		if (_host)
 			_host->sendToProp(target0, *message, msgArgs);
 		break;
+	case Script::kMethodSendToPropFx:
+		if (_host)
+			return _host->sendToPropFx(target0, *message, msgArgs);
+		break;
 	case Script::kMethodSendToActor: // sendtoactor(actor, message) -> actor script, then cast script.
 		if (_host)
 			_host->sendToActor(target0, *message, msgArgs);
+		break;
+	case Script::kMethodSendToActorFx:
+		if (_host)
+			return _host->sendToActorFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToCast: // sendtocast('file.cst', message) -> per-cast script dispatch.
 		if (_host)
 			_host->sendToCast(target0, *message, msgArgs);
 		break;
+	case Script::kMethodSendToCastFx:
+		if (_host)
+			return _host->sendToCastFx(target0, *message, msgArgs);
+		break;
 	case Script::kMethodSendToPuppet: // sendtopuppet(target, message) -> [PUP script, BOOTFILE res2].
 		if (_host)
 			_host->sendToPuppet(target0, *message, msgArgs);
+		break;
+	case Script::kMethodSendToPuppetFx:
+		if (_host)
+			return _host->sendToPuppetFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToScene: // sendtoscene(scene, message) -> TI.EXE FUN_004311e0/
 	             // FUN_00431200: dispatch against the scene's script chain.
 		if (_host)
 			_host->sendToScene(target0, *message, msgArgs);
 		break;
+	case Script::kMethodSendToSceneFx:
+		if (_host)
+			return _host->sendToSceneFx(target0, *message, msgArgs);
+		break;
 	case Script::kMethodSendToPainting: // sendtopainting(scene, view, painting, message) -> FUN_00432550/FUN_00432570
 		if (_host)
 			_host->sendToPainting(target0, target1, target2, *message, msgArgs);
+		break;
+	case Script::kMethodSendToPaintingFx:
+		if (_host)
+			return _host->sendToPaintingFx(target0, target1, target2, *message, msgArgs);
+		break;
+	case Script::kMethodSendToSetFx:
+		if (_host)
+			return _host->sendToSetFx(*message, msgArgs);
 		break;
 	case Script::kMethodSendToButton: // sendtobutton(flat, button, message) -> FUN_0040a410/FUN_0040a430:
 	             // chain [button script, node script, stage script, res2].
 		if (_host)
 			_host->sendToButton(target0, target1, *message, msgArgs);
 		break;
+	case Script::kMethodSendToButtonFx:
+		if (_host)
+			return _host->sendToButtonFx(target0, target1, *message, msgArgs);
+		break;
 	case Script::kMethodSendToFlat: // sendtoflat(flat, message) -> FUN_0040a940/FUN_0040a960
 		if (_host)
 			_host->sendToFlat(target0, *message, msgArgs);
+		break;
+	case Script::kMethodSendToFlatFx:
+		if (_host)
+			return _host->sendToFlatFx(target0, *message, msgArgs);
 		break;
 	default:
 		break;

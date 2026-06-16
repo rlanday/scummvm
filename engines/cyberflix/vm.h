@@ -102,12 +102,16 @@ public:
 	 * ScriptVM::callFunction over its registered libraries.
 	 */
 	virtual void sendToStage(const Common::String &message, const Common::Array<Value> &args) {}
+	virtual Value sendToStageFx(const Common::String &message,
+			const Common::Array<Value> &args) { return Value(); }
 
 	/**
 	 * sendtoboot(message(args)) (0x2f31, FUN_00439080/FUN_004390a0): dispatch
 	 * against [BOOTFILE res1, BOOTFILE res2].
 	 */
 	virtual void sendToBoot(const Common::String &message, const Common::Array<Value> &args) {}
+	virtual Value sendToBootFx(const Common::String &message,
+			const Common::Array<Value> &args) { return Value(); }
 
 	/**
 	 * sendtoflat(flat, message(args)) (0x2f25): dispatch against
@@ -115,6 +119,8 @@ public:
 	 */
 	virtual void sendToFlat(const Common::String &flat, const Common::String &message,
 			const Common::Array<Value> &args) {}
+	virtual Value sendToFlatFx(const Common::String &flat, const Common::String &message,
+			const Common::Array<Value> &args) { return Value(); }
 
 	/**
 	 * sendtobutton(flat, button, message(args)) (0x2f24): dispatch against
@@ -122,6 +128,8 @@ public:
 	 */
 	virtual void sendToButton(const Common::String &flat, const Common::String &button,
 			const Common::String &message, const Common::Array<Value> &args) {}
+	virtual Value sendToButtonFx(const Common::String &flat, const Common::String &button,
+			const Common::String &message, const Common::Array<Value> &args) { return Value(); }
 
 	/**
 	 * Open the set file @p name. @p scene / @p view optionally name the scene
@@ -137,6 +145,8 @@ public:
 
 	/** Name of the open set (currentset, 0x4e55), or "none". */
 	virtual Common::String currentSet() { return "none"; }
+	virtual Value sendToSetFx(const Common::String &message,
+			const Common::Array<Value> &args) { return Value(); }
 
 	/** currentview() (0x3e8b): current SET view name, "Moving", or "none". */
 	virtual Common::String currentView() { return "none"; }
@@ -162,6 +172,8 @@ public:
 	virtual void closePuppetFile() {}
 	virtual void sendToPuppet(const Common::String &puppet, const Common::String &message,
 			const Common::Array<Value> &args) {}
+	virtual Value sendToPuppetFx(const Common::String &puppet, const Common::String &message,
+			const Common::Array<Value> &args) { return Value(); }
 	virtual void puppetScript(const Common::String &name) {}
 	virtual void puppetClear() {}
 	virtual void puppetSpeak(const Common::String &name, int mode) {}
@@ -180,6 +192,8 @@ public:
 	virtual void sendToScene(const Common::String &scene,
 			const Common::String &message = Common::String(),
 			const Common::Array<Value> &args = Common::Array<Value>()) {}
+	virtual Value sendToSceneFx(const Common::String &scene, const Common::String &message,
+			const Common::Array<Value> &args) { return Value(); }
 
 	/**
 	 * sendtopainting(scene, view, painting, message(args)) (0x2f22): dispatch
@@ -188,6 +202,9 @@ public:
 	virtual void sendToPainting(const Common::String &scene, const Common::String &view,
 			const Common::String &painting, const Common::String &message,
 			const Common::Array<Value> &args) {}
+	virtual Value sendToPaintingFx(const Common::String &scene, const Common::String &view,
+			const Common::String &painting, const Common::String &message,
+			const Common::Array<Value> &args) { return Value(); }
 
 	/** countpaintings(scene, view) (0x4e32): SET painting records in the view. */
 	virtual int countPaintings(const Common::String &scene, const Common::String &view) { return 0; }
@@ -347,10 +364,14 @@ public:
 	/** sendtocast('file.cst', message(args)): dispatch against the cast script. */
 	virtual void sendToCast(const Common::String &cast, const Common::String &message,
 			const Common::Array<Value> &args) {}
+	virtual Value sendToCastFx(const Common::String &cast, const Common::String &message,
+			const Common::Array<Value> &args) { return Value(); }
 
 	/** sendtoactor(actor, message(args)): dispatch [actor script, cast script]. */
 	virtual void sendToActor(const Common::String &actor, const Common::String &message,
 			const Common::Array<Value> &args) {}
+	virtual Value sendToActorFx(const Common::String &actor, const Common::String &message,
+			const Common::Array<Value> &args) { return Value(); }
 
 	/** countactors() / indextoactor(i): native global actor list. */
 	virtual int countActors() { return 0; }
@@ -396,6 +417,8 @@ public:
 	 */
 	virtual void sendToProp(const Common::String &prop, const Common::String &message,
 			const Common::Array<Value> &args) {}
+	virtual Value sendToPropFx(const Common::String &prop, const Common::String &message,
+			const Common::Array<Value> &args) { return Value(); }
 
 	/** propvisible(name) getter (0x3e8f FUN_00429dc0). */
 	virtual bool propVisible(const Common::String &name) { return false; }

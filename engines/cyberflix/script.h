@@ -248,7 +248,18 @@ public:
 		kMethodCurrentVoice     = 0x4E6E,
 		kMethodCurrentTheme     = 0x4E6F,
 		kMethodActionFrame      = 0x4E73,
+		kMethodSendToActorFx    = 0x4E74,
+		kMethodSendToSceneFx    = 0x4E75,
+		kMethodSendToPuppetFx   = 0x4E76,
+		kMethodSendToCastFx     = 0x4E77,
+		kMethodSendToPropFx     = 0x4E78,
 		kMethodSendToShopFx     = 0x4E79,
+		kMethodSendToPaintingFx = 0x4E7A,
+		kMethodSendToSetFx      = 0x4E7B,
+		kMethodSendToButtonFx   = 0x4E7C,
+		kMethodSendToFlatFx     = 0x4E7D,
+		kMethodSendToStageFx    = 0x4E7E,
+		kMethodSendToBootFx     = 0x4E7F,
 		kMethodRoadAhead        = 0x4E94
 	};
 

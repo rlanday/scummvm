@@ -99,16 +99,23 @@ public:
 	bool stageVisible(const bool *newVisible) override;
 	Common::String currentFlat() override;
 	void sendToStage(const Common::String &message, const Common::Array<Value> &args) override;
+	Value sendToStageFx(const Common::String &message, const Common::Array<Value> &args) override;
 	void sendToBoot(const Common::String &message, const Common::Array<Value> &args) override;
+	Value sendToBootFx(const Common::String &message, const Common::Array<Value> &args) override;
 	void sendToFlat(const Common::String &flat, const Common::String &message,
 			const Common::Array<Value> &args) override;
+	Value sendToFlatFx(const Common::String &flat, const Common::String &message,
+			const Common::Array<Value> &args) override;
 	void sendToButton(const Common::String &flat, const Common::String &button,
+			const Common::String &message, const Common::Array<Value> &args) override;
+	Value sendToButtonFx(const Common::String &flat, const Common::String &button,
 			const Common::String &message, const Common::Array<Value> &args) override;
 	void openSetFile(const Common::String &name,
 			const Common::String &scene = Common::String(),
 			const Common::String &view = Common::String()) override;
 	void closeSetFile() override;
 	Common::String currentSet() override;
+	Value sendToSetFx(const Common::String &message, const Common::Array<Value> &args) override;
 	Common::String currentView() override;
 	Common::String currentScene(const Common::String *target) override;
 	bool setVisible(const bool *newVisible) override;
@@ -116,6 +123,8 @@ public:
 	void openPuppetFile(const Common::String &name) override;
 	void closePuppetFile() override;
 	void sendToPuppet(const Common::String &puppet, const Common::String &message,
+			const Common::Array<Value> &args) override;
+	Value sendToPuppetFx(const Common::String &puppet, const Common::String &message,
 			const Common::Array<Value> &args) override;
 	void puppetScript(const Common::String &name) override;
 	void puppetClear() override;
@@ -130,7 +139,12 @@ public:
 	Common::String indexToPuppet(int index) override;
 	void sendToScene(const Common::String &scene, const Common::String &message = Common::String(),
 			const Common::Array<Value> &args = Common::Array<Value>()) override;
+	Value sendToSceneFx(const Common::String &scene, const Common::String &message,
+			const Common::Array<Value> &args) override;
 	void sendToPainting(const Common::String &scene, const Common::String &view,
+			const Common::String &painting, const Common::String &message,
+			const Common::Array<Value> &args) override;
+	Value sendToPaintingFx(const Common::String &scene, const Common::String &view,
 			const Common::String &painting, const Common::String &message,
 			const Common::Array<Value> &args) override;
 	int countPaintings(const Common::String &scene, const Common::String &view) override;
@@ -178,7 +192,11 @@ public:
 	void closeCastFile(const Common::String &name) override;
 	void sendToCast(const Common::String &cast, const Common::String &message,
 			const Common::Array<Value> &args) override;
+	Value sendToCastFx(const Common::String &cast, const Common::String &message,
+			const Common::Array<Value> &args) override;
 	void sendToActor(const Common::String &actor, const Common::String &message,
+			const Common::Array<Value> &args) override;
+	Value sendToActorFx(const Common::String &actor, const Common::String &message,
 			const Common::Array<Value> &args) override;
 	int countActors() override;
 	Common::String indexToActor(int index) override;
@@ -202,6 +220,8 @@ public:
 	Value sendToShopFx(const Common::String &shop, const Common::String &message,
 			const Common::Array<Value> &args) override;
 	void sendToProp(const Common::String &prop, const Common::String &message,
+			const Common::Array<Value> &args) override;
+	Value sendToPropFx(const Common::String &prop, const Common::String &message,
 			const Common::Array<Value> &args) override;
 	bool propVisible(const Common::String &name) override;
 	void propVisible(const Common::String &name, bool visible) override;
@@ -444,6 +464,7 @@ private:
 			const Common::String &message, const Common::Array<Value> &args,
 			const char *debugContext);
 	void dispatchSetMessage(const Common::String &message, const Common::Array<Value> &args);
+	Value dispatchSetMessageValue(const Common::String &message, const Common::Array<Value> &args);
 	void dispatchSceneMessage(uint32 scene, const Common::String &message,
 			const Common::Array<Value> &args);
 	bool closeCurrentSceneForNavigation();

@@ -682,6 +682,16 @@ void CyberflixEngine::sendToStage(const Common::String &message, const Common::A
 	refreshPropsIfDirty();
 }
 
+Value CyberflixEngine::sendToStageFx(const Common::String &message, const Common::Array<Value> &args) {
+	if (!_stage || !_stage->isOpen()) {
+		warning("Cyberflix: sendtostagefx('%s') with no stage open", message.c_str());
+		return Value();
+	}
+	Common::SharedPtr<Stage> dispatchStage = _stage;
+	return dispatchWithScopesValue(dispatchStage->stageScript(), nullptr,
+			dispatchStage->name(), Common::String(), message, args, "stagefx");
+}
+
 // sendtoboot(message(...)): dispatch against [BOOTFILE res1, BOOTFILE res2].
 // CTL.STG's QUIT button reaches BOOTFILE res1 menuselect("quit") through this
 // path. Mirrors TI.EXE FUN_00439080 -> FUN_004390a0.
@@ -693,6 +703,15 @@ void CyberflixEngine::sendToBoot(const Common::String &message, const Common::Ar
 	dispatchWithScopes(_bootScript.get(), nullptr, "bootfile", Common::String(),
 			message, args, "boot");
 	refreshPropsIfDirty();
+}
+
+Value CyberflixEngine::sendToBootFx(const Common::String &message, const Common::Array<Value> &args) {
+	if (!_bootScript) {
+		warning("Cyberflix: sendtobootfx('%s') before BOOTFILE loaded", message.c_str());
+		return Value();
+	}
+	return dispatchWithScopesValue(_bootScript.get(), nullptr, "bootfile",
+			Common::String(), message, args, "bootfx");
 }
 
 // sendtoflat(flat, message): dispatch against [node script, stage script,
@@ -714,6 +733,24 @@ void CyberflixEngine::sendToFlat(const Common::String &flat, const Common::Strin
 	dispatchWithScopes(dispatchStage->nodeScript((uint32)node),
 			dispatchStage->stageScript(), flatName, flatName, message, args, "flat");
 	refreshPropsIfDirty();
+}
+
+Value CyberflixEngine::sendToFlatFx(const Common::String &flat, const Common::String &message,
+		const Common::Array<Value> &args) {
+	if (!_stage || !_stage->isOpen()) {
+		warning("Cyberflix: sendtoflatfx('%s') with no stage open", flat.c_str());
+		return Value();
+	}
+	Common::SharedPtr<Stage> dispatchStage = _stage;
+	int node = flat.empty() ? _stageNode : dispatchStage->findNode(flat);
+	if (node < 0 || (uint32)node >= dispatchStage->nodeCount()) {
+		warning("Cyberflix: stage '%s' has no flat named '%s'",
+				dispatchStage->name().c_str(), flat.c_str());
+		return Value();
+	}
+	Common::String flatName = dispatchStage->nodeName((uint32)node);
+	return dispatchWithScopesValue(dispatchStage->nodeScript((uint32)node),
+			dispatchStage->stageScript(), flatName, flatName, message, args, "flatfx");
 }
 
 // sendtobutton(flat, button, message): dispatch against [button script, node
@@ -745,6 +782,31 @@ void CyberflixEngine::sendToButton(const Common::String &flat, const Common::Str
 			message.c_str(), args.size());
 	dispatchWithScopeChain(scopes, button, button, message, args, "button");
 	refreshPropsIfDirty();
+}
+
+Value CyberflixEngine::sendToButtonFx(const Common::String &flat, const Common::String &button,
+		const Common::String &message, const Common::Array<Value> &args) {
+	if (!_stage || !_stage->isOpen()) {
+		warning("Cyberflix: sendtobuttonfx('%s') with no stage open", button.c_str());
+		return Value();
+	}
+	Common::SharedPtr<Stage> dispatchStage = _stage;
+	int node = flat.empty() ? _stageNode : dispatchStage->findNode(flat);
+	if (node < 0 || (uint32)node >= dispatchStage->nodeCount()) {
+		warning("Cyberflix: stage '%s' has no flat named '%s'",
+				dispatchStage->name().c_str(), flat.c_str());
+		return Value();
+	}
+	if (!dispatchStage->hasButton((uint32)node, button)) {
+		warning("Cyberflix: stage '%s' flat '%s' has no button named '%s'",
+				dispatchStage->name().c_str(), flat.c_str(), button.c_str());
+		return Value();
+	}
+	Common::Array<const Script *> scopes;
+	scopes.push_back(dispatchStage->buttonScript((uint32)node, button));
+	scopes.push_back(dispatchStage->nodeScript((uint32)node));
+	scopes.push_back(dispatchStage->stageScript());
+	return dispatchWithScopeChainValue(scopes, button, button, message, args, "buttonfx");
 }
 
 void CyberflixEngine::renderStageNode(int node) {
@@ -1136,6 +1198,25 @@ void CyberflixEngine::sendToPuppet(const Common::String &puppetName,
 	dispatchWithScopes(script.get(), nullptr, _puppet->sourceName(), Common::String(),
 			message, args, "puppet");
 	refreshPropsIfDirty();
+}
+
+Value CyberflixEngine::sendToPuppetFx(const Common::String &puppetName,
+		const Common::String &message, const Common::Array<Value> &args) {
+	debug(1, "Cyberflix: sendtopuppetfx('%s') -> %s(%u args)", puppetName.c_str(),
+			message.c_str(), args.size());
+	if (!_puppet || !_puppet->isOpen()) {
+		warning("Cyberflix: sendtopuppetfx('%s'): no puppet open", puppetName.c_str());
+		return Value();
+	}
+
+	Common::SharedPtr<Script> script = _puppet->scriptByName(puppetName);
+	if (!script) {
+		warning("Cyberflix: sendtopuppetfx('%s'): no such puppet script", puppetName.c_str());
+		return Value();
+	}
+
+	return dispatchWithScopesValue(script.get(), nullptr, _puppet->sourceName(),
+			Common::String(), message, args, "puppetfx");
 }
 
 void CyberflixEngine::puppetScript(const Common::String &name) {
@@ -1691,6 +1772,19 @@ void CyberflixEngine::sendToCast(const Common::String &castName, const Common::S
 			message, args, "cast");
 }
 
+Value CyberflixEngine::sendToCastFx(const Common::String &castName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	debug(1, "Cyberflix: sendtocastfx('%s') -> %s(%u args)", castName.c_str(),
+			message.c_str(), args.size());
+	Common::SharedPtr<Cast> cast = findCastShared(castName);
+	if (!cast) {
+		warning("Cyberflix: sendtocastfx('%s'): cast not open", castName.c_str());
+		return Value();
+	}
+	return dispatchWithScopesValue(cast->castScript(), nullptr, cast->name(),
+			Common::String(), message, args, "castfx");
+}
+
 void CyberflixEngine::sendToActor(const Common::String &actorName, const Common::String &message,
 		const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtoactor('%s') -> %s(%u args)", actorName.c_str(),
@@ -1705,6 +1799,20 @@ void CyberflixEngine::sendToActor(const Common::String &actorName, const Common:
 	// Avoid the generic scope-chain array in the sampled actor->puppet cascade.
 	dispatchWithScopes(ref.actor->script.get(), ref.cast->castScript(),
 			ref.actor->name, ref.actor->name, message, args, "actor");
+}
+
+Value CyberflixEngine::sendToActorFx(const Common::String &actorName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	debug(1, "Cyberflix: sendtoactorfx('%s') -> %s(%u args)", actorName.c_str(),
+			message.c_str(), args.size());
+	ActorRef ref = findActorRef(actorName);
+	if (!ref.actor) {
+		warning("Cyberflix: sendtoactorfx('%s'): no such actor", actorName.c_str());
+		return Value();
+	}
+
+	return dispatchWithScopesValue(ref.actor->script.get(), ref.cast->castScript(),
+			ref.actor->name, ref.actor->name, message, args, "actorfx");
 }
 
 int CyberflixEngine::countActors() {
@@ -2431,6 +2539,18 @@ void CyberflixEngine::dispatchSetMessage(const Common::String &message, const Co
 			message, args, "set");
 }
 
+Value CyberflixEngine::dispatchSetMessageValue(const Common::String &message, const Common::Array<Value> &args) {
+	if (!_set || !_set->isOpen() || message.empty())
+		return Value();
+	Common::SharedPtr<Script> setScript = _set->setScriptShared();
+	return dispatchWithScopesValue(setScript.get(), nullptr, _set->setName(),
+			Common::String(), message, args, "setfx");
+}
+
+Value CyberflixEngine::sendToSetFx(const Common::String &message, const Common::Array<Value> &args) {
+	return dispatchSetMessageValue(message, args);
+}
+
 void CyberflixEngine::dispatchSceneMessage(uint32 scene, const Common::String &message,
 		const Common::Array<Value> &args) {
 	if (!_set || !_set->isOpen() || message.empty())
@@ -2539,6 +2659,20 @@ void CyberflixEngine::sendToProp(const Common::String &propName, const Common::S
 	dispatchWithScopes(prop->script.get(), shopOwner->shopScript(), prop->name, prop->name,
 			message, args);
 	refreshPropsIfDirty();
+}
+
+Value CyberflixEngine::sendToPropFx(const Common::String &propName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	debug(1, "Cyberflix: sendtopropfx('%s') -> %s(%u args)", propName.c_str(),
+			message.c_str(), args.size());
+	Shop::Prop *prop = nullptr;
+	Common::SharedPtr<Shop> shopOwner = findPropOwnerShared(propName, &prop);
+	if (!prop) {
+		warning("Cyberflix: sendtopropfx('%s'): no such prop", propName.c_str());
+		return Value();
+	}
+	return dispatchWithScopesValue(prop->script.get(), shopOwner->shopScript(),
+			prop->name, prop->name, message, args, "propfx");
 }
 
 static bool shouldLogInterfaceProp(const Common::String &name) {
@@ -4107,6 +4241,24 @@ void CyberflixEngine::sendToScene(const Common::String &scene,
 		dispatchSceneMessage((uint32)index, message, args);
 }
 
+Value CyberflixEngine::sendToSceneFx(const Common::String &scene,
+		const Common::String &message, const Common::Array<Value> &args) {
+	if (!_set || !_set->isOpen()) {
+		warning("Cyberflix: sendtoscenefx('%s') with no set open", scene.c_str());
+		return Value();
+	}
+	int index = _set->findScene(scene);
+	if (index < 0) {
+		warning("Cyberflix: set '%s' has no scene named '%s'",
+				_set->name().c_str(), scene.c_str());
+		return Value();
+	}
+	Common::SharedPtr<Script> sceneScript = _set->sceneScriptShared((uint32)index);
+	Common::SharedPtr<Script> setScript = _set->setScriptShared();
+	return dispatchWithScopesValue(sceneScript.get(), setScript.get(),
+			_set->sceneName((uint32)index), Common::String(), message, args, "scenefx");
+}
+
 // sendtopainting(scene, view, painting, message): dispatch the message over the
 // current SET's painting chain. BEDSIT1's poster records have no own script, so
 // the set script handles mousedown/setcursor via 0xfbb (target painting name).
@@ -4135,6 +4287,32 @@ void CyberflixEngine::sendToPainting(const Common::String &sceneName, const Comm
 	dispatchWithThreeScopesValue(paintingScript.get(), sceneScript.get(), setScript.get(),
 			painting, painting, message, args, "painting");
 	refreshPropsIfDirty();
+}
+
+Value CyberflixEngine::sendToPaintingFx(const Common::String &sceneName,
+		const Common::String &viewName, const Common::String &painting,
+		const Common::String &message, const Common::Array<Value> &args) {
+	if (!_set || !_set->isOpen()) {
+		warning("Cyberflix: sendtopaintingfx('%s') with no set open", painting.c_str());
+		return Value();
+	}
+	int scene = sceneName.empty() ? _setScene : _set->findScene(sceneName);
+	if (scene < 0) {
+		warning("Cyberflix: sendtopaintingfx('%s'): no scene '%s'",
+				painting.c_str(), sceneName.c_str());
+		return Value();
+	}
+	Common::String view = !viewName.empty() ? viewName : _setView;
+
+	Common::SharedPtr<Script> paintingScript, sceneScript, setScript;
+	if (!_set->paintingDispatchScripts((uint32)scene, view, painting,
+			paintingScript, sceneScript, setScript)) {
+		warning("Cyberflix: sendtopaintingfx('%s'): no view '%s'",
+				painting.c_str(), view.c_str());
+		return Value();
+	}
+	return dispatchWithThreeScopesValue(paintingScript.get(), sceneScript.get(), setScript.get(),
+			painting, painting, message, args, "paintingfx");
 }
 
 void CyberflixEngine::navigateSet(const Common::String &action) {
