@@ -2690,8 +2690,17 @@ void CyberflixEngine::refreshPropsIfDirty() {
 		_propsDirty = false;
 		return;
 	}
-	if (_set && _set->isOpen() && _setScene >= 0)
-		renderSetScene(_setScene, _setAngle);
+	if (_set && _set->isOpen() && _setScene >= 0) {
+		// ScummVM-only optimization matching the native backing-surface model:
+		// prop mutations do not change the SET background, and the current
+		// decoded/transitioned background is already retained in _setFrameSequence.
+		// Recompose that surface with live props instead of re-decoding the same
+		// compressed panorama/transition frame for every sendtoprop() refresh.
+		if (!_setFrameSequence.empty())
+			displaySetFrame(_setFrameSequence);
+		else
+			renderSetScene(_setScene, _setAngle);
+	}
 	_dirtyRects.clear();
 }
 
