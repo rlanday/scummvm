@@ -28,6 +28,8 @@
 #include "cyberflix/shop.h"
 #include "cyberflix/sound.h" // kMasterHeaderInfoTag
 
+#include <math.h>
+
 namespace Cyberflix {
 
 const byte *Shop::engineBase(uint32 index) const {
@@ -189,14 +191,38 @@ bool Shop::shapePoseCount(const Prop &prop, const Common::String &shape, uint16 
 	return false;
 }
 
-// Angular distance with wraparound, mirroring the cell selector's metric
-// (FUN_00426250; cell angles are degrees 0..359).
+// Angular distance with wraparound, mirroring the cell selector's 0..255 metric
+// (FUN_00426250).
 static int angleDistance(int a, int b) {
-	int d = ABS(a - b) % 360;
-	return d > 180 ? 360 - d : d;
+	int d = ABS(a - b) & 0xff;
+	return d > 128 ? 256 - d : d;
 }
 
-bool Shop::renderProp(const Prop &prop, CelImage &cel, Common::Rect &rect) const {
+static int16 nativeTrigSin(int angle) {
+	double v = sin((double)(angle & 0xff) * 6.28318530717958647692 / 256.0) * 16384.0;
+	return (int16)(v >= 0.0 ? v + 0.5 : v - 0.5);
+}
+
+static int16 nativeTrigCos(int angle) {
+	double v = cos((double)(angle & 0xff) * 6.28318530717958647692 / 256.0) * 16384.0;
+	return (int16)(v >= 0.0 ? v + 0.5 : v - 0.5);
+}
+
+static int fixedShift14(int value) {
+	return (value + (value < 0 ? 0x3fff : 0)) >> 14;
+}
+
+static int nativePointAngle(int dx, int dy) {
+	int deg = (int)(atan2((double)dx, (double)dy) * (256.0 / 6.28318530717958647692));
+	deg %= 256;
+	if (deg < 0)
+		deg += 256;
+	return deg;
+}
+
+bool Shop::resolvePropCel(const Prop &prop, int angle, CelImage &cel,
+		Common::Rect &cellRect, int16 &regV, int16 &regH,
+		int16 &cellScale) const {
 	// Resolve the current shape resource (FUN_0042bed0).
 	const Shape *shape = nullptr;
 	for (uint32 i = 0; i < prop.shapes.size(); ++i)
@@ -236,7 +262,7 @@ bool Shop::renderProp(const Prop &prop, CelImage &cel, Common::Rect &rect) const
 			break;
 		if (READ_LE_UINT16(c + kCellIdOffset) != (uint16)(poseId - 1))
 			continue;
-		int dist = angleDistance(READ_LE_INT16(c + kCellAngleOffset), prop.angle);
+		int dist = angleDistance(READ_LE_INT16(c + kCellAngleOffset), angle);
 		if (dist < bestDist) {
 			bestDist = dist;
 			best = c;
@@ -267,18 +293,81 @@ bool Shop::renderProp(const Prop &prop, CelImage &cel, Common::Rect &rect) const
 		return false;
 	}
 
+	cellRect.top = READ_LE_INT16(best + kCellRectOffset);
+	cellRect.left = READ_LE_INT16(best + kCellRectOffset + 2);
+	cellRect.bottom = READ_LE_INT16(best + kCellRectOffset + 4);
+	cellRect.right = READ_LE_INT16(best + kCellRectOffset + 6);
+	regV = READ_LE_INT16(best + kCellRegVOffset);
+	regH = READ_LE_INT16(best + kCellRegHOffset);
+	cellScale = READ_LE_INT16(best + kCellScaleOffset);
+	return true;
+}
+
+bool Shop::renderProp(const Prop &prop, CelImage &cel, Common::Rect &rect) const {
+	Common::Rect cellRect;
+	int16 regV = 0, regH = 0, cellScale = 0;
+	if (!resolvePropCel(prop, prop.angle, cel, cellRect, regV, regH, cellScale))
+		return false;
+
 	// Display-item rect (FUN_0042bb90, screen mode): position minus the cell's
 	// registration point; extent from the cell bounds (the +40 bias cancels).
-	int16 cTop = READ_LE_INT16(best + kCellRectOffset);
-	int16 cLeft = READ_LE_INT16(best + kCellRectOffset + 2);
-	int16 cBottom = READ_LE_INT16(best + kCellRectOffset + 4);
-	int16 cRight = READ_LE_INT16(best + kCellRectOffset + 6);
-	int16 regV = READ_LE_INT16(best + kCellRegVOffset);
-	int16 regH = READ_LE_INT16(best + kCellRegHOffset);
 	rect.top = prop.y - regV;
 	rect.left = prop.x - regH;
-	rect.bottom = rect.top + (cBottom - cTop);
-	rect.right = rect.left + (cRight - cLeft);
+	rect.bottom = rect.top + cellRect.height();
+	rect.right = rect.left + cellRect.width();
+	return true;
+}
+
+bool Shop::renderWorldProp(const Prop &prop, const WorldCamera &camera,
+		const Common::String &setName, CelImage &cel, Common::Rect &rect,
+		int16 &depth) const {
+	if (!prop.visible || prop.mode == 0 || !prop.setName.equalsIgnoreCase(setName))
+		return false;
+
+	const int relX = prop.x - camera.cameraX;
+	const int relY = prop.y - camera.cameraY;
+	const int sinH = nativeTrigSin(camera.heading);
+	const int cosH = nativeTrigCos(camera.heading);
+	const int projectedDepth = fixedShift14(relY * sinH + relX * cosH);
+	if (projectedDepth < 1)
+		return false;
+
+	const int zClippedDepth = MAX(projectedDepth - prop.zClip, 0);
+	const int nearLimit = (camera.nearPlane + (camera.nearPlane < 0 ? 3 : 0)) >> 2;
+	if (projectedDepth <= nearLimit || zClippedDepth > camera.farPlane)
+		return false;
+
+	const int projectedH = fixedShift14(relY * cosH - relX * sinH);
+	const int screenX = camera.centerX + projectedH * camera.focal / projectedDepth;
+	const int screenY = camera.centerY -
+			((prop.z - camera.baseZ - camera.cameraZ) * camera.focal) / projectedDepth;
+	const int angleToCamera = nativePointAngle(camera.cameraY - prop.y, camera.cameraX - prop.x);
+	const int viewAngle = (prop.angle - angleToCamera) & 0xff;
+
+	Common::Rect cellRect;
+	int16 regV = 0, regH = 0, cellScale = 0;
+	if (!resolvePropCel(prop, viewAngle, cel, cellRect, regV, regH, cellScale))
+		return false;
+
+	const int sourceH = cellRect.height();
+	const int sourceW = cellRect.width();
+	if (sourceH <= 0 || sourceW <= 0)
+		return false;
+	const int effectiveScale = (prop.scale * cellScale) / 1000;
+	const int scaledH = (effectiveScale * sourceH) / projectedDepth;
+	const int scaledW = (effectiveScale * sourceW) / projectedDepth;
+	if (scaledH <= 0 || scaledW <= 0)
+		return false;
+
+	rect.top = screenY - (scaledH * regV) / sourceH;
+	rect.left = screenX - (scaledW * regH) / sourceW;
+	rect.bottom = rect.top + scaledH;
+	rect.right = rect.left + scaledW;
+	Common::Rect viewport(camera.viewportLeft, camera.viewportTop,
+			camera.viewportRight, camera.viewportBottom);
+	if (!rect.intersects(viewport))
+		return false;
+	depth = (int16)projectedDepth;
 	return true;
 }
 

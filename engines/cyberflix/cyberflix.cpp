@@ -70,6 +70,46 @@ static const double kPaletteGammaDown = 0.9523809523809523;
 static const double kPaletteGammaMin = 0.15;
 static const double kPaletteGammaMax = 2.5;
 
+static Shop::WorldCamera makeWorldCamera(const Set::CameraData &camera) {
+	Shop::WorldCamera out;
+	out.heading = camera.heading;
+	out.cameraX = camera.cameraX;
+	out.cameraY = camera.cameraY;
+	out.cameraZ = camera.cameraZ;
+	out.baseZ = camera.baseZ;
+	out.nearPlane = camera.nearPlane;
+	out.farPlane = camera.farPlane;
+	out.viewportLeft = camera.viewportLeft;
+	out.viewportTop = camera.viewportTop;
+	out.viewportRight = camera.viewportRight;
+	out.viewportBottom = camera.viewportBottom;
+	out.centerX = camera.centerX;
+	out.centerY = camera.centerY;
+	out.focal = camera.focal;
+	return out;
+}
+
+static void drawScaledCel(Graphics::Surface *screen, const CelImage &cel,
+		const Common::Rect &dest, const Common::Rect &clip) {
+	const int destW = dest.width();
+	const int destH = dest.height();
+	if (destW <= 0 || destH <= 0 || cel.width <= 0 || cel.height <= 0)
+		return;
+	Common::Rect paint = dest;
+	paint.clip(clip);
+	if (paint.isEmpty())
+		return;
+	for (int y = paint.top; y < paint.bottom; ++y) {
+		int srcY = (int)((int64)(y - dest.top) * cel.height / destH);
+		for (int x = paint.left; x < paint.right; ++x) {
+			int srcX = (int)((int64)(x - dest.left) * cel.width / destW);
+			if (cel.isOpaque(srcX, srcY))
+				*((byte *)screen->getBasePtr(x, y)) =
+						cel.pixels[(uint)srcY * cel.width + srcX];
+		}
+	}
+}
+
 // The runtime accesses every resource through a "record+8" data pointer (the
 // info tag), which is four bytes before the payload that Archive exposes via
 // dataOffset (== record+12). All master-header/table field offsets below are
@@ -994,8 +1034,6 @@ void CyberflixEngine::openPuppetFile(const Common::String &name) {
 	_puppetCurrentAction.clear();
 	_puppetCurrentFrame = 0;
 	_puppetBevels.clear();
-	for (uint32 i = 0; i < ARRAYSIZE(_puppetParams); ++i)
-		_puppetParams[i] = 0;
 	debug(1, "Cyberflix: puppet '%s' open", _puppet->sourceName().c_str());
 }
 
@@ -1012,8 +1050,6 @@ void CyberflixEngine::closePuppetFile() {
 	_puppetCurrentAction.clear();
 	_puppetCurrentFrame = 0;
 	_puppetBevels.clear();
-	for (uint32 i = 0; i < ARRAYSIZE(_puppetParams); ++i)
-		_puppetParams[i] = 0;
 }
 
 void CyberflixEngine::sendToPuppet(const Common::String &puppetName,
@@ -1086,6 +1122,11 @@ void CyberflixEngine::puppetBevel(const Common::String &name, int mode) {
 	_puppetBevels.push_back(option);
 	renderPuppetBevels(true);
 	debug(1, "Cyberflix: puppetbevel('%s', %d)", name.c_str(), mode);
+}
+
+void CyberflixEngine::puppetGrab(bool enabled) {
+	_puppetGrab = enabled;
+	debug(1, "Cyberflix: puppetgrab(%s)", enabled ? "true" : "false");
 }
 
 int CyberflixEngine::puppetEvent(int timeout) {
@@ -1191,9 +1232,37 @@ const Puppet::ActionEntry *CyberflixEngine::currentPuppetAction() const {
 
 bool CyberflixEngine::renderPuppetFrame(const Puppet::ActionEntry &action,
 		uint32 frameIndex, bool present) {
+	bool backdropPainted = false;
+	if (_puppetGrab) {
+		if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
+			FrameImage frame;
+			if (_set->renderScene((uint32)_setScene, (uint32)_setTable,
+					(uint32)_setAngle, _setFrameSequence, frame)) {
+				displaySetFrame(frame);
+				backdropPainted = true;
+			}
+		} else if (_stage && _stage->isOpen()) {
+			FrameImage frame;
+			if (_stage->renderNode((uint32)_stageNode, frame)) {
+				Graphics::Surface *screen = _system->lockScreen();
+				screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+				for (int y = 0; y < frame.height; ++y) {
+					for (int x = 0; x < frame.width; ++x) {
+						if (x < kScreenWidth && y < kScreenHeight)
+							*((byte *)screen->getBasePtr(x, y)) =
+									frame.pixels[(uint)y * frame.width + x];
+					}
+				}
+				_system->unlockScreen();
+				backdropPainted = true;
+			}
+		}
+	}
+
 	Graphics::Surface *screen = _system->lockScreen();
-	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
-	const bool drew = _puppet->renderActionFrame(action, frameIndex, *screen);
+	if (!backdropPainted)
+		screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	const bool drew = _puppet->renderActionFrame(action, frameIndex, *screen, _puppetGrab);
 	_system->unlockScreen();
 	renderPuppetBevels(false);
 	if (present)
@@ -1219,16 +1288,18 @@ void CyberflixEngine::renderPuppetBevels(bool present) {
 		return;
 
 	Graphics::Surface *screen = _system->lockScreen();
+	if (_puppet && _puppet->isOpen())
+		_puppet->renderBevelBackdrop(*screen, kScreenHeight, kScreenWidth);
 	for (uint i = 0; i < _puppetBevels.size(); ++i) {
 		const Common::Rect &rect = _puppetBevels[i].rect;
 		Common::Rect clipped = rect;
 		clipped.clip(Common::Rect(kScreenWidth, kScreenHeight));
 		if (clipped.isEmpty())
 			continue;
-		screen->fillRect(clipped, 0);
-		const int y = clipped.top + (clipped.height() - font->getFontHeight()) / 2;
-		font->drawString(screen, _puppetBevels[i].text, clipped.left + 16, y,
-				clipped.width() - 32, 255);
+		const int baselineY = rect.top + 0x10;
+		const int x = rect.left + _puppetParams[9];
+		font->drawString(screen, _puppetBevels[i].text, x, baselineY - font->getFontAscent(),
+				kScreenWidth - x, (uint32)CLIP<int>(_puppetParams[2], 0, 255));
 	}
 	_system->unlockScreen();
 	if (present)
@@ -1665,6 +1736,44 @@ void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw
 	}
 }
 
+void CyberflixEngine::collectWorldProps(Common::Array<const Shop::Prop *> &draw,
+		Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
+		const Shop::WorldCamera &camera) {
+	if (!_set || !_set->isOpen())
+		return;
+	const Common::String &setName = _set->setName();
+	for (uint32 s = 0; s < _shops.size(); ++s) {
+		for (uint32 i = 0; i < _shops[s]->propCount(); ++i) {
+			const Shop::Prop &p = _shops[s]->prop(i);
+			if (!p.visible || p.mode == 0 || !p.setName.equalsIgnoreCase(setName))
+				continue;
+			CelImage cel;
+			Common::Rect rect;
+			int16 depth = 0;
+			if (!_shops[s]->renderWorldProp(p, camera, setName, cel, rect, depth))
+				continue;
+			draw.push_back(&p);
+			drawShop.push_back(_shops[s].get());
+			depths.push_back(depth);
+		}
+	}
+
+	for (uint32 i = 1; i < draw.size(); ++i) {
+		const Shop::Prop *p = draw[i];
+		const Shop *sh = drawShop[i];
+		int16 depth = depths[i];
+		uint32 j = i;
+		for (; j > 0 && depths[j - 1] < depth; --j) {
+			draw[j] = draw[j - 1];
+			drawShop[j] = drawShop[j - 1];
+			depths[j] = depths[j - 1];
+		}
+		draw[j] = p;
+		drawShop[j] = sh;
+		depths[j] = depth;
+	}
+}
+
 bool CyberflixEngine::screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const {
 	if (!prop.visible || prop.mode != 0)
 		return false;
@@ -1752,6 +1861,35 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 			continue;
 		_hitKind = "prop";
 		return draw[i]->name;
+	}
+
+	if (_setVisible && _set && _set->isOpen() && _setScene >= 0 &&
+			_setTransitionType == kSetTransitionNone) {
+		Set::CameraData cameraData;
+		if (_set->cameraData((uint32)_setScene, (uint32)_setTable,
+				(uint32)_setAngle, cameraData)) {
+			Shop::WorldCamera camera = makeWorldCamera(cameraData);
+			Common::Array<const Shop::Prop *> worldDraw;
+			Common::Array<const Shop *> worldShop;
+			Common::Array<int16> worldDepths;
+			collectWorldProps(worldDraw, worldShop, worldDepths, camera);
+			for (int i = (int)worldDraw.size() - 1; i >= 0; --i) {
+				CelImage cel;
+				Common::Rect r;
+				int16 depth = 0;
+				if (!worldShop[i]->renderWorldProp(*worldDraw[i], camera,
+						_set->setName(), cel, r, depth))
+					continue;
+				if (x < r.left || x >= r.right || y < r.top || y >= r.bottom)
+					continue;
+				int srcX = (int)((int64)(x - r.left) * cel.width / r.width());
+				int srcY = (int)((int64)(y - r.top) * cel.height / r.height());
+				if (!cel.isOpaque(srcX, srcY))
+					continue;
+				_hitKind = "prop";
+				return worldDraw[i]->name;
+			}
+		}
 	}
 
 	if (_stageVisible && isReplacementStage(_stage)) {
@@ -2957,8 +3095,26 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 		return _set && _set->isOpen() && _set->loadSetPalette(rgb);
 	if (key == "stage")
 		return _stage && _stage->isOpen() && _stage->loadStagePalette(rgb);
-	if (key == "puppet")
-		return _puppet && _puppet->isOpen() && _puppet->loadPuppetPalette(rgb);
+	if (key == "puppet") {
+		if (!_puppet || !_puppet->isOpen() || !_puppet->loadPuppetPalette(rgb))
+			return false;
+		if (_puppetGrab) {
+			byte backdrop[256 * 3];
+			memset(backdrop, 0, sizeof(backdrop));
+			bool haveBackdrop = false;
+			if (_set && _set->isOpen())
+				haveBackdrop = _set->loadSetPalette(backdrop);
+			else if (_stage && _stage->isOpen())
+				haveBackdrop = _stage->loadStagePalette(backdrop);
+			if (haveBackdrop) {
+				int first = CLIP<int>(_puppetParams[0], 0, 256);
+				int last = CLIP<int>(_puppetParams[1], 0, 256);
+				if (last > first)
+					memcpy(rgb + first * 3, backdrop + first * 3, (last - first) * 3);
+			}
+		}
+		return true;
+	}
 	warning("Cyberflix: clut '%s' not resolvable yet", name.c_str());
 	return false;
 }
@@ -3523,6 +3679,34 @@ void CyberflixEngine::displaySetFrame(const FrameImage &frame) {
 			int sx = x0 + x, sy = y0 + y;
 			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
 				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
+		}
+	}
+	// World/SET-space SHOP props (propset + propxyz) are projected through the
+	// active panorama camera before the screen-space inventory/UI overlays.
+	Set::CameraData cameraData;
+	bool haveCamera = false;
+	if (_setTransitionType == kSetTransitionForward) {
+		haveCamera = _set->transitionCameraData(_setTransitionResource,
+				_setTransitionFrame, cameraData);
+	} else if (_setScene >= 0) {
+		haveCamera = _set->cameraData((uint32)_setScene, (uint32)_setTable,
+				(uint32)_setAngle, cameraData);
+	}
+	if (haveCamera) {
+		Shop::WorldCamera camera = makeWorldCamera(cameraData);
+		Common::Array<const Shop::Prop *> worldDraw;
+		Common::Array<const Shop *> worldShop;
+		Common::Array<int16> worldDepths;
+		collectWorldProps(worldDraw, worldShop, worldDepths, camera);
+		Common::Rect viewport(camera.viewportLeft, camera.viewportTop,
+				camera.viewportRight, camera.viewportBottom);
+		for (uint32 i = 0; i < worldDraw.size(); ++i) {
+			CelImage cel;
+			Common::Rect r;
+			int16 depth = 0;
+			if (worldShop[i]->renderWorldProp(*worldDraw[i], camera,
+					_set->setName(), cel, r, depth))
+				drawScaledCel(screen, cel, r, viewport);
 		}
 	}
 	// Screen-space props (HELP button, life preserver, owned items...) on top

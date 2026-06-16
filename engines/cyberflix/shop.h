@@ -126,7 +126,25 @@ public:
 		kCellRectOffset = 0x12,
 		kCellRegVOffset = 0x1a,
 		kCellRegHOffset = 0x1c,
-		kCellAngleOffset = 0x28
+		kCellAngleOffset = 0x28,
+		kCellScaleOffset = 0x2a
+	};
+
+	struct WorldCamera {
+		int16 heading = 0;
+		int16 cameraX = 0;
+		int16 cameraY = 0;
+		int16 cameraZ = 0;
+		int16 baseZ = 0;
+		int16 nearPlane = 0;
+		int16 farPlane = 0;
+		int16 viewportLeft = 0;
+		int16 viewportTop = 0;
+		int16 viewportRight = 0;
+		int16 viewportBottom = 0;
+		int16 centerX = 0;
+		int16 centerY = 0;
+		int16 focal = 0;
 	};
 
 	Shop() {}
@@ -161,12 +179,18 @@ public:
 	 * FUN_0042bb90). Returns false if the prop has no drawable cell.
 	 */
 	bool renderProp(const Prop &prop, CelImage &cel, Common::Rect &rect) const;
+	bool renderWorldProp(const Prop &prop, const WorldCamera &camera,
+			const Common::String &setName, CelImage &cel, Common::Rect &rect,
+			int16 &depth) const;
 
 private:
 	const byte *engineBase(uint32 index) const;
 	int resourceIndexById(uint32 id) const;
 	/** Read the Pascal string at @p p (bounded by the file buffer). */
 	Common::String pascalString(const byte *p) const;
+	bool resolvePropCel(const Prop &prop, int angle, CelImage &cel,
+			Common::Rect &cellRect, int16 &regV, int16 &regH,
+			int16 &cellScale) const;
 
 	Common::String _name;
 	Common::Array<byte> _fileData; ///< Outlives _archive (streams point in).

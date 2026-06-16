@@ -166,6 +166,7 @@ public:
 	virtual void puppetClear() {}
 	virtual void puppetSpeak(const Common::String &name, int mode) {}
 	virtual void puppetBevel(const Common::String &name, int mode) {}
+	virtual void puppetGrab(bool enabled) {}
 	virtual int puppetEvent(int timeout) { return -1; }
 	virtual Common::String puppetBase(const Common::String *newBase) { return Common::String(); }
 	virtual bool puppetVisible(const bool *newVisible) { return false; }

@@ -117,7 +117,8 @@ public:
 	const ActionEntry *actionAt(uint32 index) const;
 	const ActionEntry *actionByName(const Common::String &name) const;
 	bool renderActionFrame(const ActionEntry &action, uint32 frameIndex,
-			Graphics::Surface &screen) const;
+			Graphics::Surface &screen, bool skipLayer0) const;
+	bool renderBevelBackdrop(Graphics::Surface &screen, int screenHeight, int screenWidth) const;
 	bool decodeActionAudio(const ActionEntry &action, Common::Array<byte> &pcm) const;
 
 	bool loadPuppetPalette(byte *rgb) const;
@@ -132,7 +133,7 @@ private:
 	uint32 baseDisplayListResource(int16 baseState) const;
 	uint32 displayLayerResourceId(uint32 displayListResourceId,
 			uint32 layer, int16 celIndex) const;
-	bool renderCelResource(uint32 resId, int16 x, int16 y,
+	bool renderCelResource(uint32 resId, int16 nativeY, int16 nativeX,
 			Graphics::Surface &screen) const;
 
 	Common::String _sourceName;

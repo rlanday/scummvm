@@ -120,6 +120,7 @@ public:
 	void puppetClear() override;
 	void puppetSpeak(const Common::String &name, int mode) override;
 	void puppetBevel(const Common::String &name, int mode) override;
+	void puppetGrab(bool enabled) override;
 	int puppetEvent(int timeout) override;
 	Common::String puppetBase(const Common::String *newBase) override;
 	bool puppetVisible(const bool *newVisible) override;
@@ -356,7 +357,8 @@ private:
 	Common::String _puppetCurrentAction;
 	uint32 _puppetCurrentFrame = 0;
 	bool _puppetVisible = false;
-	int16 _puppetParams[10] = {};
+	bool _puppetGrab = false;
+	int16 _puppetParams[10] = { 0, 0x80, 0xfa, 0xfb, 0x378, 0x0c, 0, 0, 2, 8 };
 	Audio::SoundHandle _puppetSpeechHandle;
 	struct PuppetBevelOption {
 		Common::String text;
@@ -386,6 +388,9 @@ private:
 	 */
 	void collectScreenProps(Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop);
+	void collectWorldProps(Common::Array<const Shop::Prop *> &draw,
+			Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
+			const Shop::WorldCamera &camera);
 	bool screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const;
 	void queueDirtyRect(const Common::Rect &rect);
 	void markPropDirty(const Shop &shop, const Shop::Prop &prop, const Common::Rect *oldRect);

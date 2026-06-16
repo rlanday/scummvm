@@ -159,6 +159,30 @@ public:
 	int16 viewTop() const { return _viewTop; }
 	uint32 sceneCount() const { return _sceneCount; }
 
+	/** Camera/projection state copied from the active panorama record by
+	 *  TI.EXE FUN_00442e90, with viewport/focal state from FUN_00441f40. */
+	struct CameraData {
+		int16 heading = 0;       ///< record +0x26, 0..255 native angle units.
+		int16 cameraX = 0;       ///< record +0x20, compared with propxyz x.
+		int16 cameraY = 0;       ///< record +0x22, compared with propxyz y.
+		int16 cameraZ = 0;       ///< record +0x24.
+		int16 baseZ = 0;         ///< SET state DAT_0046119a; Titanic SETs use 0.
+		int16 nearPlane = 0;     ///< DAT_00461194.
+		int16 farPlane = 0;      ///< DAT_00461198.
+		int16 viewportLeft = 0;
+		int16 viewportTop = 0;
+		int16 viewportRight = 0;
+		int16 viewportBottom = 0;
+		int16 centerX = 0;
+		int16 centerY = 0;
+		int16 focal = 0;
+	};
+
+	/** Fill the native camera state for @p scene/table/angle. */
+	bool cameraData(uint32 scene, uint32 table, uint32 angle, CameraData &camera) const;
+	/** Fill the native camera state for a forward-transition frame record. */
+	bool transitionCameraData(uint32 transitionId, uint32 frame, CameraData &camera) const;
+
 	/** Scene @p index's name, or empty if out of range. */
 	Common::String sceneName(uint32 index) const;
 	/** Index of the scene named @p name (case-insensitive), or -1. */

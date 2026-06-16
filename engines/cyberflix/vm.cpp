@@ -404,62 +404,62 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 		debug(0, "    message #%#06x -> %s(%u args)", opcode, message.c_str(), msgArgs.size());
 
 	switch (opcode) {
-	case 0x2f26: // sendtostage(message(...)) -> TI.EXE FUN_0040ad80
+	case Script::kMethodSendToStage: // sendtostage(message(...)) -> TI.EXE FUN_0040ad80
 		if (_host)
 			_host->sendToStage(message, msgArgs);
 		break;
-	case 0x2f31: // sendtoboot(message(...)) -> TI.EXE FUN_00439080/FUN_004390a0
+	case Script::kMethodSendToBoot: // sendtoboot(message(...)) -> TI.EXE FUN_00439080/FUN_004390a0
 		if (_host)
 			_host->sendToBoot(message, msgArgs);
 		break;
-	case 0x2f1b: // sendtoshop('file.shp', message) -> TI.EXE FUN_0042b2b0:
+	case Script::kMethodSendToShop: // sendtoshop('file.shp', message) -> TI.EXE FUN_0042b2b0:
 	             // dispatch against [shop script, BOOTFILE res2].
 		if (_host)
 			_host->sendToShop(targets.empty() ? Common::String() : targets[0].strValue,
 					message, msgArgs);
 		break;
-	case 0x2f17: // sendtoprop('propname', message) -> TI.EXE FUN_0042ae80:
+	case Script::kMethodSendToProp: // sendtoprop('propname', message) -> TI.EXE FUN_0042ae80:
 	             // dispatch against [prop script, shop script, BOOTFILE res2].
 		if (_host)
 			_host->sendToProp(targets.empty() ? Common::String() : targets[0].strValue,
 					message, msgArgs);
 		break;
-	case 0x2ef0: // sendtoactor(actor, message) -> actor script, then cast script.
+	case Script::kMethodSendToActor: // sendtoactor(actor, message) -> actor script, then cast script.
 		if (_host)
 			_host->sendToActor(targets.empty() ? Common::String() : targets[0].strValue,
 					message, msgArgs);
 		break;
-	case 0x2f10: // sendtocast('file.cst', message) -> per-cast script dispatch.
+	case Script::kMethodSendToCast: // sendtocast('file.cst', message) -> per-cast script dispatch.
 		if (_host)
 			_host->sendToCast(targets.empty() ? Common::String() : targets[0].strValue,
 					message, msgArgs);
 		break;
-	case 0x2f0d: // sendtopuppet(target, message) -> [PUP script, BOOTFILE res2].
+	case Script::kMethodSendToPuppet: // sendtopuppet(target, message) -> [PUP script, BOOTFILE res2].
 		if (_host)
 			_host->sendToPuppet(targets.empty() ? Common::String() : targets[0].strValue,
 					message, msgArgs);
 		break;
-	case 0x2f02: // sendtoscene(scene, message) -> TI.EXE FUN_004311e0/
+	case Script::kMethodSendToScene: // sendtoscene(scene, message) -> TI.EXE FUN_004311e0/
 	             // FUN_00431200: dispatch against the scene's script chain.
 		if (_host)
 			_host->sendToScene(targets.empty() ? Common::String() : targets[0].strValue,
 					message, msgArgs);
 		break;
-	case 0x2f22: // sendtopainting(scene, view, painting, message) -> FUN_00432550/FUN_00432570
+	case Script::kMethodSendToPainting: // sendtopainting(scene, view, painting, message) -> FUN_00432550/FUN_00432570
 		if (_host)
 			_host->sendToPainting(targets.size() > 0 ? targets[0].strValue : Common::String(),
 					targets.size() > 1 ? targets[1].strValue : Common::String(),
 					targets.size() > 2 ? targets[2].strValue : Common::String(),
 					message, msgArgs);
 		break;
-	case 0x2f24: // sendtobutton(flat, button, message) -> FUN_0040a410/FUN_0040a430:
+	case Script::kMethodSendToButton: // sendtobutton(flat, button, message) -> FUN_0040a410/FUN_0040a430:
 	             // chain [button script, node script, stage script, res2].
 		if (_host)
 			_host->sendToButton(targets.size() > 0 ? targets[0].strValue : Common::String(),
 					targets.size() > 1 ? targets[1].strValue : Common::String(),
 					message, msgArgs);
 		break;
-	case 0x2f25: // sendtoflat(flat, message) -> FUN_0040a940/FUN_0040a960
+	case Script::kMethodSendToFlat: // sendtoflat(flat, message) -> FUN_0040a940/FUN_0040a960
 		if (_host)
 			_host->sendToFlat(targets.empty() ? Common::String() : targets[0].strValue,
 					message, msgArgs);
@@ -527,17 +527,17 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 	// (The message-carrying send* builtins never reach this path; they are
 	// routed through dispatchMessageBuiltin with the message unevaluated.)
 	switch (opcode) {
-	case 0x4e21: // random(n) -> FUN_004366c0/FUN_0041b060
+	case Script::kMethodRandom: // random(n) -> FUN_004366c0/FUN_0041b060
 		return Value::makeInt(_host ? _host->randomNumber(args.empty() ? 0 : args[0].intValue) : 0);
-	case 0x4e39: // stringtonum(str) -> FUN_00436ee0
+	case Script::kMethodStringToNum: // stringtonum(str) -> FUN_00436ee0
 		return Value::makeInt(stringToNum(args.empty() ? Common::String() : args[0].strValue));
-	case 0x4e3a: // numtostring(n) -> FUN_00436f60
+	case Script::kMethodNumToString: // numtostring(n) -> FUN_00436f60
 		return Value::makeString(Common::String::format("%d", args.empty() ? 0 : args[0].intValue));
-	case 0x4e56: // findword(str, delimiter, index) -> FUN_00437160, 1-based
+	case Script::kMethodFindWord: // findword(str, delimiter, index) -> FUN_00437160, 1-based
 		return Value::makeString(findWord(args.size() > 0 ? args[0].strValue : Common::String(),
 				args.size() > 1 ? args[1].strValue : Common::String(),
 				args.size() > 2 ? args[2].intValue : 0));
-	case 0x4e58: // stringlength(str) -> FUN_004373e0
+	case Script::kMethodStringLength: // stringlength(str) -> FUN_004373e0
 		return Value::makeInt(args.empty() ? 0 : args[0].strValue.size());
 	default:
 		break;
@@ -545,140 +545,143 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 
 	if (_host) {
 		switch (opcode) {
-		case 0x2ee1: // message(text) -> FUN_00446240
+		case Script::kMethodMessage: // message(text) -> FUN_00446240
 			_host->message(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2eed: // opencastfile('name.cst') -> FUN_0041f1c0
+		case Script::kMethodOpenCastFile: // opencastfile('name.cst') -> FUN_0041f1c0
 			_host->openCastFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2eee: // closecastfile('name.cst') -> FUN_004211b0
+		case Script::kMethodCloseCastFile: // closecastfile('name.cst') -> FUN_004211b0
 			_host->closeCastFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2ef1: // playmovie('name.mov')
+		case Script::kMethodPlayMovie: // playmovie('name.mov')
 			_host->playMovie(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2ef2: // openpuppetfile('name.pup') -> FUN_004473c0/FUN_00447470
+		case Script::kMethodOpenPuppetFile: // openpuppetfile('name.pup') -> FUN_004473c0/FUN_00447470
 			_host->openPuppetFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2f1c: // openstagefile('name.stg')
+		case Script::kMethodOpenStageFile: // openstagefile('name.stg')
 			_host->openStageFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2f1d: // closestagefile() -> FUN_00409330
+		case Script::kMethodCloseStageFile: // closestagefile() -> FUN_00409330
 			_host->closeStageFile();
 			break;
-		case 0x2f1e: // gotoflat(name|index) -> FUN_00409460
+		case Script::kMethodGotoFlat: // gotoflat(name|index) -> FUN_00409460
 			if (!args.empty())
 				_host->gotoFlat(args[0]);
 			break;
-		case 0x2f00: // opensetfile('name.set'[, scene[, view]]) -> FUN_00430690
+		case Script::kMethodOpenSetFile: // opensetfile('name.set'[, scene[, view]]) -> FUN_00430690
 			_host->openSetFile(args.size() > 0 ? args[0].strValue : Common::String(),
 					args.size() > 1 ? args[1].strValue : Common::String(),
 					args.size() > 2 ? args[2].strValue : Common::String());
 			break;
-		case 0x2f01: // closesetfile() -> TI.EXE set-archive close
+		case Script::kMethodCloseSetFile: // closesetfile() -> TI.EXE set-archive close
 			_host->closeSetFile();
 			break;
 		// (sendtoscene 0x2f02 never reaches here: it always appears with a
 		// parenthesised message and routes through dispatchMessageBuiltin.)
-		case 0x2f06: // clut(name): snap the hardware palette (FUN_00446500)
+		case Script::kMethodClut: // clut(name): snap the hardware palette (FUN_00446500)
 			_host->setClut(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2f09: // puppetclear(): native display-list clear, rendering pending
+		case Script::kMethodPuppetClear: // puppetclear(): native display-list clear, rendering pending
 			_host->puppetClear();
 			break;
-		case 0x2f0a: // closepuppetfile() -> FUN_00447880
+		case Script::kMethodClosePuppetFile: // closepuppetfile() -> FUN_00447880
 			_host->closePuppetFile();
 			break;
-		case 0x2f0b: // puppetspeak(name[, mode]) -> FUN_00447ce0/FUN_00448b60
+		case Script::kMethodPuppetSpeak: // puppetspeak(name[, mode]) -> FUN_00447ce0/FUN_00448b60
 			_host->puppetSpeak(args.empty() ? Common::String() : args[0].strValue,
 					args.size() > 1 ? args[1].intValue : 0);
 			break;
-		case 0x2f0c: // puppetbevel(name[, mode]) -> FUN_00447b30
+		case Script::kMethodPuppetBevel: // puppetbevel(name[, mode]) -> FUN_00447b30
 			_host->puppetBevel(args.empty() ? Common::String() : args[0].strValue,
 					args.size() > 1 ? args[1].intValue : 0);
 			break;
-		case 0x2f0e: // puppetscript(name) -> FUN_004482c0
+		case Script::kMethodPuppetGrab: // puppetgrab(bool) -> FUN_00447e30 stores DAT_00461248.
+			_host->puppetGrab(!args.empty() && isTruthy(args[0]));
+			break;
+		case Script::kMethodPuppetScript: // puppetscript(name) -> FUN_004482c0
 			_host->puppetScript(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2f13: // blackscreen(): fill the window with black pixels (FUN_00446b80)
+		case Script::kMethodBlackScreen: // blackscreen(): fill the window with black pixels (FUN_00446b80)
 			_host->blackScreen();
 			break;
-		case 0x2f14: // forceupdate() -> FUN_00446910 -> FUN_00423a60
+		case Script::kMethodForceUpdate: // forceupdate() -> FUN_00446910 -> FUN_00423a60
 			_host->forceUpdate();
 			break;
-		case 0x2f29: // flushevents() -> FUN_00446cb0/FUN_00405110
+		case Script::kMethodFlushEvents: // flushevents() -> FUN_00446cb0/FUN_00405110
 			_host->flushEvents();
 			break;
-		case 0x2f30: // drawstring(text, point, color, size) -> FUN_004460c0
+		case Script::kMethodDrawString: // drawstring(text, point, color, size) -> FUN_004460c0
 			if (args.size() >= 2)
 				_host->drawString(args[0].strValue, args[1].intValue,
 						args.size() > 2 ? args[2].intValue : 0,
 						args.size() > 3 ? args[3].intValue : 12);
 			break;
-		case 0x2f27: // quit() -> FUN_00446c80: restore cursor, set native quit flag
+		case Script::kMethodQuit: // quit() -> FUN_00446c80: restore cursor, set native quit flag
 			_host->requestQuit();
 			break;
-		case 0x2f11: // blacktoscreen(target, steps): palette fade black -> target
+		case Script::kMethodBlackToScreen: // blacktoscreen(target, steps): palette fade black -> target
 			_host->fadePalette(args.size() > 0 ? args[0].strValue : Common::String("current"),
 					args.size() > 1 ? args[1].intValue : 1, false);
 			break;
-		case 0x2f12: // screentoblack(target, steps): palette fade target -> black
+		case Script::kMethodScreenToBlack: // screentoblack(target, steps): palette fade target -> black
 			_host->fadePalette(args.size() > 0 ? args[0].strValue : Common::String("current"),
 					args.size() > 1 ? args[1].intValue : 1, true);
 			break;
-		case 0x2ee9: // visualeffect(effect, dur): set default transition (FUN_00446400)
+		case Script::kMethodVisualEffect: // visualeffect(effect, dur): set default transition (FUN_00446400)
 			// The effect names ('plain', ...) are bare method opcodes 0x5dc1..
 			// 0x5dd5 used as atoms; decodeAtom yields Value() for them, so the
 			// effect code is not currently propagated. Only 'plain' is used by
 			// the boot scripts; forward the duration.
 			_host->setVisualEffect(0x5dce, args.size() > 1 ? args[1].intValue : 0);
 			break;
-		case 0x2ee5: // makeloop(kind, target, message, delay) -> FUN_00423e60
+		case Script::kMethodMakeLoop: // makeloop(kind, target, message, delay) -> FUN_00423e60
 			if (args.size() >= 4)
 				_host->makeLoop(args[0].strValue, args[1].strValue,
 						args[2].strValue, args[3].intValue);
 			break;
-		case 0x2eeb: // stoploop(kind[, target]) -> FUN_00446d30/FUN_00423bf0
+		case Script::kMethodStopLoop: // stoploop(kind[, target]) -> FUN_00446d30/FUN_00423bf0
 			if (!args.empty())
 				_host->stopLoop(args[0].strValue,
 						args.size() > 1 ? args[1].strValue : Common::String());
 			break;
-		case 0x3eae: // pauseloop(kind, flag)
+		case Script::kMethodPauseLoop: // pauseloop(kind, flag)
 			if (args.size() >= 2)
 				_host->pauseLoop(args[0].strValue, args[1].intValue != 0);
 			break;
-		case 0x2ee7: // makecricket(name, x, y, dist, angle, delay) -> FUN_00425640
+		case Script::kMethodMakeCricket: // makecricket(name, x, y, dist, angle, delay) -> FUN_00425640
 			if (!args.empty())
 				_host->makeCricket(args[0].strValue);
 			break;
-		case 0x2eec: // stopcricket(name) -> FUN_00446db0/FUN_00423c80
+		case Script::kMethodStopCricket: // stopcricket(name) -> FUN_00446db0/FUN_00423c80
 			if (!args.empty())
 				_host->stopCricket(args[0].strValue);
 			break;
-		case 0x3eaf: // pausecricket(kind, flag)
+		case Script::kMethodPauseCricket: // pausecricket(kind, flag)
 			if (args.size() >= 2)
 				_host->pauseCricket(args[0].strValue, args[1].intValue != 0);
 			break;
-		case 0x4e55: // currentset() -> open set name or 'none'
+		case Script::kMethodCurrentSet: // currentset() -> open set name or 'none'
 			return Value::makeString(_host->currentSet());
-		case 0x4e50: // currentstage() -> open stage name or native 'None'
+		case Script::kMethodCurrentStage: // currentstage() -> open stage name or native 'None'
 			return Value::makeString(_host->currentStage());
-		case 0x3e88: { // stagevisible([flag]) -> DAT_00461156
+		case Script::kMethodStageVisible: { // stagevisible([flag]) -> DAT_00461156
 			bool visible = args.empty() ? false : (args[0].intValue != 0);
 			const bool *newVisible = args.empty() ? nullptr : &visible;
 			return Value::makeBool(_host->stageVisible(newVisible));
 		}
-		case 0x4e46: // currentflat() -> current stage node name or native 'None'
+		case Script::kMethodCurrentFlat: // currentflat() -> current stage node name or native 'None'
 			return Value::makeString(_host->currentFlat());
-		case 0x3e8b: // currentview() -> current SET view name
+		case Script::kMethodCurrentView: // currentview() -> current SET view name
 			return Value::makeString(_host->currentView());
-		case 0x3e9d: { // currentscene([name|left|right|strait])
+		case Script::kMethodCurrentScene: { // currentscene([name|left|right|strait])
 			const Common::String *target = args.empty() ? nullptr : &args[0].strValue;
 			return Value::makeString(_host->currentScene(target));
 		}
-		case 0x4e51: // currentpuppet() -> current puppet name or 'none'
+		case Script::kMethodCurrentPuppet: // currentpuppet() -> current puppet name or 'none'
 			return Value::makeString(_host->currentPuppet());
-		case 0x3eb1: { // puppetparam(selector[, value]) -> FUN_00448730/FUN_004485f0
+		case Script::kMethodPuppetParam: { // puppetparam(selector[, value]) -> FUN_00448730/FUN_004485f0
 			if (args.empty())
 				return Value::makeInt(0);
 			if (args.size() >= 2) {
@@ -687,138 +690,138 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			}
 			return Value::makeInt(_host->puppetParam(args[0].intValue, nullptr));
 		}
-		case 0x3eb2: { // puppetvisible([flag]) -> FUN_00448550/FUN_004485b0
+		case Script::kMethodPuppetVisible: { // puppetvisible([flag]) -> FUN_00448550/FUN_004485b0
 			bool visible = !args.empty() && args[0].intValue != 0;
 			const bool *newVisible = args.empty() ? nullptr : &visible;
 			return Value::makeBool(_host->puppetVisible(newVisible));
 		}
-		case 0x3eb5: { // puppetbase([name]) -> FUN_00447ee0
+		case Script::kMethodPuppetBase: { // puppetbase([name]) -> FUN_00447ee0
 			const Common::String *base = args.empty() ? nullptr : &args[0].strValue;
 			return Value::makeString(_host->puppetBase(base));
 		}
-		case 0x3e87: { // setvisible([flag]) -> current SET visibility flag
+		case Script::kMethodSetVisible: { // setvisible([flag]) -> current SET visibility flag
 			bool visible = args.empty() ? false : (args[0].intValue != 0);
 			const bool *newVisible = args.empty() ? nullptr : &visible;
 			return Value::makeBool(_host->setVisible(newVisible));
 		}
-		case 0x4e73: // actionframe(n) -> bool, FUN_004362c0 (n must be 1 or 2)
+		case Script::kMethodActionFrame: // actionframe(n) -> bool, FUN_004362c0 (n must be 1 or 2)
 			return Value::makeBool(_host->actionFrame(args.empty() ? 0 : args[0].intValue));
-		case 0x3e96: { // framerate([n]) -> DAT_00461126
+		case Script::kMethodFrameRate: { // framerate([n]) -> DAT_00461126
 			int rate = args.empty() ? 0 : args[0].intValue;
 			const int *newRate = args.empty() ? nullptr : &rate;
 			return Value::makeInt(_host->frameRate(newRate));
 		}
-		case 0x2ef3: // opentrackfile('name.trk') -> FUN_00411be0/FUN_00411cc0
+		case Script::kMethodOpenTrackFile: // opentrackfile('name.trk') -> FUN_00411be0/FUN_00411cc0
 			_host->openTrackFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2ef4: // closetrackfile('name.trk') -> FUN_00412070
+		case Script::kMethodCloseTrackFile: // closetrackfile('name.trk') -> FUN_00412070
 			_host->closeTrackFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2ef5: // playtheme('name.trk') -> FUN_00412250: start the track's
+		case Script::kMethodPlayTheme: // playtheme('name.trk') -> FUN_00412250: start the track's
 		             // theme playlist on the theme channel (replaces current)
 			_host->playTheme(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2ef6: // singlesound(name) -> FUN_004122d0/FUN_0042fa80
-		case 0x2ef7: // multiplesound(name) -> FUN_00412310/FUN_0042fb20
-		case 0x2ef8: // dualsound(name) -> FUN_00412350/FUN_0042fbc0
-		case 0x2ef9: // bothsound(name) -> FUN_00412390/FUN_0042fc30
+		case Script::kMethodSingleSound: // singlesound(name) -> FUN_004122d0/FUN_0042fa80
+		case Script::kMethodMultipleSound: // multiplesound(name) -> FUN_00412310/FUN_0042fb20
+		case Script::kMethodDualSound: // dualsound(name) -> FUN_00412350/FUN_0042fbc0
+		case Script::kMethodBothSound: // bothsound(name) -> FUN_00412390/FUN_0042fc30
 			_host->playSound(args.empty() ? Common::String() : args[0].strValue,
-					opcode - 0x2ef6);
+					opcode - Script::kMethodSingleSound);
 			break;
-		case 0x2efa: // voicesound(name) -> FUN_004123d0/FUN_0042fc70
+		case Script::kMethodVoiceSound: // voicesound(name) -> FUN_004123d0/FUN_0042fc70
 			_host->playVoice(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2efc: // haltsound(1|2|3) -> FUN_00412430/FUN_0042f690
+		case Script::kMethodHaltSound: // haltsound(1|2|3) -> FUN_00412430/FUN_0042f690
 			_host->haltSound(args.empty() ? 3 : args[0].intValue);
 			break;
-		case 0x2efd: // halttheme() -> FUN_00412410: stop the theme channel
+		case Script::kMethodHaltTheme: // halttheme() -> FUN_00412410: stop the theme channel
 			_host->haltTheme();
 			break;
-		case 0x2efe: // haltvoice() -> FUN_004124d0/FUN_0042f690
+		case Script::kMethodHaltVoice: // haltvoice() -> FUN_004124d0/FUN_0042f690
 			_host->haltVoice();
 			break;
-		case 0x3ea9: // themevol('name.trk', vol 0-255) -> FUN_004125c0
+		case Script::kMethodThemeVol: // themevol('name.trk', vol 0-255) -> FUN_004125c0
 			_host->themeVolume(args.size() > 0 ? args[0].strValue : Common::String(),
 					args.size() > 1 ? args[1].intValue : 255);
 			break;
-		case 0x3ea1: { // wavevolume([level 0..9]) -> FUN_00436670/FUN_00439df0
+		case Script::kMethodWaveVolume: { // wavevolume([level 0..9]) -> FUN_00436670/FUN_00439df0
 			int level = args.empty() ? 0 : args[0].intValue;
 			const int *newLevel = args.empty() ? nullptr : &level;
 			return Value::makeInt(_host->waveVolume(newLevel));
 		}
-		case 0x3ea8: { // soundvol(name[, volume 0..255]) -> FUN_00412ad0/FUN_004125c0
+		case Script::kMethodSoundVol: { // soundvol(name[, volume 0..255]) -> FUN_00412ad0/FUN_004125c0
 			if (args.empty())
 				return Value::makeInt(0);
 			int volume = args.size() > 1 ? args[1].intValue : 0;
 			const int *newVolume = args.size() > 1 ? &volume : nullptr;
 			return Value::makeInt(_host->soundVolume(args[0].strValue, newVolume));
 		}
-		case 0x3ead: { // keyaborts([resource, key, flag]) -> FUN_00435a00/FUN_00446e10
+		case Script::kMethodKeyAborts: { // keyaborts([resource, key, flag]) -> FUN_00435a00/FUN_00446e10
 			bool enabled = args.size() > 2 && args[2].intValue != 0;
 			return Value::makeBool(_host->keyAborts(
 					args.size() > 0 ? &args[0].strValue : nullptr,
 					args.size() > 1 ? &args[1].strValue : nullptr,
 					args.size() > 2 ? &enabled : nullptr));
 		}
-		case 0x4e6f: // currenttheme(1|2) -> FUN_00412f20: 1 = playing cue name,
+		case Script::kMethodCurrentTheme: // currenttheme(1|2) -> FUN_00412f20: 1 = playing cue name,
 		             // 2 = its track file name; 'none' if silent
 			return Value::makeString(_host->currentTheme(args.empty() ? 1 : args[0].intValue));
-		case 0x4e6d: // currentsound(1|2|3) -> FUN_00412e60: active SFX cue or 'None'
+		case Script::kMethodCurrentSound: // currentsound(1|2|3) -> FUN_00412e60: active SFX cue or 'None'
 			return Value::makeString(_host->currentSound(args.empty() ? 1 : args[0].intValue));
-		case 0x4e6e: // currentvoice() -> FUN_00412ff0: active voice cue or 'None'
+		case Script::kMethodCurrentVoice: // currentvoice() -> FUN_00412ff0: active voice cue or 'None'
 			return Value::makeString(_host->currentVoice());
-		case 0x3e89: { // path(slot[, value]) -> FUN_004462a0/FUN_00438450
+		case Script::kMethodPath: { // path(slot[, value]) -> FUN_004462a0/FUN_00438450
 			int slot = args.empty() ? 0 : args[0].intValue;
 			const Common::String *newPath = args.size() >= 2 ? &args[1].strValue : nullptr;
 			return Value::makeString(_host->pathSlot(slot, newPath));
 		}
-		case 0x3ea2: { // currentcd([name]) -> FUN_00439df0/FUN_0043a290
+		case Script::kMethodCurrentCD: { // currentcd([name]) -> FUN_00439df0/FUN_0043a290
 			const Common::String *requested = args.empty() ? nullptr : &args[0].strValue;
 			return Value::makeString(_host->currentCD(requested));
 		}
-		case 0x4e22: // pointx(point) -> high word of packed (x << 16) | y
+		case Script::kMethodPointX: // pointx(point) -> high word of packed (x << 16) | y
 			return Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue >> 16));
-		case 0x4e23: // pointy(point) -> low word of packed (x << 16) | y
+		case Script::kMethodPointY: // pointy(point) -> low word of packed (x << 16) | y
 			return Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue & 0xffff));
-		case 0x4e24: // makepoint(x, y) -> packed (x << 16) | y
+		case Script::kMethodMakePoint: // makepoint(x, y) -> packed (x << 16) | y
 			return Value::makeInt(_host->makePoint(args.size() > 0 ? args[0].intValue : 0,
 					args.size() > 1 ? args[1].intValue : 0));
-		case 0x4e25: // button() -> FUN_00436880: live left mouse button state
+		case Script::kMethodButton: // button() -> FUN_00436880: live left mouse button state
 			return Value::makeBool(_host->buttonDown());
-		case 0x4e27: // stilldown() -> FUN_00436920: live mouse button state
+		case Script::kMethodStillDown: // stilldown() -> FUN_00436920: live mouse button state
 			return Value::makeBool(_host->stillDown());
-		case 0x4e28: // tick() -> FUN_004368f0: native 60 Hz timer
+		case Script::kMethodTick: // tick() -> FUN_004368f0: native 60 Hz timer
 			return Value::makeInt(_host->tick());
-		case 0x4e64: // questiondialog(text) -> FUN_004363f0/FUN_00409030
+		case Script::kMethodQuestionDialog: // questiondialog(text) -> FUN_004363f0/FUN_00409030
 			return Value::makeBool(_host->questionDialog(
 					args.empty() ? Common::String() : args[0].strValue));
-		case 0x4e5a: // optionkey() -> FUN_004376e0/GetAsyncKeyState(VK_SHIFT)
+		case Script::kMethodOptionKey: // optionkey() -> FUN_004376e0/GetAsyncKeyState(VK_SHIFT)
 			return Value::makeBool(_host->optionKey());
-		case 0x4e32: // countpaintings(scene, view) -> FUN_00431fe0
+		case Script::kMethodCountPaintings: // countpaintings(scene, view) -> FUN_00431fe0
 			if (args.size() >= 2)
 				return Value::makeInt(_host->countPaintings(args[0].strValue, args[1].strValue));
 			return Value::makeInt(0);
-		case 0x4e36: // indextopainting(scene, view, index) -> FUN_00432120, 1-based
+		case Script::kMethodIndexToPainting: // indextopainting(scene, view, index) -> FUN_00432120, 1-based
 			if (args.size() >= 3)
 				return Value::makeString(_host->indexToPainting(args[0].strValue,
 						args[1].strValue, args[2].intValue));
 			break;
-		case 0x4e94: // roadahead(scene, view) -> FUN_00431bd0/FUN_004337b0
+		case Script::kMethodRoadAhead: // roadahead(scene, view) -> FUN_00431bd0/FUN_004337b0
 			if (args.size() >= 2)
 				return Value::makeBool(_host->roadAhead(args[0].strValue, args[1].strValue));
 			return Value::makeBool(false);
-		case 0x4e2c: // countactors() -> FUN_00420a70
+		case Script::kMethodCountActors: // countactors() -> FUN_00420a70
 			return Value::makeInt(_host->countActors());
-		case 0x4e2d: // indextoactor(i) -> native 1-based actor lookup
+		case Script::kMethodIndexToActor: // indextoactor(i) -> native 1-based actor lookup
 			return Value::makeString(_host->indexToActor(args.empty() ? 0 : args[0].intValue));
-		case 0x3e81: { // actorvisible(name[, flag]) -> FUN_00420f10/FUN_00420d30
+		case Script::kMethodActorVisible: { // actorvisible(name[, flag]) -> FUN_00420f10/FUN_00420d30
 			bool visible = args.size() > 1 && args[1].intValue != 0;
 			const bool *newVisible = args.size() > 1 ? &visible : nullptr;
 			if (!args.empty())
 				return Value::makeBool(_host->actorVisible(args[0].strValue, newVisible));
 			return Value::makeBool(false);
 		}
-		case 0x3e82: { // actordeg(name[, deg]) -> FUN_0041fef0 / getter
+		case Script::kMethodActorDeg: { // actordeg(name[, deg]) -> FUN_0041fef0 / getter
 			if (args.size() >= 2) {
 				int deg = args[1].intValue;
 				return Value::makeInt(_host->actorDeg(args[0].strValue, &deg));
@@ -827,7 +830,7 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 				return Value::makeInt(_host->actorDeg(args[0].strValue, nullptr));
 			return Value::makeInt(0);
 		}
-		case 0x3e83: // actorxyz(name, x, y, z) or actorxyz(name, selector)
+		case Script::kMethodActorXYZ: // actorxyz(name, x, y, z) or actorxyz(name, selector)
 			if (args.size() >= 4) {
 				_host->actorXYZ(args[0].strValue, args[1].intValue,
 						args[2].intValue, args[3].intValue);
@@ -836,43 +839,43 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() == 2)
 				return Value::makeInt(_host->actorXYZ(args[0].strValue, args[1].intValue));
 			return Value::makeInt(0);
-		case 0x3e86: // actorstar(name[, scene]) -> FUN_0041fbb0
+		case Script::kMethodActorStar: // actorstar(name[, scene]) -> FUN_0041fbb0
 			if (args.size() >= 2)
 				return Value::makeString(_host->actorStar(args[0].strValue, &args[1].strValue));
 			if (args.size() == 1)
 				return Value::makeString(_host->actorStar(args[0].strValue, nullptr));
 			return Value::makeString(Common::String());
-		case 0x3e8e: // actorpose(name[, pose]) -> FUN_0041fd70
+		case Script::kMethodActorPose: // actorpose(name[, pose]) -> FUN_0041fd70
 			if (args.size() >= 2)
 				return Value::makeString(_host->actorPose(args[0].strValue, &args[1].strValue));
 			if (args.size() == 1)
 				return Value::makeString(_host->actorPose(args[0].strValue, nullptr));
 			return Value::makeString(Common::String());
-		case 0x3e95: // actorset(name[, set]) -> FUN_0041f970
+		case Script::kMethodActorSet: // actorset(name[, set]) -> FUN_0041f970
 			if (args.size() >= 2)
 				return Value::makeString(_host->actorSet(args[0].strValue, &args[1].strValue));
 			if (args.size() == 1)
 				return Value::makeString(_host->actorSet(args[0].strValue, nullptr));
 			return Value::makeString(Common::String());
-		case 0x3e97: // actorspeed(name, speed)
+		case Script::kMethodActorSpeed: // actorspeed(name, speed)
 			if (args.size() >= 2)
 				_host->actorSpeed(args[0].strValue, args[1].intValue);
 			break;
-		case 0x3e98: // actorscale(name, scale)
+		case Script::kMethodActorScale: // actorscale(name, scale)
 			if (args.size() >= 2)
 				_host->actorScale(args[0].strValue, args[1].intValue);
 			break;
-		case 0x3ea4: // actorturn(name, turn)
+		case Script::kMethodActorTurn: // actorturn(name, turn)
 			if (args.size() >= 2)
 				_host->actorTurn(args[0].strValue, args[1].intValue);
 			break;
-		case 0x3eab: // actorowner(name[, owner]) -> FUN_00422210
+		case Script::kMethodActorOwner: // actorowner(name[, owner]) -> FUN_00422210
 			if (args.size() >= 2)
 				return Value::makeString(_host->actorOwner(args[0].strValue, &args[1].strValue));
 			if (args.size() == 1)
 				return Value::makeString(_host->actorOwner(args[0].strValue, nullptr));
 			return Value::makeString(Common::String());
-		case 0x3eac: { // actorvalue(name[, value]) -> FUN_004222d0
+		case Script::kMethodActorValue: { // actorvalue(name[, value]) -> FUN_004222d0
 			if (args.size() >= 2) {
 				int value = args[1].intValue;
 				return Value::makeInt(_host->actorValue(args[0].strValue, &value));
@@ -881,63 +884,63 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 				return Value::makeInt(_host->actorValue(args[0].strValue, nullptr));
 			return Value::makeInt(0);
 		}
-		case 0x3eb3: // actorzclip(name, zclip)
+		case Script::kMethodActorZClip: // actorzclip(name, zclip)
 			if (args.size() >= 2)
 				_host->actorZClip(args[0].strValue, args[1].intValue);
 			break;
-		case 0x4e4e: // countpuppets() -> FUN_00448380: PUP resource-2 script count
+		case Script::kMethodCountPuppets: // countpuppets() -> FUN_00448380: PUP resource-2 script count
 			return Value::makeInt(_host->countPuppets());
-		case 0x4e4f: // indextopuppet(i) -> FUN_004483f0, 1-based
+		case Script::kMethodIndexToPuppet: // indextopuppet(i) -> FUN_004483f0, 1-based
 			return Value::makeString(_host->indexToPuppet(args.empty() ? 0 : args[0].intValue));
-		case 0x4e3c: // puppetevent(timeout) -> FUN_00449e40 waits for a clicked bevel id
+		case Script::kMethodPuppetEvent: // puppetevent(timeout) -> FUN_00449e40 waits for a clicked bevel id
 			return Value::makeInt(_host->puppetEvent(args.empty() ? -1 : args[0].intValue));
-		case 0x2f18: // openshopfile('name.shp') -> FUN_00428450: parse the .SHP,
+		case Script::kMethodOpenShopFile: // openshopfile('name.shp') -> FUN_00428450: parse the .SHP,
 		             // then dispatch openshop() and per-prop openprop().
 			_host->openShopFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2f19: // closeshopfile('name.shp') -> FUN_0042a7e0
+		case Script::kMethodCloseShopFile: // closeshopfile('name.shp') -> FUN_0042a7e0
 			_host->closeShopFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x3e8f: // propvisible(name, flag) -> FUN_00429d00
+		case Script::kMethodPropVisible: // propvisible(name, flag) -> FUN_00429d00
 			if (args.size() >= 2)
 				_host->propVisible(args[0].strValue, args[1].intValue != 0);
 			if (args.size() == 1)
 				return Value::makeBool(_host->propVisible(args[0].strValue));
 			break;
-		case 0x3e99: // propview(name, shape) -> FUN_004293a0
+		case Script::kMethodPropView: // propview(name, shape) -> FUN_004293a0
 			if (args.size() >= 2)
 				_host->propView(args[0].strValue, args[1].strValue);
 			if (args.size() == 1)
 				return Value::makeString(_host->propView(args[0].strValue));
 			break;
-		case 0x3e9b: // propset(name, set) -> FUN_00428c20
+		case Script::kMethodPropSet: // propset(name, set) -> FUN_00428c20
 			if (args.size() >= 2)
 				_host->propSet(args[0].strValue, args[1].strValue);
 			break;
-		case 0x3e91: // propxyz(name, x, y, z) -> FUN_0042a140 (mode=1)
+		case Script::kMethodPropXYZ: // propxyz(name, x, y, z) -> FUN_0042a140 (mode=1)
 			if (args.size() >= 4)
 				_host->propXYZ(args[0].strValue, args[1].intValue,
 						args[2].intValue, args[3].intValue);
 			break;
-		case 0x3e92: // propxy(name, x, y) -> FUN_0042a370 (mode=0, depth=-1)
+		case Script::kMethodPropXY: // propxy(name, x, y) -> FUN_0042a370 (mode=0, depth=-1)
 			if (args.size() >= 3)
 				_host->setPropXY(args[0].strValue, args[1].intValue, args[2].intValue);
 			if (args.size() == 2)
 				return Value::makeInt(_host->propXY(args[0].strValue, args[1].intValue));
 			break;
-		case 0x3e9c: // propscale(name, scale) -> FUN_00429870
+		case Script::kMethodPropScale: // propscale(name, scale) -> FUN_00429870
 			if (args.size() >= 2)
 				_host->propScale(args[0].strValue, args[1].intValue);
 			break;
-		case 0x3eb4: // propzclip(name, dist) -> FUN_00428ea0
+		case Script::kMethodPropZClip: // propzclip(name, dist) -> FUN_00428ea0
 			if (args.size() >= 2)
 				_host->propZClip(args[0].strValue, args[1].intValue);
 			break;
-		case 0x3e8d: // propdist(name, d) -> FUN_004295c0
+		case Script::kMethodPropDist: // propdist(name, d) -> FUN_004295c0
 			if (args.size() >= 2)
 				_host->propDist(args[0].strValue, args[1].intValue);
 			break;
-		case 0x3e90: // propdeg(name[, deg]) -> FUN_00429730/FUN_00429520
+		case Script::kMethodPropDeg: // propdeg(name[, deg]) -> FUN_00429730/FUN_00429520
 			if (args.size() >= 2) {
 				int deg = args[1].intValue;
 				return Value::makeInt(_host->propDeg(args[0].strValue, &deg));
@@ -945,13 +948,13 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() == 1)
 				return Value::makeInt(_host->propDeg(args[0].strValue, nullptr));
 			break;
-		case 0x3ea0: // propowner(name[, owner]) -> FUN_00428d40: get or set
+		case Script::kMethodPropOwner: // propowner(name[, owner]) -> FUN_00428d40: get or set
 			if (args.size() >= 2)
 				return Value::makeString(_host->propOwner(args[0].strValue, &args[1].strValue));
 			if (args.size() == 1)
 				return Value::makeString(_host->propOwner(args[0].strValue, nullptr));
 			break;
-		case 0x3eaa: // propvalue(name[, value]) -> FUN_004290d0/FUN_00428e00
+		case Script::kMethodPropValue: // propvalue(name[, value]) -> FUN_004290d0/FUN_00428e00
 			if (args.size() >= 2) {
 				int value = args[1].intValue;
 				return Value::makeInt(_host->propValue(args[0].strValue, &value));
@@ -959,34 +962,34 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() == 1)
 				return Value::makeInt(_host->propValue(args[0].strValue, nullptr));
 			break;
-		case 0x4e3f: // countprops() -> FUN_0042b4f0: global count, all shops
+		case Script::kMethodCountProps: // countprops() -> FUN_0042b4f0: global count, all shops
 			return Value::makeInt(_host->countProps());
-		case 0x4e40: // indextoprop(i) -> FUN_0042b550: 1-based global index
+		case Script::kMethodIndexToProp: // indextoprop(i) -> FUN_0042b550: 1-based global index
 			return Value::makeString(_host->indexToProp(args.empty() ? 0 : args[0].intValue));
-		case 0x4e4b: // pointinbutton(flat, button, point) -> FUN_0040a0d0
+		case Script::kMethodPointInButton: // pointinbutton(flat, button, point) -> FUN_0040a0d0
 			if (args.size() >= 3)
 				return Value::makeBool(_host->pointInButton(args[0].strValue,
 						args[1].strValue, args[2].intValue));
 			return Value::makeBool(false);
-		case 0x4e31: // pointinpainting(scene, view, painting, point) -> FUN_004322e0
+		case Script::kMethodPointInPainting: // pointinpainting(scene, view, painting, point) -> FUN_004322e0
 			if (args.size() >= 4)
 				return Value::makeBool(_host->pointInPainting(args[0].strValue,
 						args[1].strValue, args[2].strValue, args[3].intValue));
 			return Value::makeBool(false);
-		case 0x4e66: // hittest(point) -> FUN_00435e70: name of the topmost item
+		case Script::kMethodHitTest: // hittest(point) -> FUN_00435e70: name of the topmost item
 		             // under the packed point; kind stored for result()
 			if (!args.empty())
 				return Value::makeString(_host->hitTest(args[0].intValue));
 			break;
-		case 0x4e67: // calcdeg(pointA, pointB) -> FUN_00435c70
+		case Script::kMethodCalcDeg: // calcdeg(pointA, pointB) -> FUN_00435c70
 			if (args.size() >= 2)
 				return Value::makeInt(_host->calcDeg(args[0].intValue, args[1].intValue));
 			return Value::makeInt(0);
-		case 0x3e8a: // result() -> FUN_004366a0: last hittest kind (DAT_00461298)
+		case Script::kMethodResult: // result() -> FUN_004366a0: last hittest kind (DAT_00461298)
 			return Value::makeString(_host->hitTestResult());
-		case 0x4e26: // mouse() -> FUN_004368b0: current mouse point, packed
+		case Script::kMethodMouse: // mouse() -> FUN_004368b0: current mouse point, packed
 			return Value::makeInt(_host->mousePoint());
-		case 0x2f07: // cursor(id|name) -> FUN_00446920. Resource-name mapping
+		case Script::kMethodCursor: // cursor(id|name) -> FUN_00446920. Resource-name mapping
 		             // verified against TI.EXE (see VMHost::setCursorResource):
 		             // int -> CURS<n>; "arrow" -> CURS.ARROW; "watch" ->
 		             // CURS2002; other names -> CURS.<NAME>.
@@ -1004,10 +1007,10 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 				_host->setCursorResource(res);
 			}
 			break;
-		case 0x2f2d: // savegame(signature) -> FUN_00426620/FUN_00426790
+		case Script::kMethodSaveGame: // savegame(signature) -> FUN_00426620/FUN_00426790
 			_host->saveGame(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case 0x2f2e: // opengame(signature) -> FUN_004266e0/FUN_00426f00
+		case Script::kMethodOpenGame: // opengame(signature) -> FUN_004266e0/FUN_00426f00
 			_host->openGame(args.empty() ? Common::String() : args[0].strValue);
 			break;
 		default:

@@ -271,14 +271,16 @@ uint32 Puppet::displayLayerResourceId(uint32 displayListResourceId,
 	return resId == 0xffffffff ? 0 : resId;
 }
 
-bool Puppet::renderCelResource(uint32 resId, int16 x, int16 y,
+bool Puppet::renderCelResource(uint32 resId, int16 nativeY, int16 nativeX,
 		Graphics::Surface &screen) const {
 	Common::SharedPtr<CelImage> cel = celResource(resId);
 	if (!cel)
 		return false;
 
-	int left = x - cel->originX;
-	int top = y - cel->originY;
+	// TI.EXE FUN_0043b940 treats both the frame record and CEL header
+	// coordinate words as QuickDraw-style vertical then horizontal values.
+	int top = nativeY - cel->originX;
+	int left = nativeX - cel->originY;
 	for (int yy = 0; yy < cel->height; ++yy) {
 		int sy = top + yy;
 		if (sy < 0 || sy >= screen.h)
@@ -296,7 +298,7 @@ bool Puppet::renderCelResource(uint32 resId, int16 x, int16 y,
 }
 
 bool Puppet::renderActionFrame(const ActionEntry &action, uint32 frameIndex,
-		Graphics::Surface &screen) const {
+		Graphics::Surface &screen, bool skipLayer0) const {
 	if (action.frameCount == 0)
 		return false;
 	if (frameIndex >= action.frameCount)
@@ -319,17 +321,28 @@ bool Puppet::renderActionFrame(const ActionEntry &action, uint32 frameIndex,
 	const byte *record = base + frameIndex * kFrameRecordStride;
 	bool drew = false;
 	for (uint32 layer = 0; layer < kDisplayLayerCount; ++layer) {
+		if (skipLayer0 && layer == 0)
+			continue;
 		const byte *entry = record + kFrameRecordLayersOffset + layer * kFrameLayerStride;
 		int16 celIndex = (int16)READ_LE_UINT16(entry);
 		if (celIndex < 0)
 			continue;
-		int16 x = (int16)READ_LE_UINT16(entry + 2);
-		int16 y = (int16)READ_LE_UINT16(entry + 4);
+		int16 y = (int16)READ_LE_UINT16(entry + 2);
+		int16 x = (int16)READ_LE_UINT16(entry + 4);
 		uint32 celResId = displayLayerResourceId(displayList, layer, celIndex);
 		if (celResId)
-			drew |= renderCelResource(celResId, x, y, screen);
+			drew |= renderCelResource(celResId, y, x, screen);
 	}
 	return drew;
+}
+
+bool Puppet::renderBevelBackdrop(Graphics::Surface &screen, int screenHeight, int screenWidth) const {
+	if (!_globalResourceId)
+		return false;
+	// TI.EXE FUN_00449370 draws DAT_0046120c (master +0x85a) at
+	// {v = screenH - 0x3c, h = screenW / 2}. For Titanic this centers the
+	// authored 512x120 option panel over y=264..384.
+	return renderCelResource(_globalResourceId, screenHeight - 0x3c, screenWidth / 2, screen);
 }
 
 bool Puppet::decodeActionAudio(const ActionEntry &action, Common::Array<byte> &pcm) const {

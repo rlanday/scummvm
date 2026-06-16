@@ -425,6 +425,74 @@ int Set::viewTagAtAngle(uint32 scene, uint32 table, uint32 angle) const {
 	return tag >= 0 ? (int)tag : -1;
 }
 
+bool Set::cameraData(uint32 scene, uint32 table, uint32 angle, CameraData &camera) const {
+	uint32 count = 0;
+	const byte *pano = panoramaTable(scene, table, count);
+	if (!pano || angle >= count)
+		return false;
+	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
+	if (r + kPanoramaRecordStride > _fileData.end())
+		return false;
+
+	const byte *hdr = _master >= 0 ? engineBase((uint32)_master) : nullptr;
+	if (!hdr || hdr + 0xa0c > _fileData.end())
+		return false;
+
+	camera.heading = READ_LE_INT16(r + 0x26);
+	camera.cameraX = READ_LE_INT16(r + 0x20);
+	camera.cameraY = READ_LE_INT16(r + 0x22);
+	camera.cameraZ = READ_LE_INT16(r + 0x24);
+	camera.baseZ = 0; // FUN_004307f0 initializes DAT_0046119a to zero.
+	int16 farPlane = READ_LE_INT16(hdr + 0xa08);
+	int16 nearDivisor = READ_LE_INT16(hdr + 0x9fa);
+	camera.nearPlane = nearDivisor ? farPlane / nearDivisor : farPlane;
+	camera.farPlane = farPlane;
+	camera.viewportLeft = _viewLeft;
+	camera.viewportTop = _viewTop;
+	camera.viewportRight = _viewLeft + (int16)_width;
+	camera.viewportBottom = _viewTop + (int16)_height;
+	camera.centerX = _viewLeft + (int16)(_width / 2);
+	camera.centerY = _viewTop + (int16)(_height / 2);
+	int16 halfW = (int16)(_width / 2);
+	int16 halfH = (int16)(_height / 2);
+	camera.focal = MAX(halfW, halfH);
+	return true;
+}
+
+bool Set::transitionCameraData(uint32 transitionId, uint32 frame, CameraData &camera) const {
+	uint32 count = 0;
+	const byte *transition = transitionTable(transitionId, count);
+	if (!transition || frame >= count)
+		return false;
+	const byte *r = transition + 0x0c + frame * kPanoramaRecordStride;
+	if (r + kPanoramaRecordStride > _fileData.end())
+		return false;
+
+	const byte *hdr = _master >= 0 ? engineBase((uint32)_master) : nullptr;
+	if (!hdr || hdr + 0xa0c > _fileData.end())
+		return false;
+
+	camera.heading = READ_LE_INT16(r + 0x26);
+	camera.cameraX = READ_LE_INT16(r + 0x20);
+	camera.cameraY = READ_LE_INT16(r + 0x22);
+	camera.cameraZ = READ_LE_INT16(r + 0x24);
+	camera.baseZ = 0;
+	int16 farPlane = READ_LE_INT16(hdr + 0xa08);
+	int16 nearDivisor = READ_LE_INT16(hdr + 0x9fa);
+	camera.nearPlane = nearDivisor ? farPlane / nearDivisor : farPlane;
+	camera.farPlane = farPlane;
+	camera.viewportLeft = _viewLeft;
+	camera.viewportTop = _viewTop;
+	camera.viewportRight = _viewLeft + (int16)_width;
+	camera.viewportBottom = _viewTop + (int16)_height;
+	camera.centerX = _viewLeft + (int16)(_width / 2);
+	camera.centerY = _viewTop + (int16)(_height / 2);
+	int16 halfW = (int16)(_width / 2);
+	int16 halfH = (int16)(_height / 2);
+	camera.focal = MAX(halfW, halfH);
+	return true;
+}
+
 int Set::nextTaggedAngle(uint32 scene, uint32 table, int startAngle) const {
 	uint32 count = angleCount(scene, table);
 	if (startAngle < 0 || count == 0)
