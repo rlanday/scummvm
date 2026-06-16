@@ -2721,13 +2721,191 @@ int CyberflixEngine::frameRate(const int *newRate) {
 }
 
 CyberflixEngine::ThemeTrack *CyberflixEngine::findTrack(const Common::String &name) {
+	Common::SharedPtr<ThemeTrack> track = findTrackRef(name);
+	return track ? track.get() : nullptr;
+}
+
+Common::SharedPtr<CyberflixEngine::ThemeTrack> CyberflixEngine::findTrackRef(const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
 	for (uint i = 0; i < _tracks.size(); ++i)
 		if (_tracks[i]->name == key)
-			return _tracks[i].get();
-	return nullptr;
+			return _tracks[i];
+	return Common::SharedPtr<ThemeTrack>();
 }
+
+class CyberflixEngine::ThemeAudioStream : public Audio::AudioStream {
+public:
+	ThemeAudioStream(const Common::SharedPtr<ThemeTrack> &track, uint32 startSample) :
+			_track(track), _loopIdx(track->loopIdx) {
+		// Native playtheme() (FUN_00412250 -> FUN_0042f930/FUN_0042f960)
+		// installs the theme cue chain on the DirectSound theme channel
+		// (DAT_00460a88). FUN_0042f960 primes the DirectSound ring by calling the
+		// servicer once, then FUN_0042ebb0 decodes later 0x400-byte ring blocks as
+		// the sound buffer advances, following each cue's +0x18 next pointer and
+		// looping from the final playlist entry back to loopIdx. Keep the already
+		// loaded ThemeTrack alive like those locked native descriptors, and decode
+		// one cbx block at a time so ScummVM does not block the main thread by
+		// predecoding the full intro and loop before the music starts.
+		for (uint i = 0; i < _track->playlist.size(); ++i) {
+			CueData cueData;
+			const uint16 cueIdx = _track->playlist[i];
+			if (cueIdx >= 1 && cueIdx <= _track->cues.size()) {
+				const ThemeTrack::Cue &cue = _track->cues[cueIdx - 1];
+				if (cue.length && cue.dataOffset + cue.length <= _track->fileData.size()) {
+					CbxAudioInfo info = getCbxAudioInfo(_track->fileData.begin() + cue.dataOffset, cue.length);
+					if (info.blockSamples != 0 &&
+							info.blockCount <= 0xffffffffU / info.blockSamples) {
+						cueData.dataOffset = cue.dataOffset;
+						cueData.length = cue.length;
+						cueData.blockSamples = info.blockSamples;
+						cueData.blockCount = info.blockCount;
+						cueData.totalSamples = info.blockSamples * info.blockCount;
+						if (cueData.blockSamples > _maxBlockSamples)
+							_maxBlockSamples = cueData.blockSamples;
+					}
+				}
+			}
+			if (i < _loopIdx)
+				_introSamples += cueData.totalSamples;
+			else
+				_loopSamples += cueData.totalSamples;
+			_cues.push_back(cueData);
+		}
+
+		if (_loopIdx >= _cues.size())
+			_loopIdx = _cues.empty() ? 0 : _cues.size() - 1;
+		if (_maxBlockSamples != 0)
+			_block.resize(_maxBlockSamples);
+		seekToSample(startSample);
+	}
+
+	int readBuffer(int16 *buffer, const int numSamples) override {
+		int produced = 0;
+		while (produced < numSamples && !_finished) {
+			if (_blockOffset >= _blockValid)
+				decodeNextBlock();
+			if (_finished)
+				break;
+
+			const uint32 n = MIN<uint32>(numSamples - produced, _blockValid - _blockOffset);
+			for (uint32 i = 0; i < n; ++i)
+				buffer[produced + i] = (int16)(((int)_block[_blockOffset + i] - 128) << 8);
+			_blockOffset += n;
+			produced += n;
+		}
+		return produced;
+	}
+
+	bool isStereo() const override { return false; }
+	int getRate() const override { return kAudioSampleRate; }
+	bool endOfData() const override { return _finished; }
+	bool endOfStream() const override { return _finished; }
+
+private:
+	struct CueData {
+		uint32 dataOffset = 0;
+		uint32 length = 0;
+		uint32 blockSamples = 0;
+		uint32 blockCount = 0;
+		uint32 totalSamples = 0;
+	};
+
+	void seekToSample(uint32 sample) {
+		const uint32 totalSamples = _introSamples + _loopSamples;
+		if (_cues.empty() || totalSamples == 0 || _maxBlockSamples == 0) {
+			_finished = true;
+			return;
+		}
+		if (sample >= _introSamples) {
+			if (_loopSamples == 0) {
+				_finished = true;
+				return;
+			}
+			sample = _introSamples + (sample - _introSamples) % _loopSamples;
+		}
+
+		for (uint i = 0; i < _cues.size(); ++i) {
+			const CueData &cue = _cues[i];
+			if (sample < cue.totalSamples) {
+				_cueIndex = i;
+				_blockIndex = sample / cue.blockSamples;
+				_blockOffset = sample % cue.blockSamples;
+				_blockValid = 0;
+				decodeCurrentBlock();
+				return;
+			}
+			sample -= cue.totalSamples;
+		}
+		if (_loopSamples != 0) {
+			_cueIndex = _loopIdx;
+			_blockIndex = 0;
+			_blockOffset = _blockValid = 0;
+			decodeNextBlock();
+		} else {
+			_finished = true;
+		}
+	}
+
+	void advanceCue() {
+		if (_cues.empty() || (_loopSamples == 0 && _cueIndex + 1 >= _cues.size())) {
+			_finished = true;
+			return;
+		}
+
+		do {
+			if (_cueIndex + 1 >= _cues.size())
+				_cueIndex = _loopIdx;
+			else
+				++_cueIndex;
+		} while (_cues[_cueIndex].totalSamples == 0 && !_finished && _cueIndex + 1 < _cues.size());
+
+		if (_cues[_cueIndex].totalSamples == 0) {
+			_finished = true;
+			return;
+		}
+		_blockIndex = _blockOffset = _blockValid = 0;
+	}
+
+	void decodeCurrentBlock() {
+		while (!_finished) {
+			if (_cueIndex >= _cues.size()) {
+				_finished = true;
+				return;
+			}
+			const CueData &cue = _cues[_cueIndex];
+			if (cue.totalSamples == 0 || _blockIndex >= cue.blockCount) {
+				advanceCue();
+				continue;
+			}
+
+			_blockValid = decodeCbxAudioBlock(_track->fileData.begin() + cue.dataOffset, cue.length,
+					_blockIndex, _block.begin(), _block.size());
+			++_blockIndex;
+			if (_blockValid != 0)
+				return;
+			advanceCue();
+		}
+	}
+
+	void decodeNextBlock() {
+		_blockOffset = 0;
+		decodeCurrentBlock();
+	}
+
+	Common::SharedPtr<ThemeTrack> _track;
+	Common::Array<CueData> _cues;
+	Common::Array<byte> _block;
+	uint32 _loopIdx = 0;
+	uint32 _introSamples = 0;
+	uint32 _loopSamples = 0;
+	uint32 _maxBlockSamples = 0;
+	uint32 _cueIndex = 0;
+	uint32 _blockIndex = 0;
+	uint32 _blockOffset = 0;
+	uint32 _blockValid = 0;
+	bool _finished = false;
+};
 
 const CyberflixEngine::ThemeTrack::Cue *CyberflixEngine::findSfxCue(const Common::String &name,
 		ThemeTrack **trackOut) {
@@ -2797,6 +2975,54 @@ void CyberflixEngine::applyLiveAudioVolumes() {
 	}
 }
 
+void CyberflixEngine::prepareThemeSpans(const ThemeTrack &track) {
+	_themeSpans.clear();
+	_themeIntroSamples = _themeLoopSamples = 0;
+	for (uint i = 0; i < track.playlist.size(); ++i) {
+		const bool inLoop = (i >= track.loopIdx);
+		const uint16 cueIdx = track.playlist[i];
+		if (cueIdx < 1 || cueIdx > track.cues.size())
+			continue;
+
+		const ThemeTrack::Cue &cue = track.cues[cueIdx - 1];
+		const uint32 start = inLoop ? _themeIntroSamples + _themeLoopSamples : _themeIntroSamples;
+		ThemeCueSpan span;
+		span.startSample = start;
+		span.name = cue.name;
+		_themeSpans.push_back(span);
+
+		uint32 samples = 0;
+		if (cue.length && cue.dataOffset + cue.length <= track.fileData.size()) {
+			const CbxAudioInfo info = getCbxAudioInfo(track.fileData.begin() + cue.dataOffset, cue.length);
+			if (info.blockSamples != 0 && info.blockCount <= 0xffffffffU / info.blockSamples)
+				samples = info.blockSamples * info.blockCount;
+		}
+		if (inLoop)
+			_themeLoopSamples += samples;
+		else
+			_themeIntroSamples += samples;
+	}
+}
+
+bool CyberflixEngine::startThemeStream(const Common::SharedPtr<ThemeTrack> &track, uint32 startSample) {
+	if (!track)
+		return false;
+	prepareThemeSpans(*track);
+	if (_themeIntroSamples == 0 && _themeLoopSamples == 0)
+		return false;
+
+	Audio::AudioStream *stream = new ThemeAudioStream(track, startSample);
+	if (stream->endOfStream()) {
+		delete stream;
+		return false;
+	}
+	_mixer->playStream(Audio::Mixer::kMusicSoundType, &_themeHandle, stream);
+	_mixer->setChannelVolume(_themeHandle, effectiveAudioVolume(track->volume));
+	_themeTrackName = track->name;
+	_themeStartSample = startSample;
+	return true;
+}
+
 // opentrackfile('name.trk'): load and parse a track file, appending it to the
 // open-track list (TI.EXE FUN_00411be0 -> parser FUN_00411cc0, list
 // DAT_0046114c), including its theme and SFX cue directories.
@@ -2809,6 +3035,11 @@ void CyberflixEngine::applyLiveAudioVolumes() {
 // records @T+0x10e stride 0x1a { u32 ?, u32 resId @+4, pascal name @+0xa }.
 // SFX table S: count u32 @S+4, records @S+8 stride 0x1a
 // { flags @+0, u32 resId @+4, pascal name @+0xa }.
+//
+// Native parser FUN_00411cc0 immediately calls FUN_00430330 for every theme cue:
+// FUN_00440b00 loads/caches the resource, FUN_0043f970 locks it, and the cue
+// descriptor stores the payload pointer. playtheme() later consumes those
+// descriptors, so disk/resource loading is intentionally front-loaded here.
 // See files/audio-re-notes.md.
 void CyberflixEngine::openTrackFile(const Common::String &name) {
 	if (name.empty())
@@ -2910,8 +3141,9 @@ void CyberflixEngine::openTrackFile(const Common::String &name) {
 }
 
 // closetrackfile('name.trk'): remove the named track from the open list
-// (TI.EXE FUN_00412070; it does not stop a theme already streaming, and
-// neither do we -- the PCM was decoded up front).
+// (TI.EXE FUN_00412070). Native playback already has locked cue descriptors in
+// the DirectSound theme channel, so closing the track does not stop the active
+// theme; our ThemeAudioStream likewise keeps a reference to the parsed track.
 void CyberflixEngine::closeTrackFile(const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
@@ -2925,13 +3157,12 @@ void CyberflixEngine::closeTrackFile(const Common::String &name) {
 
 // playtheme('name.trk'): start the track's theme playlist on the theme
 // channel, replacing whatever is playing (TI.EXE FUN_00412250 ->
-// FUN_0042f930/FUN_0042f960). The original streams the cue chain via the
-// servicer thread: playlist entries in order, the last one's next-pointer
-// aimed back at playlist[loopIdx], so cues before the loop index play once
-// and the tail loops forever. We decode the same two regions to PCM and play
-// them as intro + looped streams on a queuing stream.
+// FUN_0042f930/FUN_0042f960). Native opentrackfile() has already loaded and
+// locked each theme cue resource with FUN_00430330; playtheme() just installs
+// that cue chain on the DirectSound theme channel. FUN_0042f960 primes the ring
+// once, and FUN_0042ebb0 keeps decoding later cbx blocks as playback advances.
 void CyberflixEngine::playTheme(const Common::String &name) {
-	ThemeTrack *track = findTrack(name);
+	Common::SharedPtr<ThemeTrack> track = findTrackRef(name);
 	if (!track) {
 		warning("Cyberflix: playtheme('%s'): track not open", name.c_str());
 		return;
@@ -2945,47 +3176,8 @@ void CyberflixEngine::playTheme(const Common::String &name) {
 	if (track->playlist.empty())
 		return;
 
-	// Decode the intro (playlist[0..loopIdx-1]) and loop (playlist[loopIdx..])
-	// regions, recording each cue's start for currenttheme(1).
-	Common::Array<byte> intro, loop;
-	for (uint i = 0; i < track->playlist.size(); ++i) {
-		bool inLoop = (i >= track->loopIdx);
-		Common::Array<byte> &out = inLoop ? loop : intro;
-		uint16 cueIdx = track->playlist[i]; // 1-based
-		if (cueIdx < 1 || cueIdx > track->cues.size())
-			continue;
-		const ThemeTrack::Cue &cue = track->cues[cueIdx - 1];
-		ThemeCueSpan span;
-		span.startSample = (inLoop ? _themeIntroSamples : 0) + out.size();
-		span.name = cue.name;
-		_themeSpans.push_back(span);
-		if (cue.length && cue.dataOffset + cue.length <= track->fileData.size())
-			decodeCbxAudio(track->fileData.begin() + cue.dataOffset, cue.length, out);
-		if (!inLoop)
-			_themeIntroSamples = intro.size();
-	}
-	_themeLoopSamples = loop.size();
-	if (intro.empty() && loop.empty())
+	if (!startThemeStream(track, 0))
 		return;
-
-	Audio::QueuingAudioStream *queue = Audio::makeQueuingAudioStream(kAudioSampleRate, false);
-	if (!intro.empty()) {
-		byte *buf = (byte *)malloc(intro.size());
-		memcpy(buf, intro.begin(), intro.size());
-		queue->queueBuffer(buf, intro.size(), DisposeAfterUse::YES, Audio::FLAG_UNSIGNED);
-	}
-	if (!loop.empty()) {
-		byte *buf = (byte *)malloc(loop.size());
-		memcpy(buf, loop.begin(), loop.size());
-		Audio::SeekableAudioStream *loopStream = Audio::makeRawStream(
-				buf, loop.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED, DisposeAfterUse::YES);
-		queue->queueAudioStream(new Audio::LoopingAudioStream(loopStream, 0), DisposeAfterUse::YES);
-	}
-	queue->finish();
-
-	_mixer->playStream(Audio::Mixer::kMusicSoundType, &_themeHandle, queue);
-	_mixer->setChannelVolume(_themeHandle, effectiveAudioVolume(track->volume));
-	_themeTrackName = track->name;
 	debug(1, "Cyberflix: playtheme '%s' (intro %u + loop %u samples, vol %d)",
 			name.c_str(), _themeIntroSamples, _themeLoopSamples, track->volume);
 }

@@ -785,75 +785,12 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	}
 
 	auto restoreTheme = [&](const Common::String &name, uint32 elapsedMillis) {
-		ThemeTrack *track = findTrack(name);
+		Common::SharedPtr<ThemeTrack> track = findTrackRef(name);
 		if (!track || track->playlist.empty())
 			return;
 
-		Common::Array<byte> intro, loop;
-		_themeSpans.clear();
-		_themeIntroSamples = _themeLoopSamples = 0;
-		for (uint i = 0; i < track->playlist.size(); ++i) {
-			bool inLoop = (i >= track->loopIdx);
-			Common::Array<byte> &out = inLoop ? loop : intro;
-			uint16 cueIdx = track->playlist[i];
-			if (cueIdx < 1 || cueIdx > track->cues.size())
-				continue;
-			const ThemeTrack::Cue &cue = track->cues[cueIdx - 1];
-			ThemeCueSpan span;
-			span.startSample = (inLoop ? _themeIntroSamples : 0) + out.size();
-			span.name = cue.name;
-			_themeSpans.push_back(span);
-			if (cue.length && cue.dataOffset + cue.length <= track->fileData.size())
-				decodeCbxAudio(track->fileData.begin() + cue.dataOffset, cue.length, out);
-			if (!inLoop)
-				_themeIntroSamples = intro.size();
-		}
-		_themeLoopSamples = loop.size();
-
 		const uint32 startSample = (uint32)((uint64)elapsedMillis * kAudioSampleRate / 1000);
-		_themeStartSample = startSample;
-		Audio::QueuingAudioStream *queue = Audio::makeQueuingAudioStream(kAudioSampleRate, false);
-		bool queued = false;
-		auto queueSlice = [&](const Common::Array<byte> &pcm, uint32 offset) {
-			if (offset >= pcm.size())
-				return;
-			uint32 len = pcm.size() - offset;
-			byte *buf = (byte *)malloc(len);
-			memcpy(buf, pcm.begin() + offset, len);
-			queue->queueBuffer(buf, len, DisposeAfterUse::YES, Audio::FLAG_UNSIGNED);
-			queued = true;
-		};
-
-		if (startSample < intro.size()) {
-			queueSlice(intro, startSample);
-			if (!loop.empty()) {
-				byte *buf = (byte *)malloc(loop.size());
-				memcpy(buf, loop.begin(), loop.size());
-				Audio::SeekableAudioStream *loopStream = Audio::makeRawStream(
-						buf, loop.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED, DisposeAfterUse::YES);
-				queue->queueAudioStream(new Audio::LoopingAudioStream(loopStream, 0), DisposeAfterUse::YES);
-				queued = true;
-			}
-		} else if (!loop.empty()) {
-			uint32 loopOffset = (startSample - intro.size()) % loop.size();
-			if (loopOffset)
-				queueSlice(loop, loopOffset);
-			byte *buf = (byte *)malloc(loop.size());
-			memcpy(buf, loop.begin(), loop.size());
-			Audio::SeekableAudioStream *loopStream = Audio::makeRawStream(
-					buf, loop.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED, DisposeAfterUse::YES);
-			queue->queueAudioStream(new Audio::LoopingAudioStream(loopStream, 0), DisposeAfterUse::YES);
-			queued = true;
-		}
-
-		if (!queued) {
-			delete queue;
-			return;
-		}
-		queue->finish();
-		_mixer->playStream(Audio::Mixer::kMusicSoundType, &_themeHandle, queue);
-		_mixer->setChannelVolume(_themeHandle, effectiveAudioVolume(track->volume));
-		_themeTrackName = track->name;
+		startThemeStream(track, startSample);
 	};
 
 	if (audioState.seen) {

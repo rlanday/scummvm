@@ -82,21 +82,21 @@ static void decodeCbxBlock(const byte *src, uint32 srcLen, uint32 outSize,
 		memset(dst + produced, 0x80, outSize - produced);
 }
 
-uint32 decodeCbxAudio(const byte *payload, uint32 payloadLen, Common::Array<byte> &out) {
+CbxAudioInfo getCbxAudioInfo(const byte *payload, uint32 payloadLen) {
+	CbxAudioInfo info;
 	// Header fields are relative to the decoder base B == payload - 4, so e.g.
 	// the rate at B+0x1c is payload+0x18. Read them directly off payload.
 	if (payloadLen < 0x2c)
-		return 0;
+		return info;
 	const uint32 rate = READ_LE_UINT32(payload + 0x18);
 	const uint32 blockBytes = READ_LE_UINT32(payload + 0x1c);
 	const uint32 count = READ_LE_UINT32(payload + 0x24);
 	if (blockBytes == 0 || count == 0 || count > 0x10000)
-		return 0;
+		return info;
 	const bool duplicate = rate != kAudioRate22050;
 	if (duplicate && blockBytes > 0x7fffffffU)
-		return 0;
+		return info;
 	const uint32 outSize = blockBytes * (duplicate ? 2 : 1);
-	const uint32 startBytes = out.size();
 
 	uint32 validBlocks = 0;
 	for (; validBlocks < count; ++validBlocks) {
@@ -107,19 +107,51 @@ uint32 decodeCbxAudio(const byte *payload, uint32 payloadLen, Common::Array<byte
 		if (off < 4 || off - 4 >= payloadLen)
 			break;
 	}
-	if (validBlocks == 0 || outSize > (0xffffffffU - startBytes) / validBlocks)
+	if (validBlocks == 0)
+		return info;
+	info.blockSamples = outSize;
+	info.blockCount = validBlocks;
+	return info;
+}
+
+uint32 decodeCbxAudioBlock(const byte *payload, uint32 payloadLen, uint32 blockIndex,
+		byte *out, uint32 outSize) {
+	if (payloadLen < 0x2c)
 		return 0;
 
-	out.resize(startBytes + outSize * validBlocks);
-	for (uint32 b = 0; b < validBlocks; ++b) {
-		const uint32 tableOff = 0x28 + b * 4;
-		const uint32 off = READ_LE_UINT32(payload + tableOff);
-		// Block offsets are relative to base B (payload-4); >= 4 keeps the
-		// in-payload start non-negative.
-		const uint32 start = off - 4;
-		decodeCbxBlock(payload + start, payloadLen - start, outSize, duplicate,
-				out.begin() + startBytes + b * outSize);
-	}
+	const uint32 rate = READ_LE_UINT32(payload + 0x18);
+	const uint32 blockBytes = READ_LE_UINT32(payload + 0x1c);
+	const uint32 count = READ_LE_UINT32(payload + 0x24);
+	if (blockBytes == 0 || blockIndex >= count)
+		return 0;
+	const bool duplicate = rate != kAudioRate22050;
+	if (duplicate && blockBytes > 0x7fffffffU)
+		return 0;
+	const uint32 blockSamples = blockBytes * (duplicate ? 2 : 1);
+	if (outSize < blockSamples)
+		return 0;
+
+	const uint32 tableOff = 0x28 + blockIndex * 4;
+	if (tableOff + 4 > payloadLen)
+		return 0;
+	const uint32 off = READ_LE_UINT32(payload + tableOff);
+	if (off < 4 || off - 4 >= payloadLen)
+		return 0;
+	const uint32 start = off - 4;
+	decodeCbxBlock(payload + start, payloadLen - start, blockSamples, duplicate, out);
+	return blockSamples;
+}
+
+uint32 decodeCbxAudio(const byte *payload, uint32 payloadLen, Common::Array<byte> &out) {
+	CbxAudioInfo info = getCbxAudioInfo(payload, payloadLen);
+	const uint32 startBytes = out.size();
+	if (info.blockSamples == 0 || info.blockSamples > (0xffffffffU - startBytes) / info.blockCount)
+		return 0;
+
+	out.resize(startBytes + info.blockSamples * info.blockCount);
+	for (uint32 b = 0; b < info.blockCount; ++b)
+		decodeCbxAudioBlock(payload, payloadLen, b, out.begin() + startBytes + b * info.blockSamples,
+				info.blockSamples);
 	return out.size() - startBytes;
 }
 

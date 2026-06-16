@@ -59,6 +59,25 @@ static const uint32 kAudioRate22050 = 0x5622;
  */
 static const uint32 kMasterHeaderInfoTag = 0x00040000;
 
+struct CbxAudioInfo {
+	uint32 blockSamples = 0;
+	uint32 blockCount = 0;
+};
+
+/**
+ * Return the decoded block geometry for a cbx audio resource without decoding
+ * it. This mirrors the native servicer's block-at-a-time traversal of the
+ * offset table.
+ */
+CbxAudioInfo getCbxAudioInfo(const byte *payload, uint32 payloadLen);
+
+/**
+ * Decode one cbx block into @p out. @p out must hold at least
+ * CbxAudioInfo::blockSamples bytes for this resource.
+ */
+uint32 decodeCbxAudioBlock(const byte *payload, uint32 payloadLen, uint32 blockIndex,
+		byte *out, uint32 outSize);
+
 /**
  * Decode a CyberFlix "cbx" audio resource (MOV @c info==kAudioResourceInfoTag)
  * into 8-bit unsigned mono PCM at @c kAudioSampleRate, appending the samples to

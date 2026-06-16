@@ -492,16 +492,20 @@ private:
 	Common::Array<Common::SharedPtr<ThemeTrack> > _tracks;
 
 	/** Find an open track by (case-insensitive) file name, or nullptr. */
+	Common::SharedPtr<ThemeTrack> findTrackRef(const Common::String &name);
 	ThemeTrack *findTrack(const Common::String &name);
 	const ThemeTrack::Cue *findSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr);
 	ThemeTrack::Cue *findMutableSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr);
 	byte effectiveAudioVolume(int baseVolume) const;
 	void applyLiveAudioVolumes();
+	void prepareThemeSpans(const ThemeTrack &track);
+	bool startThemeStream(const Common::SharedPtr<ThemeTrack> &track, uint32 startSample);
 	bool playSoundCue(const Common::String &name, Audio::SoundHandle &handle,
 			Common::String &currentCue, uint32 &currentResId);
 	void clearStageShellFrame();
 	const FrameImage *stageShellFrame();
 
+	class ThemeAudioStream;
 	Audio::SoundHandle _themeHandle;   ///< Theme channel (TI.EXE DAT_00460a88).
 	Common::String _themeTrackName;    ///< Track of the playing theme, or empty.
 
