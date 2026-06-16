@@ -1448,26 +1448,28 @@ const Graphics::Font *CyberflixEngine::textFont(int size) {
 }
 
 void CyberflixEngine::renderPuppetBevels(bool present) {
-	if (_puppetBevels.empty())
-		return;
-
-	const Graphics::Font *font = textFont(_puppetParams[5]);
-	if (!font)
+	if (!_puppet || !_puppet->isOpen())
 		return;
 
 	Graphics::Surface *screen = _system->lockScreen();
-	if (_puppet && _puppet->isOpen())
-		_puppet->renderBevelBackdrop(*screen, kScreenHeight, kScreenWidth);
-	for (uint i = 0; i < _puppetBevels.size(); ++i) {
-		const Common::Rect &rect = _puppetBevels[i].rect;
-		Common::Rect clipped = rect;
-		clipped.clip(Common::Rect(kScreenWidth, kScreenHeight));
-		if (clipped.isEmpty())
-			continue;
-		const int baselineY = rect.top + 0x10;
-		const int x = rect.left + _puppetParams[9];
-		font->drawString(screen, _puppetBevels[i].text, x, baselineY - font->getFontAscent(),
-				kScreenWidth - x, (uint32)CLIP<int>(_puppetParams[2], 0, 255));
+	// FUN_00449370 always draws the PUP master bevel backdrop before checking
+	// the queued bevel count, so Smethels' text-row panel stays visible even
+	// during speech beats that offer no clickable choices.
+	_puppet->renderBevelBackdrop(*screen, kScreenHeight, kScreenWidth);
+
+	const Graphics::Font *font = textFont(_puppetParams[5]);
+	if (font) {
+		for (uint i = 0; i < _puppetBevels.size(); ++i) {
+			const Common::Rect &rect = _puppetBevels[i].rect;
+			Common::Rect clipped = rect;
+			clipped.clip(Common::Rect(kScreenWidth, kScreenHeight));
+			if (clipped.isEmpty())
+				continue;
+			const int baselineY = rect.top + 0x10;
+			const int x = rect.left + _puppetParams[9];
+			font->drawString(screen, _puppetBevels[i].text, x, baselineY - font->getFontAscent(),
+					kScreenWidth - x, (uint32)CLIP<int>(_puppetParams[2], 0, 255));
+		}
 	}
 	_system->unlockScreen();
 	if (present)
