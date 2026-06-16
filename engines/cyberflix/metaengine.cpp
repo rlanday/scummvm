@@ -21,6 +21,8 @@
 
 #include "base/plugins.h"
 
+#include "common/translation.h"
+
 #include "engines/advancedDetector.h"
 
 #include "cyberflix/cyberflix.h"
@@ -28,10 +30,29 @@
 
 namespace Cyberflix {
 
+static const ADExtraGuiOptionsMap optionsList[] = {
+	{
+		GAMEOPTION_FONT_ANTIALIASING,
+		{
+			_s("Enable font anti-aliasing"),
+			_s("Render CyberFlix text with smooth TrueType glyphs instead of the original monochrome Windows-style glyphs."),
+			CYBERFLIX_OPTION_FONT_ANTIALIASING,
+			false,
+			0,
+			0
+		}
+	},
+	AD_EXTRA_GUI_OPTIONS_TERMINATOR
+};
+
 class CyberflixMetaEngine : public AdvancedMetaEngine<Cyberflix::CyberflixGameDescription> {
 public:
 	const char *getName() const override {
 		return "cyberflix";
+	}
+
+	const ADExtraGuiOptionsMap *getAdvancedExtraGuiOptions() const override {
+		return optionsList;
 	}
 
 	Common::Error createInstance(OSystem *syst, Engine **engine, const Cyberflix::CyberflixGameDescription *desc) const override {

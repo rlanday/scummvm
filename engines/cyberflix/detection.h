@@ -24,6 +24,9 @@
 
 #include "engines/advancedDetector.h"
 
+#define GAMEOPTION_FONT_ANTIALIASING GUIO_GAMEOPTIONS1
+#define CYBERFLIX_OPTION_FONT_ANTIALIASING "enable_font_antialiasing"
+
 namespace Cyberflix {
 
 enum CyberflixGameType {

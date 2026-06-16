@@ -58,6 +58,7 @@ class SoundHandle;
 }
 
 namespace Graphics {
+class Font;
 struct WinCursorGroup;
 }
 
@@ -366,7 +367,11 @@ private:
 		Common::Rect rect;
 	};
 	Common::Array<PuppetBevelOption> _puppetBevels;
+	Common::ScopedPtr<Graphics::Font> _nativeTextFont;
+	int _nativeTextFontSize = 0;
+	bool _nativeTextFontAntialiasing = false;
 	const Puppet::ActionEntry *currentPuppetAction() const;
+	const Graphics::Font *textFont(int size);
 	bool renderPuppetFrame(const Puppet::ActionEntry &action, uint32 frameIndex, bool present);
 	bool renderCurrentPuppetFrame(bool present);
 	void renderPuppetBevels(bool present);

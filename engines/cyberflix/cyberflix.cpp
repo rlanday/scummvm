@@ -28,6 +28,7 @@
 #include "common/endian.h"
 #include "common/keyboard.h"
 #include "common/memstream.h"
+#include "common/archive.h"
 #include "common/system.h"
 #include "common/util.h"
 
@@ -44,6 +45,9 @@
 #include "graphics/cursorman.h"
 #include "graphics/font.h"
 #include "graphics/fontman.h"
+#ifdef USE_FREETYPE2
+#include "graphics/fonts/ttf.h"
+#endif
 #include "graphics/palette.h"
 #include "graphics/paletteman.h"
 #include "graphics/surface.h"
@@ -1277,13 +1281,59 @@ bool CyberflixEngine::renderCurrentPuppetFrame(bool present) {
 	return renderPuppetFrame(*action, _puppetCurrentFrame, present);
 }
 
+const Graphics::Font *CyberflixEngine::textFont(int size) {
+#ifdef USE_FREETYPE2
+	const bool antialiasing = ConfMan.hasKey(CYBERFLIX_OPTION_FONT_ANTIALIASING) &&
+			ConfMan.getBool(CYBERFLIX_OPTION_FONT_ANTIALIASING);
+	if (_nativeTextFont && _nativeTextFontSize == size &&
+			_nativeTextFontAntialiasing == antialiasing)
+		return _nativeTextFont.get();
+
+	_nativeTextFont.reset();
+	_nativeTextFontSize = size;
+	_nativeTextFontAntialiasing = antialiasing;
+
+	const Graphics::TTFRenderMode renderMode = antialiasing
+			? Graphics::kTTFRenderModeLight
+			: Graphics::kTTFRenderModeMonochrome;
+
+	static const char *const arialNames[] = {
+		"arial.ttf",
+		"Arial.ttf",
+		"ARIAL.TTF",
+		nullptr
+	};
+
+	for (const char *const *name = arialNames; *name; ++name) {
+		Common::SeekableReadStream *stream = SearchMan.createReadStreamForMember(
+				Common::Path(*name, Common::Path::kNoSeparator));
+		if (!stream)
+			continue;
+		_nativeTextFont.reset(Graphics::loadTTFFont(stream, DisposeAfterUse::YES,
+				size, Graphics::kTTFSizeModeCharacter, 0, 0, renderMode));
+		if (_nativeTextFont)
+			return _nativeTextFont.get();
+	}
+
+	_nativeTextFont.reset(Graphics::loadTTFFontFromArchive("LiberationSans-Regular.ttf",
+			size, Graphics::kTTFSizeModeCharacter, 0, 0, renderMode));
+	if (_nativeTextFont)
+		return _nativeTextFont.get();
+#endif
+
+	const Graphics::Font *font = size >= 12
+			? FontMan.getFontByUsage(Graphics::FontManager::kGUIFont)
+			: FontMan.getFontByUsage(Graphics::FontManager::kConsoleFont);
+	if (!font)
+		font = FontMan.getFontByUsage(Graphics::FontManager::kConsoleFont);
+	return font;
+}
+
 void CyberflixEngine::renderPuppetBevels(bool present) {
 	if (_puppetBevels.empty())
 		return;
 
-	const Graphics::Font *font = FontMan.getFontByUsage(Graphics::FontManager::kGUIFont);
-	if (!font)
-		font = FontMan.getFontByUsage(Graphics::FontManager::kConsoleFont);
+	const Graphics::Font *font = textFont(_puppetParams[5]);
 	if (!font)
 		return;
 
@@ -3204,9 +3254,7 @@ void CyberflixEngine::flushEvents() {
 }
 
 void CyberflixEngine::drawString(const Common::String &text, int32 packedPoint, int color, int size) {
-	const Graphics::Font *font = size >= 12
-			? FontMan.getFontByUsage(Graphics::FontManager::kGUIFont)
-			: FontMan.getFontByUsage(Graphics::FontManager::kConsoleFont);
+	const Graphics::Font *font = textFont(size);
 	if (!font)
 		return;
 
