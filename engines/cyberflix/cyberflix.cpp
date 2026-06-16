@@ -3872,6 +3872,8 @@ CyberflixEngine::ScheduledLoop::Kind CyberflixEngine::scheduledLoopKind(
 		return ScheduledLoop::kProp;
 	if (kind.equalsIgnoreCase("shop"))
 		return ScheduledLoop::kShop;
+	if (kind.equalsIgnoreCase("actor"))
+		return ScheduledLoop::kActor;
 	return ScheduledLoop::kUnknown;
 }
 
@@ -3992,6 +3994,9 @@ void CyberflixEngine::processScheduledLoops() {
 			break;
 		case ScheduledLoop::kShop:
 			sendToShop(loop.target, loop.message, noArgs);
+			break;
+		case ScheduledLoop::kActor:
+			sendToActor(loop.target, loop.message, noArgs);
 			break;
 		default:
 			debug(1, "Cyberflix: makeloop kind '%s' unhandled", loop.kind.c_str());

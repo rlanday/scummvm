@@ -541,7 +541,8 @@ private:
 			kFlat,
 			kStage,
 			kProp,
-			kShop
+			kShop,
+			kActor
 		};
 		Kind kindId = kUnknown;
 		Common::String kind;
