@@ -298,17 +298,19 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 		return Value::makeInt(-v.intValue);
 	}
 
-	case Script::kOpPushSym:
-	case Script::kOpPush3:
 	case Script::kOpPush4: {
+		// ScummVM-only hot-path cleanup: push4 shares the split-operand storage
+		// format with self-relative symbols, but it is an integer literal, so it
+		// must not touch the pool-string decoder/cache at all.
+		pc++;
+		return Value::makeInt((int32)script.getSplitOperand(pc - 1));
+	}
+
+	case Script::kOpPushSym:
+	case Script::kOpPush3: {
 		Common::String sym = script.getSelfRelString(pc);
 		uint16 headOp = inst.opcode;
 		pc++;
-		// push4 (0x0004) is a 32-bit INTEGER literal, not a name: the value's
-		// bits are the same split dword used for self-relative symbol operands
-		// (atom decoder 0x0041a550 case 4 reads a dword from opcode+2).
-		if (headOp == Script::kOpPush4)
-			return Value::makeInt((int32)script.getSplitOperand(pc - 1));
 		// A name immediately followed by '(' is a call atom: parse and evaluate
 		// the balanced argument list, then dispatch (TI.EXE 0x0041a609 checks
 		// the next opcode for kOpOpenParen and sizes the span via 0x0040b690).
@@ -1027,33 +1029,31 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 }
 
 Value ScriptVM::evaluateExpression(const Script &script, uint32 &pc) {
-	// atom (operator atom)* reduced by precedence, per evaluator 0x00419cf0.
-	Common::Array<Value> operands;
-	Common::Array<uint16> operators;
+	return evaluateExpression(script, pc, 1);
+}
 
-	operands.push_back(decodeAtom(script, pc));
-	while (pc < script.getInstructionCount() &&
-			Script::isOperator(script.getInstruction(pc).opcode)) {
-		operators.push_back(script.getInstruction(pc).opcode);
+Value ScriptVM::evaluateExpression(const Script &script, uint32 &pc, uint8 minBindingPower) {
+	// ScummVM-only optimization of TI.EXE's expression reducer: native stores
+	// atom/operator lists and then reduces precedence classes, but using the
+	// same recovered precedence table as binding powers avoids per-expression
+	// Common::Array allocations in idle/hittest hot paths.
+	Value lhs = decodeAtom(script, pc);
+	while (pc < script.getInstructionCount()) {
+		const uint16 op = script.getInstruction(pc).opcode;
+		if (!Script::isOperator(op))
+			break;
+
+		const uint8 prec = Script::operatorPrecedence(op);
+		const uint8 bindingPower = 7 - prec; // native precedence 0 is tightest
+		if (bindingPower < minBindingPower)
+			break;
+
 		pc++;
-		operands.push_back(decodeAtom(script, pc));
+		Value rhs = evaluateExpression(script, pc, bindingPower + 1);
+		lhs = applyBinary(op, lhs, rhs);
 	}
 
-	// Reduce by precedence class (0 binds tightest), left-to-right within a
-	// class, matching the reduction loop at 0x00419e5e.
-	for (uint8 prec = 0; prec <= 6; ++prec) {
-		for (uint32 i = 0; i < operators.size();) {
-			if (Script::operatorPrecedence(operators[i]) == prec) {
-				operands[i] = applyBinary(operators[i], operands[i], operands[i + 1]);
-				operands.remove_at(i + 1);
-				operators.remove_at(i);
-			} else {
-				++i;
-			}
-		}
-	}
-
-	return operands[0];
+	return lhs;
 }
 
 uint32 ScriptVM::runProgram(const Script &script, uint32 maxSteps) {

@@ -35,6 +35,10 @@ bool Script::parse(Common::SeekableReadStream *stream) {
 	_poolOffset = 0;
 	_code.clear();
 	_payload.clear();
+	_selfRelStringCache.clear();
+	_selfRelStringCached.clear();
+	_defsScanned = false;
+	_defs.clear();
 
 	if (!stream)
 		return false;
@@ -73,6 +77,11 @@ bool Script::parse(Common::SeekableReadStream *stream) {
 	}
 
 	_poolOffset = pos;
+	// Allocate the lazy string cache once per parsed resource. Entries are
+	// filled on demand so scripts that are only scanned for metadata do not pay
+	// to decode every pool reference up front.
+	_selfRelStringCache.resize(_code.size());
+	_selfRelStringCached.resize(_code.size(), 0);
 	_valid = true;
 	return true;
 }
@@ -107,20 +116,38 @@ uint32 Script::getSplitOperand(uint32 index) const {
 Common::String Script::getSelfRelString(uint32 index) const {
 	if (index >= _code.size())
 		return Common::String();
+	// This cache is deliberately below the public accessor so all VM call sites
+	// retain the same bounds checks and invalid-string behavior as the uncached
+	// path.
+	if (index < _selfRelStringCached.size() && _selfRelStringCached[index])
+		return _selfRelStringCache[index];
 	// The operand is relative to the instruction's opcode field, which sits 4
 	// bytes into the 8-byte record (after the leading operandB dword).
 	uint32 opcodeFieldOffset = index * 8 + 4;
 	uint32 rel = getSplitOperand(index);
-	return getPoolString(opcodeFieldOffset + rel);
+	Common::String result = getPoolString(opcodeFieldOffset + rel);
+	if (index < _selfRelStringCache.size()) {
+		_selfRelStringCache[index] = result;
+		_selfRelStringCached[index] = 1;
+	}
+	return result;
 }
 
 void Script::neutralizeRange(uint32 first, uint32 last) {
+	if (first >= _code.size())
+		return;
 	if (last >= _code.size())
 		last = _code.size() - 1;
 	for (uint32 i = first; i <= last; ++i) {
 		_code[i].operandB = 0;
 		_code[i].opcode = kOpPushInt;
 		_code[i].operandA = 0;
+		if (i < _selfRelStringCached.size()) {
+			// Structural script edits are rare, but keep the ScummVM cache
+			// coherent for any later diagnostics/disassembly of the edited span.
+			_selfRelStringCached[i] = 0;
+			_selfRelStringCache[i].clear();
+		}
 	}
 }
 

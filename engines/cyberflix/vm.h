@@ -660,6 +660,7 @@ private:
 	 * operator precedence recovered in files/opcode-map.md section 8.
 	 */
 	Value evaluateExpression(const Script &script, uint32 &pc);
+	Value evaluateExpression(const Script &script, uint32 &pc, uint8 minBindingPower);
 
 	/** Decode a single atom (literal/symbol/call) at @p pc, advancing @p pc. */
 	Value decodeAtom(const Script &script, uint32 &pc);

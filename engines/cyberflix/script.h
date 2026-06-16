@@ -415,6 +415,13 @@ private:
 	uint32 _poolOffset;
 	Common::Array<Instruction> _code;
 	Common::Array<byte> _payload;
+
+	// ScummVM-only optimization: native TI.EXE resolves self-relative pool
+	// strings while evaluating each atom, but parsed script resources are
+	// immutable here, so repeated idle/mouse dispatches can reuse the decoded
+	// strings without changing VM semantics.
+	mutable Common::Array<Common::String> _selfRelStringCache;
+	mutable Common::Array<byte> _selfRelStringCached;
 	mutable bool _defsScanned;                  ///< Lazy definitions() cache flag.
 	mutable Common::Array<Definition> _defs;    ///< Cached definition index.
 };
