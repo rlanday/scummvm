@@ -367,7 +367,8 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	// sendtocast('gang.cst', initactors()). Evaluate any leading target
 	// arguments, then capture the trailing message WITHOUT evaluating it.
 	const uint32 count = script.getInstructionCount();
-	Common::Array<Value> targets;
+	Value targets[3];
+	uint32 targetCount = 0;
 	Common::String message;
 	Common::Array<Value> msgArgs;
 
@@ -388,7 +389,14 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 			pc++;
 			parseCallArgs(script, pc, msgArgs);
 		} else {
-			targets.push_back(evaluateExpression(script, pc));
+			Value target = evaluateExpression(script, pc);
+			// sendto* builtins have at most three leading target arguments
+			// (sendtopainting(scene, view, painting, message)). Store those in a
+			// fixed array so hot idle/mouse dispatches do not allocate a
+			// Common::Array just to forward one scene/prop name.
+			if (targetCount < ARRAYSIZE(targets))
+				targets[targetCount] = target;
+			targetCount++;
 		}
 		if (pc < count && script.getInstruction(pc).opcode == Script::kOpArgSep) {
 			pc++;
@@ -404,6 +412,11 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	if (_trace)
 		debug(0, "    message #%#06x -> %s(%u args)", opcode, message.c_str(), msgArgs.size());
 
+	const Common::String empty;
+	const Common::String &target0 = targetCount > 0 ? targets[0].strValue : empty;
+	const Common::String &target1 = targetCount > 1 ? targets[1].strValue : empty;
+	const Common::String &target2 = targetCount > 2 ? targets[2].strValue : empty;
+
 	switch (opcode) {
 	case Script::kMethodSendToStage: // sendtostage(message(...)) -> TI.EXE FUN_0040ad80
 		if (_host)
@@ -416,59 +429,46 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	case Script::kMethodSendToShop: // sendtoshop('file.shp', message) -> TI.EXE FUN_0042b2b0:
 	             // dispatch against [shop script, BOOTFILE res2].
 		if (_host)
-			_host->sendToShop(targets.empty() ? Common::String() : targets[0].strValue,
-					message, msgArgs);
+			_host->sendToShop(target0, message, msgArgs);
 		break;
 	case Script::kMethodSendToShopFx: // sendtoshopfx('file.shp', message) -> return dispatch result.
 		if (_host)
-			return _host->sendToShopFx(targets.empty() ? Common::String() : targets[0].strValue,
-					message, msgArgs);
+			return _host->sendToShopFx(target0, message, msgArgs);
 		break;
 	case Script::kMethodSendToProp: // sendtoprop('propname', message) -> TI.EXE FUN_0042ae80:
 	             // dispatch against [prop script, shop script, BOOTFILE res2].
 		if (_host)
-			_host->sendToProp(targets.empty() ? Common::String() : targets[0].strValue,
-					message, msgArgs);
+			_host->sendToProp(target0, message, msgArgs);
 		break;
 	case Script::kMethodSendToActor: // sendtoactor(actor, message) -> actor script, then cast script.
 		if (_host)
-			_host->sendToActor(targets.empty() ? Common::String() : targets[0].strValue,
-					message, msgArgs);
+			_host->sendToActor(target0, message, msgArgs);
 		break;
 	case Script::kMethodSendToCast: // sendtocast('file.cst', message) -> per-cast script dispatch.
 		if (_host)
-			_host->sendToCast(targets.empty() ? Common::String() : targets[0].strValue,
-					message, msgArgs);
+			_host->sendToCast(target0, message, msgArgs);
 		break;
 	case Script::kMethodSendToPuppet: // sendtopuppet(target, message) -> [PUP script, BOOTFILE res2].
 		if (_host)
-			_host->sendToPuppet(targets.empty() ? Common::String() : targets[0].strValue,
-					message, msgArgs);
+			_host->sendToPuppet(target0, message, msgArgs);
 		break;
 	case Script::kMethodSendToScene: // sendtoscene(scene, message) -> TI.EXE FUN_004311e0/
 	             // FUN_00431200: dispatch against the scene's script chain.
 		if (_host)
-			_host->sendToScene(targets.empty() ? Common::String() : targets[0].strValue,
-					message, msgArgs);
+			_host->sendToScene(target0, message, msgArgs);
 		break;
 	case Script::kMethodSendToPainting: // sendtopainting(scene, view, painting, message) -> FUN_00432550/FUN_00432570
 		if (_host)
-			_host->sendToPainting(targets.size() > 0 ? targets[0].strValue : Common::String(),
-					targets.size() > 1 ? targets[1].strValue : Common::String(),
-					targets.size() > 2 ? targets[2].strValue : Common::String(),
-					message, msgArgs);
+			_host->sendToPainting(target0, target1, target2, message, msgArgs);
 		break;
 	case Script::kMethodSendToButton: // sendtobutton(flat, button, message) -> FUN_0040a410/FUN_0040a430:
 	             // chain [button script, node script, stage script, res2].
 		if (_host)
-			_host->sendToButton(targets.size() > 0 ? targets[0].strValue : Common::String(),
-					targets.size() > 1 ? targets[1].strValue : Common::String(),
-					message, msgArgs);
+			_host->sendToButton(target0, target1, message, msgArgs);
 		break;
 	case Script::kMethodSendToFlat: // sendtoflat(flat, message) -> FUN_0040a940/FUN_0040a960
 		if (_host)
-			_host->sendToFlat(targets.empty() ? Common::String() : targets[0].strValue,
-					message, msgArgs);
+			_host->sendToFlat(target0, message, msgArgs);
 		break;
 	default:
 		break;

@@ -662,11 +662,26 @@ const Common::Array<Script::Definition> &Script::definitions() const {
 }
 
 const Script::Definition *Script::findDefinition(const Common::String &name) const {
-	// Case-insensitive match, mirroring the Pascal-string compare the matcher
-	// uses (TI.EXE 0x0041ae80).
+	// Definitions are cached lowercased. Most dispatch names are already
+	// lowercased by the parser/VM hot path, so compare exactly and only build a
+	// folded copy for the uncommon mixed-case caller. This keeps TI.EXE's
+	// case-insensitive matching without paying equalsIgnoreCase() for every
+	// definition in every idle/mouse sendto* dispatch.
+	Common::String folded;
+	const Common::String *key = &name;
+	for (uint32 i = 0; i < name.size(); ++i) {
+		char c = name[i];
+		if (c >= 'A' && c <= 'Z') {
+			folded = name;
+			folded.toLowercase();
+			key = &folded;
+			break;
+		}
+	}
+
 	const Common::Array<Definition> &defs = definitions();
 	for (uint32 i = 0; i < defs.size(); ++i) {
-		if (defs[i].name.equalsIgnoreCase(name))
+		if (defs[i].name == *key)
 			return &defs[i];
 	}
 	return nullptr;
