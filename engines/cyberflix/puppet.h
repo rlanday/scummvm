@@ -118,6 +118,8 @@ public:
 	uint32 actionCount() const { return _actions.size(); }
 	const ActionEntry *actionAt(uint32 index) const;
 	const ActionEntry *actionByName(const Common::String &name) const;
+	bool actionFramesVisuallyEqual(const ActionEntry &action, uint32 frameA,
+			uint32 frameB, bool skipLayer0) const;
 	bool renderActionFrame(const ActionEntry &action, uint32 frameIndex,
 			Graphics::Surface &screen, bool skipLayer0) const;
 	bool renderBevelBackdrop(Graphics::Surface &screen, int screenHeight, int screenWidth) const;

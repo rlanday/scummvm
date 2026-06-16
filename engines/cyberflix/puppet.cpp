@@ -424,6 +424,41 @@ bool Puppet::renderCelResource(uint32 resId, int16 nativeY, int16 nativeX,
 	return renderCelImage(*cel, nativeY, nativeX, screen);
 }
 
+bool Puppet::actionFramesVisuallyEqual(const ActionEntry &action, uint32 frameA,
+		uint32 frameB, bool skipLayer0) const {
+	if (frameA == frameB)
+		return true;
+	if (action.frameCount == 0)
+		return true;
+	if (frameA >= action.frameCount)
+		frameA = action.frameCount - 1;
+	if (frameB >= action.frameCount)
+		frameB = action.frameCount - 1;
+
+	const Common::Array<RenderFrame> *frames = cachedActionFrames(action);
+	if (!frames || frameA >= frames->size() || frameB >= frames->size())
+		return false;
+
+	const RenderFrame &a = (*frames)[frameA];
+	const RenderFrame &b = (*frames)[frameB];
+	uint ia = 0;
+	uint ib = 0;
+	for (;;) {
+		while (skipLayer0 && ia < a.layers.size() && a.layers[ia].layer == 0)
+			++ia;
+		while (skipLayer0 && ib < b.layers.size() && b.layers[ib].layer == 0)
+			++ib;
+		if (ia >= a.layers.size() || ib >= b.layers.size())
+			return ia >= a.layers.size() && ib >= b.layers.size();
+
+		const RenderLayer &la = a.layers[ia++];
+		const RenderLayer &lb = b.layers[ib++];
+		if (la.layer != lb.layer || la.nativeY != lb.nativeY ||
+				la.nativeX != lb.nativeX || la.cel.get() != lb.cel.get())
+			return false;
+	}
+}
+
 bool Puppet::renderActionFrame(const ActionEntry &action, uint32 frameIndex,
 		Graphics::Surface &screen, bool skipLayer0) const {
 	if (action.frameCount == 0)

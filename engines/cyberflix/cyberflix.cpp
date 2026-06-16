@@ -1521,6 +1521,7 @@ void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
 
 	const uint32 frameCount = action.frameCount ? action.frameCount : 1;
 	uint32 lastFrame = (uint32)-1;
+	uint32 lastPresentedFrame = (uint32)-1;
 	const uint32 wallStart = _system->getMillis();
 	// Puppet speech redraws animation frames at native 30 fps against the same
 	// puppetgrab backdrop. Cache that grabbed SET/STG image once per action so
@@ -1542,7 +1543,11 @@ void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
 			frame = frameCount - 1;
 		if (frame != lastFrame) {
 			_puppetCurrentFrame = frame;
-			renderPuppetFrame(action, frame, true, cachedBackdrop);
+			if (lastPresentedFrame == (uint32)-1 ||
+					!_puppet->actionFramesVisuallyEqual(action, lastPresentedFrame, frame, _puppetGrab)) {
+				renderPuppetFrame(action, frame, true, cachedBackdrop);
+				lastPresentedFrame = frame;
+			}
 			lastFrame = frame;
 		}
 		bool aborted = false;
@@ -1577,9 +1582,10 @@ void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
 				MIN<uint32>(nextFrameMs - elapsed, kPuppetActionPollCapMs) : 1);
 	}
 	_puppetCurrentFrame = frameCount - 1;
-	// If playback timing already presented the final frame, avoid one redundant
-	// backend swap at the end of the action.
-	if (lastFrame != _puppetCurrentFrame)
+	// If playback timing already presented the final visual frame, avoid one
+	// redundant backend swap at the end of the action.
+	if (lastPresentedFrame == (uint32)-1 ||
+			!_puppet->actionFramesVisuallyEqual(action, lastPresentedFrame, _puppetCurrentFrame, _puppetGrab))
 		renderPuppetFrame(action, _puppetCurrentFrame, true, cachedBackdrop);
 }
 
