@@ -150,14 +150,6 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
 // zeros that prefixes each residual.
 static const byte kFrameMagTable[16] = { 8, 8, 8, 8, 8, 8, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0 };
 
-// Index of the most significant set bit of @p v, or -1 if @p v is zero.
-static int highestBit16(uint16 v) {
-	// DPCM classifies one variable-length code per output pixel, so this is a
-	// hot path. Use ScummVM's portable intrinsic/table wrapper instead of
-	// scanning all 16 bit positions each time.
-	return Common::intLog2(v);
-}
-
 // Decoder state for a single frame. All pointers are byte offsets into @c _dst
 // (the padded working surface) or @c _src (the compressed stream).
 class FrameDecoder {
@@ -244,6 +236,10 @@ private:
 	// byte/word/dword granularity so self-overlapping runs match exactly.
 	void dcopy(int d, int s, int n) {
 		if (!destRange(d, n) || !destRange(s, n)) { _ok = false; return; }
+		if (d + n <= s || s + n <= d) {
+			memcpy(_dst + d, _dst + s, n);
+			return;
+		}
 		if (n & 1) { _dst[d] = _dst[s]; ++d; ++s; }
 		if (n & 2) { _dst[d] = _dst[s]; _dst[d + 1] = _dst[s + 1]; d += 2; s += 2; }
 		for (int k = n >> 2; k > 0; --k) {
@@ -271,25 +267,25 @@ private:
 	//                          code is (mag + 2) bits long.
 	// Returns the advanced destination offset.
 	int dpcm(int pe, int di, int budget) {
+		if (budget <= 0)
+			return di;
+		if (!destRange(di, budget) || !destRange(pe, budget)) {
+			_ok = false;
+			return di;
+		}
+
 		uint16 ax = readWordBE();   // current code window (MSB first)
 		uint16 dxw = readWordBE();  // look-ahead bits feeding into ax
 		int bits = 16;              // valid bits remaining in ax
+		byte *dst = _dst;
 		while (_ok) {
-			const int cx = highestBit16(ax);
 			int consume;            // number of code bits this symbol occupies
-			if (ax == 0 || cx < 8) {
-				// Escape: predicted byte plus the low 8 bits of the window.
-				if (!destRange(di, 1) || pe < 0 || pe >= _dstSize) { _ok = false; break; }
-				_dst[di] = (byte)((ax + _dst[pe]) & 0xff);
+			if (ax & 0x8000) {
+				// Most smooth gradients encode "same as predictor" as a single
+				// high bit. Test that bit directly instead of classifying the
+				// whole 16-bit window for every pixel in this hottest DPCM path.
+				dst[di] = dst[pe];
 				++di; ++pe;
-				consume = 16;
-			} else if (cx == 15) {
-				// Copy the predictor verbatim; this symbol is a single set bit.
-				if (!destRange(di, 1) || pe < 0 || pe >= _dstSize) { _ok = false; break; }
-				_dst[di] = _dst[pe];
-				++di; ++pe;
-				// Shift that one bit out of the window and refill, decrementing the
-				// pixel budget (this branch resolves the symbol on its own).
 				ax = (uint16)((ax << 1) | (dxw >> 15));
 				--bits; --budget;
 				if (budget == 0) break;
@@ -297,19 +293,25 @@ private:
 					dxw = (uint16)(dxw << 1);
 				else { dxw = readWordBE(); bits = 16; }
 				continue;
+			}
+			if (ax < 0x0100) {
+				// Escape: predicted byte plus the low 8 bits of the window.
+				dst[di] = (byte)((ax + dst[pe]) & 0xff);
+				++di; ++pe;
+				consume = 16;
 			} else {
 				// Signed residual: magnitude by code length, sign from the bit just
 				// below the leading one.
+				const int cx = Common::intLog2(ax);
 				const int c = cx - 1;
 				const int sign = (ax >> c) & 1;
 				const int mag = kFrameMagTable[c];
-				if (!destRange(di, 1) || pe < 0 || pe >= _dstSize) { _ok = false; break; }
-				_dst[di] = _dst[pe];
+				dst[di] = dst[pe];
 				++di; ++pe;
 				if (sign)
-					_dst[di - 1] = (byte)((_dst[di - 1] + mag) & 0xff);
+					dst[di - 1] = (byte)((dst[di - 1] + mag) & 0xff);
 				else
-					_dst[di - 1] = (byte)((_dst[di - 1] - mag) & 0xff);
+					dst[di - 1] = (byte)((dst[di - 1] - mag) & 0xff);
 				consume = mag + 2;
 			}
 
@@ -367,16 +369,16 @@ private:
 				edx -= n; ref += n;
 				if (!destRange(di, n) || di < 1) { _ok = false; return; }
 				const byte v = _dst[di - 1];
-				for (int i = 0; i < n; ++i)
-					_dst[di++] = v;
+				memset(_dst + di, v, n);
+				di += n;
 			} else if (!b0 && b1 && !b2) {      // skip (leave as-is)
 				edx -= n; ref += n; di += n;
 			} else if (!b0 && b1 && b2) {       // RLE fill from one stream byte
 				edx -= n; ref += n;
 				if (!destRange(di, n)) { _ok = false; return; }
 				const byte v = readByte();
-				for (int i = 0; i < n; ++i)
-					_dst[di++] = v;
+				memset(_dst + di, v, n);
+				di += n;
 			} else if (b0 && !b1 && !b2) {      // pure DPCM (predict from reference row)
 				edx -= n;
 				di = dpcm(ref, di, n);
