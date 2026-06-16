@@ -145,11 +145,6 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
 // inter-row predictors reference rows up to four lines above or below the
 // current one, so the working buffer carries padding rows of zero on each side.
 
-// Magnitude table for the DPCM bit-mode, indexed by the high-bit position of
-// the 16-bit code window (TI.EXE 0x00457b00). Equivalently the run of leading
-// zeros that prefixes each residual.
-static const byte kFrameMagTable[16] = { 8, 8, 8, 8, 8, 8, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0 };
-
 // Decoder state for a single frame. All pointers are byte offsets into @c _dst
 // (the padded working surface) or @c _src (the compressed stream).
 class FrameDecoder {
@@ -190,7 +185,7 @@ public:
 				// Exact copy of a neighbouring row 1..4 lines above or below.
 				static const int kCopyRef[19] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 						0, -4, -3, -2, -1, 1, 2, 3, 4 };
-				dcopy(di, di + kCopyRef[k] * _w, contentWidth);
+				copyFromRefRow(di, di + kCopyRef[k] * _w, contentWidth);
 				di = rowStart + _w;
 			} else {
 				_ok = false;
@@ -232,6 +227,18 @@ private:
 		_s += n;
 	}
 
+	void copyFromRefRow(int di, int ref, int n) {
+		// Reference-row copies do not overlap for valid row-sized runs, so bypass
+		// dcopy()'s overlap-preserving loop here; that path showed up as a SET
+		// transition hotspot when decodeDeltaRow() copied unchanged spans.
+		if (n > _w) {
+			dcopy(di, ref, n);
+			return;
+		}
+		if (!destRange(di, n) || !destRange(ref, n)) { _ok = false; return; }
+		memcpy(_dst + di, _dst + ref, n);
+	}
+
 	// Copy @p n bytes within the destination, reproducing the original's
 	// byte/word/dword granularity so self-overlapping runs match exactly.
 	void dcopy(int d, int s, int n) {
@@ -262,7 +269,7 @@ private:
 	//   - ax == 0 or cx < 8   escape: the residual is the window's low 8 bits and
 	//                          the whole window (16 bits) is consumed;
 	//   - cx == 15            the predictor is copied unchanged (1 bit consumed);
-	//   - 8 <= cx <= 14       a residual of fixed magnitude kFrameMagTable[cx-1]
+	//   - 8 <= cx <= 14       a signed residual of magnitude 15 - cx
 	//                          with the sign taken from the next code bit; the
 	//                          code is (mag + 2) bits long.
 	// Returns the advanced destination offset.
@@ -282,33 +289,40 @@ private:
 			int consume;            // number of code bits this symbol occupies
 			if (ax & 0x8000) {
 				// Most smooth gradients encode "same as predictor" as consecutive
-				// one-bit symbols. Batch the leading 1 bits in the current window:
-				// reference-row prediction becomes a memcpy, while left prediction
-				// (pe == di - 1) becomes a fill of the previous output byte. Limit
-				// the batch to @c bits so reload/backtracking state stays identical
-				// to consuming the symbols one at a time.
-				uint16 inv = (uint16)~ax;
-				int run = inv ? 15 - Common::intLog2(inv) : 16;
-				if (run > bits)
-					run = bits;
-				if (run > budget)
-					run = budget;
+				// one-bit symbols. Batch across bit-window reloads so long
+				// predictor-copy spans become one libc copy/fill instead of many
+				// tiny calls, while preserving the native reader's final backtrack.
+				int run = 0;
+				do {
+					const uint16 inv = (uint16)~ax;
+					int chunk = inv ? 15 - Common::intLog2(inv) : 16;
+					if (chunk > bits)
+						chunk = bits;
+					if (chunk > budget - run)
+						chunk = budget - run;
+
+					if (chunk == 16)
+						ax = dxw;
+					else
+						ax = (uint16)((ax << chunk) | (dxw >> (16 - chunk)));
+					bits -= chunk;
+					run += chunk;
+
+					if (run == budget)
+						break;
+					if (bits != 0)
+						dxw = (uint16)(dxw << chunk);
+					else { dxw = readWordBE(); bits = 16; }
+				} while (_ok && (ax & 0x8000));
+				if (!_ok)
+					break;
 
 				if (pe + 1 == di)
 					memset(dst + di, dst[pe], run);
 				else
 					memcpy(dst + di, dst + pe, run);
-
-				if (run == 16)
-					ax = dxw;
-				else
-					ax = (uint16)((ax << run) | (dxw >> (16 - run)));
-				bits -= run;
 				di += run; pe += run; budget -= run;
 				if (budget == 0) break;
-				if (bits != 0)
-					dxw = (uint16)(dxw << run);
-				else { dxw = readWordBE(); bits = 16; }
 				continue;
 			}
 			if (ax < 0x0100) {
@@ -320,15 +334,10 @@ private:
 				// Signed residual: magnitude by code length, sign from the bit just
 				// below the leading one.
 				const int cx = Common::intLog2(ax);
-				const int c = cx - 1;
-				const int sign = (ax >> c) & 1;
-				const int mag = kFrameMagTable[c];
-				dst[di] = dst[pe];
+				const int mag = 15 - cx;
+				const int sign = (ax >> (cx - 1)) & 1;
+				dst[di] = (byte)((dst[pe] + (sign ? mag : -mag)) & 0xff);
 				++di; ++pe;
-				if (sign)
-					dst[di - 1] = (byte)((dst[di - 1] + mag) & 0xff);
-				else
-					dst[di - 1] = (byte)((dst[di - 1] - mag) & 0xff);
 				consume = mag + 2;
 			}
 
@@ -373,43 +382,55 @@ private:
 		int edx = contentWidth;
 		while (edx > 0 && _ok) {
 			const byte c = readByte();
-			const int b0 = c & 1, b1 = (c >> 1) & 1, b2 = (c >> 2) & 1;
 			const int n = readRunLength(c);
 			if (!_ok)
 				return;
-			if (!b0 && !b1 && !b2) {            // one literal byte, then DPCM (predict from left)
+			switch (c & 7) {
+			case 0: {                           // one literal byte, then DPCM (predict from left)
 				edx -= n; ref += n;
 				if (!destRange(di, 1) || _s >= _srcSize) { _ok = false; return; }
 				_dst[di] = readByte(); ++di;
 				di = dpcm(di - 1, di, n - 1);
-			} else if (!b0 && !b1 && b2) {      // repeat the previous byte
+				break;
+			}
+			case 4: {                           // repeat the previous byte
 				edx -= n; ref += n;
 				if (!destRange(di, n) || di < 1) { _ok = false; return; }
 				const byte v = _dst[di - 1];
 				memset(_dst + di, v, n);
 				di += n;
-			} else if (!b0 && b1 && !b2) {      // skip (leave as-is)
+				break;
+			}
+			case 2:                             // skip (leave as-is)
 				edx -= n; ref += n; di += n;
-			} else if (!b0 && b1 && b2) {       // RLE fill from one stream byte
+				break;
+			case 6: {                           // RLE fill from one stream byte
 				edx -= n; ref += n;
 				if (!destRange(di, n)) { _ok = false; return; }
 				const byte v = readByte();
 				memset(_dst + di, v, n);
 				di += n;
-			} else if (b0 && !b1 && !b2) {      // pure DPCM (predict from reference row)
+				break;
+			}
+			case 1:                             // pure DPCM (predict from reference row)
 				edx -= n;
 				di = dpcm(ref, di, n);
 				ref += n;
-			} else if (b0 && !b1 && b2) {       // literal copy from the stream
+				break;
+			case 5:                             // literal copy from the stream
 				edx -= n; ref += n;
 				copyFromSrc(di, n); di += n;
-			} else if (b0 && b1 && !b2) {       // copy from the reference row
+				break;
+			case 3:                             // copy from the reference row
 				edx -= n;
-				dcopy(di, ref, n); di += n; ref += n;
-			} else {                            // LZ back-reference within the row
+				copyFromRefRow(di, ref, n); di += n; ref += n;
+				break;
+			default: {                          // LZ back-reference within the row
 				edx -= n; ref += n;
 				const int dist = readWordLE();
 				dcopy(di, di - dist, n); di += n;
+				break;
+			}
 			}
 		}
 	}
@@ -437,8 +458,9 @@ uint32 FrameSequence::applyFrame(const byte *src, uint32 srcSize) {
 		_width = (uint16)width;
 		_height = (uint16)height;
 		_pitch = width;
-		_work.resize((height + 2 * kPad) * _pitch);
-		memset(_work.begin(), 0, _work.size());
+		// Value-initialize the retained surface and predictor padding rows once;
+		// an extra memset here showed up as bzero during SET-transition profiles.
+		_work.resize((height + 2 * kPad) * _pitch, 0);
 	} else if (width != _width || height != _height) {
 		return 0;
 	}
