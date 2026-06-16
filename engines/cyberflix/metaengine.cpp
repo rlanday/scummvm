@@ -21,6 +21,9 @@
 
 #include "base/plugins.h"
 
+#include "common/algorithm.h"
+#include "common/savefile.h"
+#include "common/system.h"
 #include "common/translation.h"
 
 #include "engines/advancedDetector.h"
@@ -29,6 +32,50 @@
 #include "cyberflix/detection.h"
 
 namespace Cyberflix {
+
+static bool readFastSaveString(Common::SeekableReadStream &in, int64 end, Common::String &s) {
+	if (in.pos() + 4 > end)
+		return false;
+	uint32 len = in.readUint32LE();
+	if (in.pos() + len > end)
+		return false;
+	s.clear();
+	if (!len)
+		return !in.err();
+	Common::Array<char> buf;
+	buf.resize(len);
+	return in.read(buf.begin(), len) == len && (s = Common::String(buf.begin(), len), true);
+}
+
+static bool readFastChunkHeader(Common::SeekableReadStream &in, char tag[5], int64 &end) {
+	if (in.pos() + 8 > in.size())
+		return false;
+	if (in.read(tag, 4) != 4)
+		return false;
+	tag[4] = 0;
+	uint32 size = in.readUint32LE();
+	end = in.pos() + size;
+	return end <= in.size();
+}
+
+static bool readCyberflixSaveDescription(Common::SeekableReadStream &in, Common::String &description) {
+	char magic[5] = {};
+	if (in.read(magic, 4) != 4 || memcmp(magic, "CFXS", 4))
+		return false;
+	if (in.readUint32LE() != 1)
+		return false;
+
+	char tag[5];
+	int64 end = 0;
+	if (!readFastChunkHeader(in, tag, end) || strcmp(tag, "HEAD"))
+		return false;
+
+	Common::String signature;
+	if (!readFastSaveString(in, end, signature) ||
+			!readFastSaveString(in, end, description))
+		return false;
+	return !in.err();
+}
 
 static const ADExtraGuiOptionsMap optionsList[] = {
 	{
@@ -62,6 +109,39 @@ public:
 
 	bool hasFeature(MetaEngineFeature f) const override {
 		return checkExtendedSaves(f);
+	}
+
+	SaveStateList listSaves(const char *target) const override {
+		Common::SaveFileManager *saveFileMan = g_system->getSavefileManager();
+		Common::StringArray filenames = saveFileMan->listSavefiles(getSavegameFilePattern(target));
+
+		SaveStateList saveList;
+		for (const auto &file : filenames) {
+			const char *slotStr = file.c_str() + file.size() - 2;
+			const char *prev = slotStr - 1;
+			if (*prev >= '0' && *prev <= '9')
+				slotStr = prev;
+			int slotNum = atoi(slotStr);
+			if (slotNum < 0 || slotNum > getMaximumSaveSlot())
+				continue;
+
+			Common::ScopedPtr<Common::InSaveFile> saveFile(saveFileMan->openForLoading(file));
+			Common::String description;
+			if (!saveFile || !readCyberflixSaveDescription(*saveFile, description))
+				continue;
+
+			// CyberFlix saves are large because they persist open audio/runtime
+			// state. The common extended-save metadata lives in a footer, and
+			// seeking there inside a compressed save forces gzip to inflate most
+			// of the file for every slot. The CyberFlix HEAD chunk is at the
+			// front, so use it for the initial chooser list; the GUI still calls
+			// querySaveMetaInfos() lazily for visible/selected slots that need
+			// thumbnails, dates, and playtime.
+			saveList.push_back(SaveStateDescriptor(this, slotNum, description));
+		}
+
+		Common::sort(saveList.begin(), saveList.end(), SaveStateDescriptorSlotComparator());
+		return saveList;
 	}
 };
 
