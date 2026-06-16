@@ -3345,20 +3345,28 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 // renders noticeably lighter than the raw clut colors. _screenClut stays
 // pre-gamma like DAT_0045f3c8 (fades interpolate raw cluts and re-apply the
 // curve every step, matching FUN_0041ba80 -> FUN_004010f0).
-void CyberflixEngine::programPalette(const byte (&rgb)[256 * 3]) {
-	memcpy(_screenClut, rgb, sizeof(_screenClut));
-
-	byte gammaTable[3][256];
+void CyberflixEngine::updatePaletteGammaTable() {
+	if (!_paletteGammaTableDirty)
+		return;
+	// Fades call programPalette() once per 60 Hz step. Gamma changes only via
+	// F1-F9, so cache the expensive pow() lookup table and reuse it across fade
+	// steps instead of rebuilding it for every palette update.
 	for (int c = 0; c < 3; ++c) {
 		for (int i = 0; i < 256; ++i)
-			gammaTable[c][i] = (byte)(pow(i / 255.0, _paletteGamma[c]) * 255.0); // trunc, like __ftol
+			_paletteGammaTable[c][i] = (byte)(pow(i / 255.0, _paletteGamma[c]) * 255.0); // trunc, like __ftol
 	}
+	_paletteGammaTableDirty = false;
+}
+
+void CyberflixEngine::programPalette(const byte (&rgb)[256 * 3]) {
+	memcpy(_screenClut, rgb, sizeof(_screenClut));
+	updatePaletteGammaTable();
 
 	byte hw[256 * 3];
 	for (int i = 0; i < 256; ++i) {
-		hw[i * 3 + 0] = gammaTable[0][_screenClut[i * 3 + 0]];
-		hw[i * 3 + 1] = gammaTable[1][_screenClut[i * 3 + 1]];
-		hw[i * 3 + 2] = gammaTable[2][_screenClut[i * 3 + 2]];
+		hw[i * 3 + 0] = _paletteGammaTable[0][_screenClut[i * 3 + 0]];
+		hw[i * 3 + 1] = _paletteGammaTable[1][_screenClut[i * 3 + 1]];
+		hw[i * 3 + 2] = _paletteGammaTable[2][_screenClut[i * 3 + 2]];
 	}
 	_system->getPaletteManager()->setPalette(hw, 0, 256);
 }
@@ -3478,12 +3486,15 @@ void CyberflixEngine::fadePaletteSteps(const byte (&from)[256 * 3], const byte (
 	if (steps < 1)
 		steps = 1;
 	uint32 startMs = _system->getMillis();
+	bool reachedFinalStep = false;
 	for (int s = 1; s <= steps && !shouldQuit(); ++s) {
 		byte cur[256 * 3];
 		for (int i = 0; i < 256 * 3; ++i)
 			cur[i] = (byte)(from[i] + ((int)to[i] - (int)from[i]) * s / steps);
 		programPalette(cur);
 		_system->updateScreen();
+		if (s == steps)
+			reachedFinalStep = true;
 		// One step per 60 Hz tick of the original's scaled timer.
 		uint32 deadline = startMs + (uint32)((uint64)s * 1000 / 60);
 		uint32 now = _system->getMillis();
@@ -3493,8 +3504,13 @@ void CyberflixEngine::fadePaletteSteps(const byte (&from)[256 * 3], const byte (
 		while (_eventMan->pollEvent(event))
 			; // keep the window live; fades are not skippable in the original
 	}
-	programPalette(to);
-	_system->updateScreen();
+	if (!reachedFinalStep) {
+		// Preserve the old "finish at target palette" behavior if the loop exits
+		// early, but avoid a duplicate final update when the last timed step
+		// already displayed the target palette.
+		programPalette(to);
+		_system->updateScreen();
+	}
 }
 
 // visualeffect(effect, dur) (FUN_00446400): mark a full-screen dirty rect
@@ -4293,6 +4309,7 @@ bool CyberflixEngine::handleGlobalKey(const Common::Event &event) {
 
 	for (int i = 0; i < 3; ++i)
 		_paletteGamma[i] = CLIP(_paletteGamma[i], kPaletteGammaMin, kPaletteGammaMax);
+	_paletteGammaTableDirty = true;
 
 	byte rgb[256 * 3];
 	memcpy(rgb, _screenClut, sizeof(rgb));

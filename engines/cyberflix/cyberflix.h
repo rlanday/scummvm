@@ -556,6 +556,7 @@ private:
 	 * writes funnel through here so fades always start from the true state.
 	 */
 	void programPalette(const byte (&rgb)[256 * 3]);
+	void updatePaletteGammaTable();
 
 	/** Linear palette fade @p from -> @p to, one step per 60 Hz tick of the
 	 *  original's scaled timer (TI.EXE FUN_0041b200 step loop). */
@@ -574,6 +575,8 @@ private:
 	 */
 	byte _screenClut[256 * 3] = {};
 	double _paletteGamma[3] = { 0.65, 0.65, 0.65 };
+	byte _paletteGammaTable[3][256] = {};
+	bool _paletteGammaTableDirty = true;
 
 	Common::String _saveSignature; ///< Current savegame()/opengame() argument while a ScummVM dialog is active.
 	int _pendingLoadSlot = -1;
