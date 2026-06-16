@@ -60,6 +60,7 @@ public:
 		uint32 frameResourceId = 0;
 		Common::String text;
 		Common::String name;
+		uint32 cacheIndex = 0;
 	};
 
 	enum {
@@ -124,12 +125,26 @@ public:
 	bool loadPuppetPalette(byte *rgb) const;
 
 private:
+	struct RenderLayer {
+		uint8 layer = 0;
+		int16 nativeY = 0;
+		int16 nativeX = 0;
+		Common::SharedPtr<CelImage> cel;
+	};
+
+	struct RenderFrame {
+		Common::Array<RenderLayer> layers;
+	};
+
 	const byte *engineBase(uint32 index) const;
 	const byte *payload(uint32 index) const;
 	int resourceIndexById(uint32 id) const;
 	Common::String pascalString(const byte *p) const;
 	Common::SharedPtr<Script> parseScriptResource(uint32 resId) const;
 	Common::SharedPtr<CelImage> celResource(uint32 resId) const;
+	const Common::Array<RenderFrame> *cachedActionFrames(const ActionEntry &action) const;
+	bool renderCelImage(const CelImage &cel, int16 nativeY, int16 nativeX,
+			Graphics::Surface &screen) const;
 	uint32 baseDisplayListResource(int16 baseState) const;
 	uint32 displayLayerResourceId(uint32 displayListResourceId,
 			uint32 layer, int16 celIndex) const;
@@ -147,6 +162,7 @@ private:
 	Common::Array<ScriptEntry> _scripts;
 	Common::Array<ActionEntry> _actions;
 	mutable Common::HashMap<uint32, Common::SharedPtr<CelImage> > _celCache;
+	mutable Common::HashMap<uint32, Common::Array<RenderFrame> > _actionFrameCache;
 };
 
 } // End of namespace Cyberflix

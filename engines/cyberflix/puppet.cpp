@@ -88,6 +88,7 @@ bool Puppet::open(const Common::String &name) {
 	_scripts.clear();
 	_actions.clear();
 	_celCache.clear();
+	_actionFrameCache.clear();
 	_puppetName.clear();
 	_sourceName = name;
 	_sourceName.toLowercase();
@@ -141,6 +142,7 @@ bool Puppet::open(const Common::String &name) {
 		action.frameResourceId = READ_LE_UINT32(entry + kMasterActionFrameResourceOffset);
 		action.text = pascalString(entry + kMasterActionTextOffset);
 		action.name = pascalString(entry + kMasterActionNameOffset);
+		action.cacheIndex = i;
 		_actions.push_back(action);
 	}
 
@@ -239,6 +241,130 @@ Common::SharedPtr<CelImage> Puppet::celResource(uint32 resId) const {
 	return cel;
 }
 
+const Common::Array<Puppet::RenderFrame> *Puppet::cachedActionFrames(
+		const ActionEntry &action) const {
+	if (action.frameCount == 0)
+		return nullptr;
+
+	Common::HashMap<uint32, Common::Array<RenderFrame> >::const_iterator cached =
+			_actionFrameCache.find(action.cacheIndex);
+	if (cached != _actionFrameCache.end())
+		return &cached->_value;
+
+	Common::Array<RenderFrame> &frames = _actionFrameCache[action.cacheIndex];
+	frames.resize(action.frameCount);
+
+	int frameIdx = resourceIndexById(action.frameResourceId);
+	if (frameIdx < 0)
+		return &frames;
+	const Archive::Resource &res = _archive.getResource((uint32)frameIdx);
+	const byte *base = engineBase((uint32)frameIdx);
+	if (!base)
+		return &frames;
+
+	uint32 displayList = baseDisplayListResource(action.baseState);
+	if (displayList == 0)
+		return &frames;
+	int displayIdx = resourceIndexById(displayList);
+	const byte *displayBase = displayIdx >= 0 ? engineBase((uint32)displayIdx) : nullptr;
+	if (!displayBase)
+		return &frames;
+
+	// Puppet speech re-renders every action frame at 30 fps. Cache the resolved
+	// frame/layer/CEL pointers once per action so playback avoids repeated
+	// resource-table scans and hash lookups in the sampled inner loop.
+	const uint32 availableFrames = MIN<uint32>(action.frameCount,
+			(uint32)(((uint64)res.length + 4) / kFrameRecordStride));
+	for (uint32 frame = 0; frame < availableFrames; ++frame) {
+		const byte *record = base + frame * kFrameRecordStride;
+		if (record + kFrameRecordLayersOffset + kDisplayLayerCount * kFrameLayerStride >
+				_fileData.end())
+			break;
+		for (uint32 layer = 0; layer < kDisplayLayerCount; ++layer) {
+			const byte *entry = record + kFrameRecordLayersOffset + layer * kFrameLayerStride;
+			int16 celIndex = (int16)READ_LE_UINT16(entry);
+			if (celIndex < 0)
+				continue;
+
+			uint32 off = kDisplayLayerOffset + layer * kDisplayLayerStride;
+			if (displayBase + off + 2 > _fileData.end())
+				continue;
+			int16 count = (int16)READ_LE_UINT16(displayBase + off);
+			if (count < 0 || count > kDisplayLayerMaxResources || celIndex >= count)
+				continue;
+
+			const byte *resEntry = displayBase + off + kDisplayLayerResourceListOffset +
+					celIndex * 4;
+			if (resEntry + 4 > _fileData.end())
+				continue;
+			uint32 celResId = READ_LE_UINT32(resEntry);
+			if (celResId == 0xffffffff || celResId == 0)
+				continue;
+
+			Common::SharedPtr<CelImage> cel = celResource(celResId);
+			if (!cel)
+				continue;
+			RenderLayer cachedLayer;
+			cachedLayer.layer = (uint8)layer;
+			cachedLayer.nativeY = (int16)READ_LE_UINT16(entry + 2);
+			cachedLayer.nativeX = (int16)READ_LE_UINT16(entry + 4);
+			cachedLayer.cel = cel;
+			frames[frame].layers.push_back(cachedLayer);
+		}
+	}
+	return &frames;
+}
+
+bool Puppet::renderCelImage(const CelImage &cel, int16 nativeY, int16 nativeX,
+		Graphics::Surface &screen) const {
+	// TI.EXE FUN_0043b940 treats both the frame record and CEL header
+	// coordinate words as QuickDraw-style vertical then horizontal values.
+	const int top = nativeY - cel.originX;
+	const int left = nativeX - cel.originY;
+
+	int srcLeft = 0;
+	int dstLeft = left;
+	int width = cel.width;
+	if (dstLeft < 0) {
+		srcLeft = -dstLeft;
+		width -= srcLeft;
+		dstLeft = 0;
+	}
+	if (dstLeft + width > screen.w)
+		width = screen.w - dstLeft;
+
+	int srcTop = 0;
+	int dstTop = top;
+	int height = cel.height;
+	if (dstTop < 0) {
+		srcTop = -dstTop;
+		height -= srcTop;
+		dstTop = 0;
+	}
+	if (dstTop + height > screen.h)
+		height = screen.h - dstTop;
+
+	if (width <= 0 || height <= 0)
+		return true;
+
+	for (int yy = 0; yy < height; ++yy) {
+		const uint row = (uint)(srcTop + yy) * cel.width + srcLeft;
+		const byte *src = cel.pixels.begin() + row;
+		const byte *opaque = cel.opaque.begin() + row;
+		byte *dst = (byte *)screen.getBasePtr(dstLeft, dstTop + yy);
+		for (int xx = 0; xx < width;) {
+			while (xx < width && !opaque[xx])
+				++xx;
+			const int start = xx;
+			while (xx < width && opaque[xx])
+				++xx;
+			if (start != xx)
+				memcpy(dst + start, src + start, xx - start);
+		}
+	}
+	return true;
+}
+
 uint32 Puppet::baseDisplayListResource(int16 baseState) const {
 	if (baseState < 0 || baseState >= (int16)kBaseControllerStateCount)
 		baseState = 0;
@@ -277,24 +403,7 @@ bool Puppet::renderCelResource(uint32 resId, int16 nativeY, int16 nativeX,
 	if (!cel)
 		return false;
 
-	// TI.EXE FUN_0043b940 treats both the frame record and CEL header
-	// coordinate words as QuickDraw-style vertical then horizontal values.
-	int top = nativeY - cel->originX;
-	int left = nativeX - cel->originY;
-	for (int yy = 0; yy < cel->height; ++yy) {
-		int sy = top + yy;
-		if (sy < 0 || sy >= screen.h)
-			continue;
-		for (int xx = 0; xx < cel->width; ++xx) {
-			if (!cel->isOpaque(xx, yy))
-				continue;
-			int sx = left + xx;
-			if (sx >= 0 && sx < screen.w)
-				*((byte *)screen.getBasePtr(sx, sy)) =
-						cel->pixels[(uint)yy * cel->width + xx];
-		}
-	}
-	return true;
+	return renderCelImage(*cel, nativeY, nativeX, screen);
 }
 
 bool Puppet::renderActionFrame(const ActionEntry &action, uint32 frameIndex,
@@ -303,35 +412,17 @@ bool Puppet::renderActionFrame(const ActionEntry &action, uint32 frameIndex,
 		return false;
 	if (frameIndex >= action.frameCount)
 		frameIndex = action.frameCount - 1;
-	int frameIdx = resourceIndexById(action.frameResourceId);
-	if (frameIdx < 0)
-		return false;
-	const Archive::Resource &res = _archive.getResource((uint32)frameIdx);
-	const byte *base = engineBase((uint32)frameIdx);
-	if (!base || base + (uint64)frameIndex * kFrameRecordStride +
-			kFrameRecordLayersOffset + kDisplayLayerCount * kFrameLayerStride >
-			_fileData.end())
-		return false;
-	if ((uint64)(frameIndex + 1) * kFrameRecordStride > res.length + 4)
+	const Common::Array<RenderFrame> *frames = cachedActionFrames(action);
+	if (!frames || frameIndex >= frames->size())
 		return false;
 
-	uint32 displayList = baseDisplayListResource(action.baseState);
-	if (displayList == 0)
-		return false;
-	const byte *record = base + frameIndex * kFrameRecordStride;
 	bool drew = false;
-	for (uint32 layer = 0; layer < kDisplayLayerCount; ++layer) {
-		if (skipLayer0 && layer == 0)
+	const RenderFrame &frame = (*frames)[frameIndex];
+	for (uint32 i = 0; i < frame.layers.size(); ++i) {
+		const RenderLayer &layer = frame.layers[i];
+		if (skipLayer0 && layer.layer == 0)
 			continue;
-		const byte *entry = record + kFrameRecordLayersOffset + layer * kFrameLayerStride;
-		int16 celIndex = (int16)READ_LE_UINT16(entry);
-		if (celIndex < 0)
-			continue;
-		int16 y = (int16)READ_LE_UINT16(entry + 2);
-		int16 x = (int16)READ_LE_UINT16(entry + 4);
-		uint32 celResId = displayLayerResourceId(displayList, layer, celIndex);
-		if (celResId)
-			drew |= renderCelResource(celResId, y, x, screen);
+		drew |= renderCelImage(*layer.cel, layer.nativeY, layer.nativeX, screen);
 	}
 	return drew;
 }
