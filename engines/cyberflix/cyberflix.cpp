@@ -1661,6 +1661,7 @@ void CyberflixEngine::openCastFile(const Common::String &name) {
 	if (!cast->open(key))
 		return;
 	_casts.push_back(cast);
+	_propsDirty = true;
 }
 
 void CyberflixEngine::closeCastFile(const Common::String &name) {
@@ -1670,6 +1671,7 @@ void CyberflixEngine::closeCastFile(const Common::String &name) {
 		if (_casts[i]->name() == key) {
 			debug(1, "Cyberflix: cast '%s' closed", key.c_str());
 			_casts.remove_at(i);
+			_propsDirty = true;
 			return;
 		}
 	}
@@ -1730,8 +1732,10 @@ bool CyberflixEngine::actorVisible(const Common::String &name, const bool *newVi
 		warning("Cyberflix: actorvisible('%s'): no such actor", name.c_str());
 		return false;
 	}
-	if (newVisible)
+	if (newVisible && ref.actor->visible != *newVisible) {
 		ref.actor->visible = *newVisible;
+		_propsDirty = true;
+	}
 	return ref.actor->visible;
 }
 
@@ -1742,8 +1746,12 @@ Common::String CyberflixEngine::actorSet(const Common::String &name, const Commo
 		return Common::String();
 	}
 	if (newSet) {
-		ref.actor->setName = *newSet;
-		ref.actor->setName.toLowercase();
+		Common::String key = *newSet;
+		key.toLowercase();
+		if (ref.actor->setName != key) {
+			ref.actor->setName = key;
+			_propsDirty = true;
+		}
 	}
 	return ref.actor->setName;
 }
@@ -1755,8 +1763,12 @@ Common::String CyberflixEngine::actorStar(const Common::String &name, const Comm
 		return Common::String();
 	}
 	if (newStar) {
-		ref.actor->sceneName = *newStar;
-		ref.actor->sceneName.toLowercase();
+		Common::String key = *newStar;
+		key.toLowercase();
+		if (ref.actor->sceneName != key) {
+			ref.actor->sceneName = key;
+			_propsDirty = true;
+		}
 	}
 	return ref.actor->sceneName;
 }
@@ -1768,8 +1780,12 @@ Common::String CyberflixEngine::actorPose(const Common::String &name, const Comm
 		return Common::String();
 	}
 	if (newPose) {
-		ref.actor->shapeName = *newPose;
-		ref.actor->shapeName.toLowercase();
+		Common::String key = *newPose;
+		key.toLowercase();
+		if (ref.actor->shapeName != key) {
+			ref.actor->shapeName = key;
+			_propsDirty = true;
+		}
 	}
 	return ref.actor->shapeName;
 }
@@ -1780,9 +1796,12 @@ void CyberflixEngine::actorXYZ(const Common::String &name, int x, int y, int z) 
 		warning("Cyberflix: actorxyz('%s'): no such actor", name.c_str());
 		return;
 	}
-	ref.actor->x = (int16)x;
-	ref.actor->y = (int16)y;
-	ref.actor->z = (int16)z;
+	if (ref.actor->x != (int16)x || ref.actor->y != (int16)y || ref.actor->z != (int16)z) {
+		ref.actor->x = (int16)x;
+		ref.actor->y = (int16)y;
+		ref.actor->z = (int16)z;
+		_propsDirty = true;
+	}
 }
 
 int CyberflixEngine::actorXYZ(const Common::String &name, int selector) {
@@ -1811,8 +1830,10 @@ int CyberflixEngine::actorDeg(const Common::String &name, const int *newDeg) {
 		warning("Cyberflix: actordeg('%s'): no such actor", name.c_str());
 		return 0;
 	}
-	if (newDeg)
+	if (newDeg && ref.actor->angle != (int16)(*newDeg & 0xff)) {
 		ref.actor->angle = (int16)(*newDeg & 0xff);
+		_propsDirty = true;
+	}
 	return ref.actor->angle;
 }
 
@@ -1835,8 +1856,9 @@ Common::String CyberflixEngine::actorOwner(const Common::String &name,
 		return Common::String();
 	}
 	if (newOwner) {
-		ref.actor->owner = *newOwner;
-		ref.actor->owner.toLowercase();
+		Common::String key = *newOwner;
+		key.toLowercase();
+		ref.actor->owner = key;
 	}
 	return ref.actor->owner;
 }
@@ -1847,7 +1869,10 @@ void CyberflixEngine::actorZClip(const Common::String &name, int zClip) {
 		warning("Cyberflix: actorzclip('%s'): no such actor", name.c_str());
 		return;
 	}
-	ref.actor->zClip = zClip;
+	if (ref.actor->zClip != zClip) {
+		ref.actor->zClip = zClip;
+		_propsDirty = true;
+	}
 }
 
 void CyberflixEngine::actorSpeed(const Common::String &name, int speed) {
@@ -1865,7 +1890,11 @@ void CyberflixEngine::actorScale(const Common::String &name, int scale) {
 		warning("Cyberflix: actorscale('%s'): no such actor", name.c_str());
 		return;
 	}
-	ref.actor->scale = MAX(1, scale);
+	const int newScale = MAX(1, scale);
+	if (ref.actor->scale != newScale) {
+		ref.actor->scale = newScale;
+		_propsDirty = true;
+	}
 }
 
 void CyberflixEngine::actorTurn(const Common::String &name, int turn) {
@@ -1990,6 +2019,44 @@ void CyberflixEngine::collectWorldProps(Common::Array<const Shop::Prop *> &draw,
 	}
 }
 
+void CyberflixEngine::collectWorldActors(Common::Array<const Cast::Actor *> &draw,
+		Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
+		const Shop::WorldCamera &camera) {
+	if (!_set || !_set->isOpen())
+		return;
+	const Common::String &setName = _set->setName();
+	for (uint32 c = 0; c < _casts.size(); ++c) {
+		for (uint32 i = 0; i < _casts[c]->actorCount(); ++i) {
+			const Cast::Actor &actor = _casts[c]->actor(i);
+			if (!actor.visible || !actor.setName.equalsIgnoreCase(setName))
+				continue;
+			CelImage cel;
+			Common::Rect rect;
+			int16 depth = 0;
+			if (!_casts[c]->renderWorldActor(actor, camera, setName, cel, rect, depth))
+				continue;
+			draw.push_back(&actor);
+			drawCast.push_back(_casts[c].get());
+			depths.push_back(depth);
+		}
+	}
+
+	for (uint32 i = 1; i < draw.size(); ++i) {
+		const Cast::Actor *actor = draw[i];
+		const Cast *cast = drawCast[i];
+		int16 depth = depths[i];
+		uint32 j = i;
+		for (; j > 0 && depths[j - 1] < depth; --j) {
+			draw[j] = draw[j - 1];
+			drawCast[j] = drawCast[j - 1];
+			depths[j] = depths[j - 1];
+		}
+		draw[j] = actor;
+		drawCast[j] = cast;
+		depths[j] = depth;
+	}
+}
+
 bool CyberflixEngine::screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const {
 	if (!prop.visible || prop.mode != 0)
 		return false;
@@ -2088,22 +2155,46 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 			Common::Array<const Shop::Prop *> worldDraw;
 			Common::Array<const Shop *> worldShop;
 			Common::Array<int16> worldDepths;
+			Common::Array<const Cast::Actor *> actorDraw;
+			Common::Array<const Cast *> actorCast;
+			Common::Array<int16> actorDepths;
 			collectWorldProps(worldDraw, worldShop, worldDepths, camera);
-			for (int i = (int)worldDraw.size() - 1; i >= 0; --i) {
+			collectWorldActors(actorDraw, actorCast, actorDepths, camera);
+			Common::Array<byte> itemType;
+			Common::Array<uint32> itemIndex;
+			uint32 propIndex = 0, actorIndex = 0;
+			while (propIndex < worldDraw.size() || actorIndex < actorDraw.size()) {
+				const bool useActor = actorIndex < actorDraw.size() &&
+						(propIndex >= worldDraw.size() || actorDepths[actorIndex] >= worldDepths[propIndex]);
+				itemType.push_back(useActor ? 1 : 0);
+				itemIndex.push_back(useActor ? actorIndex++ : propIndex++);
+			}
+			for (int i = (int)itemType.size() - 1; i >= 0; --i) {
 				CelImage cel;
 				Common::Rect r;
 				int16 depth = 0;
-				if (!worldShop[i]->renderWorldProp(*worldDraw[i], camera,
-						_set->setName(), cel, r, depth))
-					continue;
+				Common::String name;
+				if (itemType[(uint)i]) {
+					uint32 idx = itemIndex[(uint)i];
+					if (!actorCast[idx]->renderWorldActor(*actorDraw[idx], camera,
+							_set->setName(), cel, r, depth))
+						continue;
+					name = actorDraw[idx]->name;
+				} else {
+					uint32 idx = itemIndex[(uint)i];
+					if (!worldShop[idx]->renderWorldProp(*worldDraw[idx], camera,
+							_set->setName(), cel, r, depth))
+						continue;
+					name = worldDraw[idx]->name;
+				}
 				if (x < r.left || x >= r.right || y < r.top || y >= r.bottom)
 					continue;
 				int srcX = (int)((int64)(x - r.left) * cel.width / r.width());
 				int srcY = (int)((int64)(y - r.top) * cel.height / r.height());
 				if (!cel.isOpaque(srcX, srcY))
 					continue;
-				_hitKind = "prop";
-				return worldDraw[i]->name;
+				_hitKind = itemType[(uint)i] ? "actor" : "prop";
+				return name;
 			}
 		}
 	}
@@ -4276,16 +4367,31 @@ void CyberflixEngine::displaySetFramePixels(const byte *pixels, uint16 width, ui
 		Common::Array<const Shop::Prop *> worldDraw;
 		Common::Array<const Shop *> worldShop;
 		Common::Array<int16> worldDepths;
+		Common::Array<const Cast::Actor *> actorDraw;
+		Common::Array<const Cast *> actorCast;
+		Common::Array<int16> actorDepths;
 		collectWorldProps(worldDraw, worldShop, worldDepths, camera);
+		collectWorldActors(actorDraw, actorCast, actorDepths, camera);
 		Common::Rect viewport(camera.viewportLeft, camera.viewportTop,
 				camera.viewportRight, camera.viewportBottom);
-		for (uint32 i = 0; i < worldDraw.size(); ++i) {
+		uint32 propIndex = 0, actorIndex = 0;
+		while (propIndex < worldDraw.size() || actorIndex < actorDraw.size()) {
+			const bool drawActor = actorIndex < actorDraw.size() &&
+					(propIndex >= worldDraw.size() || actorDepths[actorIndex] >= worldDepths[propIndex]);
 			CelImage cel;
 			Common::Rect r;
 			int16 depth = 0;
-			if (worldShop[i]->renderWorldProp(*worldDraw[i], camera,
-					_set->setName(), cel, r, depth))
-				drawScaledCel(screen, cel, r, viewport);
+			if (drawActor) {
+				if (actorCast[actorIndex]->renderWorldActor(*actorDraw[actorIndex],
+						camera, _set->setName(), cel, r, depth))
+					drawScaledCel(screen, cel, r, viewport);
+				++actorIndex;
+			} else {
+				if (worldShop[propIndex]->renderWorldProp(*worldDraw[propIndex], camera,
+						_set->setName(), cel, r, depth))
+					drawScaledCel(screen, cel, r, viewport);
+				++propIndex;
+			}
 		}
 	}
 	// Screen-space props (HELP button, life preserver, owned items...) on top

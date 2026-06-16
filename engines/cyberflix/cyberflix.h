@@ -410,6 +410,9 @@ private:
 	void collectWorldProps(Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
 			const Shop::WorldCamera &camera);
+	void collectWorldActors(Common::Array<const Cast::Actor *> &draw,
+			Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
+			const Shop::WorldCamera &camera);
 	bool screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const;
 	void queueDirtyRect(const Common::Rect &rect);
 	void markPropDirty(const Shop &shop, const Shop::Prop &prop, const Common::Rect *oldRect);

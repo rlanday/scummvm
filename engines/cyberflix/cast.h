@@ -30,6 +30,7 @@
 
 #include "cyberflix/archive.h"
 #include "cyberflix/script.h"
+#include "cyberflix/shop.h"
 
 namespace Cyberflix {
 
@@ -43,6 +44,11 @@ namespace Cyberflix {
 class Cast {
 public:
 	struct Actor {
+		struct Shape {
+			uint32 resId = 0;
+			Common::String name;
+		};
+
 		Common::String name;      ///< Runtime lookup name, master +0x2a.
 		Common::String setName;   ///< Current SET/location string, record +0x60.
 		Common::String sceneName; ///< Current star/scene string, record +0x70.
@@ -63,6 +69,7 @@ public:
 		int32 speed = 0;
 		int32 turn = 0;
 		int32 value = 0;
+		Common::Array<Shape> shapes;
 	};
 
 	enum {
@@ -79,7 +86,20 @@ public:
 		kActorShapeCountOffset = 0x5a,
 		kActorShapeTableOffset = 0x5e,
 		kActorShapeStride = 0x20,
-		kActorShapeNameOffset = 0x10
+		kActorShapeNameOffset = 0x10,
+
+		kShapePoseTableOffset = 0x2e,
+		kShapePoseCountOffset = 0x70,
+		kShapeCellCountOffset = 0x72,
+		kShapeCellTableOffset = 0x76,
+		kShapeCellStride = 0x2c,
+		kCellFrameResOffset = 0x00,
+		kCellIdOffset = 0x08,
+		kCellRectOffset = 0x12,
+		kCellRegVOffset = 0x1a,
+		kCellRegHOffset = 0x1c,
+		kCellAngleOffset = 0x28,
+		kCellScaleOffset = 0x2a
 	};
 
 	Cast() {}
@@ -98,10 +118,17 @@ public:
 	/** Find an actor by case-insensitive runtime name, or null. */
 	Common::SharedPtr<Actor> findActor(const Common::String &name);
 
+	bool renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
+			const Common::String &setName, CelImage &cel, Common::Rect &rect,
+			int16 &depth) const;
+
 private:
 	const byte *engineBase(uint32 index) const;
 	int resourceIndexById(uint32 id) const;
 	Common::String pascalString(const byte *p) const;
+	bool resolveActorCel(const Actor &actor, int angle, CelImage &cel,
+			Common::Rect &cellRect, int16 &regV, int16 &regH,
+			int16 &cellScale) const;
 
 	Common::String _name;
 	Common::Array<byte> _fileData;
