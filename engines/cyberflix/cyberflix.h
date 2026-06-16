@@ -255,6 +255,7 @@ private:
 	 * decoded cursor groups are cached for reuse. Returns true on success.
 	 */
 	bool setGameCursor(const Common::String &name);
+	bool pumpCursorMotionEvents();
 
 	/** Lazily open the game's TI.EXE for resource access. Returns nullptr if
 	 *  it cannot be found (the game can still run without a custom cursor). */

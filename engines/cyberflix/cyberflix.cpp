@@ -3602,16 +3602,45 @@ void CyberflixEngine::blackScreen() {
 	debug(1, "Cyberflix: blackscreen()");
 }
 
+bool CyberflixEngine::pumpCursorMotionEvents() {
+	const Common::Point oldMouse = _eventMan->getMousePos();
+	Common::Array<Common::Event> deferred;
+	Common::Event event;
+
+	while (_eventMan->pollEvent(event)) {
+		switch (event.type) {
+		case Common::EVENT_MOUSEMOVE:
+			break;
+		case Common::EVENT_QUIT:
+		case Common::EVENT_RETURN_TO_LAUNCHER:
+			quitGame();
+			break;
+		default:
+			deferred.push_back(event);
+			break;
+		}
+	}
+
+	for (uint i = 0; i < deferred.size(); ++i)
+		_eventMan->pushEvent(deferred[i]);
+
+	const Common::Point newMouse = _eventMan->getMousePos();
+	return oldMouse.x != newMouse.x || oldMouse.y != newMouse.y;
+}
+
 void CyberflixEngine::forceUpdate() {
 	// forceupdate() (TI.EXE 0x2f14 -> FUN_00446910 -> FUN_00423a60): rebuild the
 	// display list from LIVE prop visibility, step active SET transitions through
 	// FUN_004420b0, composite, and present.
+	const bool cursorMoved = pumpCursorMotionEvents();
+	bool presented = false;
 	processScheduledLoops();
 	refreshPropsIfDirty();
 	if (_puppet && _puppet->isOpen() && _puppetVisible) {
 		renderCurrentPuppetFrame(true);
 		_screenUpdatePending = false;
 		_idleForceUpdatePresented = true;
+		presented = true;
 	} else {
 		advanceSetTransition();
 		// Native forceupdate() presents after its compositor pass, but in
@@ -3622,7 +3651,16 @@ void CyberflixEngine::forceUpdate() {
 		// script-visible timing of forceupdate(). If no pixels changed, leave
 		// _idleForceUpdatePresented false so the main loop still does its cheap
 		// cursor-only updateScreen() and mouse movement stays responsive.
-		_idleForceUpdatePresented = presentPendingScreenUpdate();
+		presented = presentPendingScreenUpdate();
+		_idleForceUpdatePresented = presented;
+	}
+	if (cursorMoved && !presented) {
+		// Native uses the Win32 cursor, which moves independently while script
+		// wait loops call forceupdate(). ScummVM's cursor is software-drawn, so
+		// after pumping mouse-motion events above we need a cursor-only present
+		// if the compositor did not upload any pixels this pass.
+		_system->updateScreen();
+		_idleForceUpdatePresented = true;
 	}
 	if (_frameRate > 0) {
 		const int deadline = _lastFrameTick + _frameRate;
