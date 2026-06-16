@@ -73,6 +73,9 @@ namespace Cyberflix {
  * previous one. There is no per-angle keyframe flag. To show an arbitrary angle
  * from cold, replay frames 0..angle through a FrameSequence (decoding a delta
  * angle standalone leaves its "copy from previous" pixels unwritten -> garbage).
+ * A panorama record's BACKGROUND FRAME resource id can itself be 0; that is
+ * different from panorama frame index 0, and native FUN_00442e90 treats it as a
+ * no-op that preserves the retained framebuffer.
  *
  * Rendering a room is therefore: pick a scene, pick a panorama table (A/B),
  * replay frames 0..angle, and apply the set clut. Panorama navigation, hotspots

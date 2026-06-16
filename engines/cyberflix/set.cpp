@@ -186,6 +186,12 @@ const byte *Set::transitionTable(uint32 transitionId, uint32 &count) const {
 }
 
 bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq) const {
+	// TI.EXE FUN_00442e90 treats a panorama/transition frame resource id of 0
+	// as a no-op on the retained framebuffer; resource 0 is the SET master
+	// header and must not be sent through the frame decoder.
+	if (frameId == 0)
+		return true;
+
 	int idx = resourceIndexById(frameId);
 	if (idx < 0) {
 		warning("Cyberflix: set '%s' references missing frame res %u", _name.c_str(), frameId);
@@ -738,7 +744,15 @@ bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &s
 	// arbitrary angle from cold we replay frames 0..angle, exactly the buffer
 	// state the engine would have built up. Decoding a delta angle standalone
 	// would leave its "copy from previous" regions unwritten (visible garbage).
-	seq.clear();
+	//
+	// Some authored records (for example GSTAIR2 Scene64/Scene65) use a frame
+	// resource id of 0, which native FUN_00442e90 handles as "keep the retained
+	// framebuffer". Only clear for a normal non-zero starting frame.
+	const byte *first = pano + 8;
+	if (first + kPanoramaRecordStride > _fileData.end())
+		return false;
+	if (READ_LE_UINT32(first + 0x2c) != 0)
+		seq.clear();
 	for (uint32 a = 0; a <= angle; ++a) {
 		const byte *r = pano + 8 + a * kPanoramaRecordStride;
 		if (r + kPanoramaRecordStride > _fileData.end())
