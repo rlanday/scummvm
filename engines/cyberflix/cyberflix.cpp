@@ -1242,7 +1242,21 @@ bool CyberflixEngine::renderPuppetFrame(const Puppet::ActionEntry &action,
 			FrameImage frame;
 			if (_set->renderScene((uint32)_setScene, (uint32)_setTable,
 					(uint32)_setAngle, _setFrameSequence, frame)) {
-				displaySetFrame(frame);
+				Graphics::Surface *screen = _system->lockScreen();
+				screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+				// TI.EXE FUN_00449150 copies the SET backing surface rect when a
+				// SET is open; it does not copy the stage/inventory-bar composite.
+				const int x0 = _set->viewLeft();
+				const int y0 = _set->viewTop();
+				for (int y = 0; y < frame.height; ++y) {
+					for (int x = 0; x < frame.width; ++x) {
+						int sx = x0 + x, sy = y0 + y;
+						if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
+							*((byte *)screen->getBasePtr(sx, sy)) =
+									frame.pixels[(uint)y * frame.width + x];
+					}
+				}
+				_system->unlockScreen();
 				backdropPainted = true;
 			}
 		} else if (_stage && _stage->isOpen()) {
