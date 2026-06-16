@@ -2255,6 +2255,38 @@ Value CyberflixEngine::dispatchWithScopesValue(const Script *scope1, const Scrip
 	return result;
 }
 
+Value CyberflixEngine::dispatchWithThreeScopesValue(const Script *scope1, const Script *scope2,
+		const Script *scope3, const Common::String &self,
+		const Common::String &targetProp, const Common::String &message,
+		const Common::Array<Value> &args, const char *debugContext) {
+	// Painting dispatch has exactly three native scopes: painting, scene, set.
+	// Keep the same search order as dispatchWithScopeChainValue() but skip the
+	// caller-side temporary scope array in this sampled hot path.
+	Common::String prevSelf = _vm.contextSelf();
+	Common::String prevProp = _vm.contextProp();
+	Common::Array<const Script *> chain;
+	chain.reserve(4);
+	if (_globalLib)
+		chain.push_back(_globalLib.get()); // "System: " tail, searched last
+	if (scope3)
+		chain.push_back(scope3);
+	if (scope2)
+		chain.push_back(scope2);
+	if (scope1)
+		chain.push_back(scope1);
+	Common::Array<const Script *> prevChain = _vm.swapLibraries(chain);
+	_vm.setDispatchContext(self, targetProp);
+
+	bool handled = false;
+	Value result = _vm.callFunction(message, args, &handled);
+	if (!handled)
+		debug(1, "Cyberflix: %s message '%s' unhandled", debugContext, message.c_str());
+
+	_vm.setDispatchContext(prevSelf, prevProp);
+	_vm.swapLibraries(prevChain);
+	return result;
+}
+
 void CyberflixEngine::dispatchWithScopeChain(const Common::Array<const Script *> &scopes,
 		const Common::String &self, const Common::String &targetProp,
 		const Common::String &message, const Common::Array<Value> &args,
@@ -3984,21 +4016,16 @@ void CyberflixEngine::sendToPainting(const Common::String &sceneName, const Comm
 		return;
 	}
 	Common::String view = !viewName.empty() ? viewName : _setView;
-	if (_set->findView((uint32)scene, view) < 0) {
+
+	Common::SharedPtr<Script> paintingScript, sceneScript, setScript;
+	if (!_set->paintingDispatchScripts((uint32)scene, view, painting,
+			paintingScript, sceneScript, setScript)) {
 		warning("Cyberflix: sendtopainting('%s'): no view '%s'",
 				painting.c_str(), view.c_str());
 		return;
 	}
-
-	Common::Array<Common::SharedPtr<Script> > keepAlive;
-	keepAlive.push_back(_set->paintingScriptShared((uint32)scene, view, painting));
-	keepAlive.push_back(_set->sceneScriptShared((uint32)scene));
-	keepAlive.push_back(_set->setScriptShared());
-	Common::Array<const Script *> scopes;
-	scopes.push_back(keepAlive[0].get());
-	scopes.push_back(keepAlive[1].get());
-	scopes.push_back(keepAlive[2].get());
-	dispatchWithScopeChain(scopes, painting, painting, message, args, "painting");
+	dispatchWithThreeScopesValue(paintingScript.get(), sceneScript.get(), setScript.get(),
+			painting, painting, message, args, "painting");
 	refreshPropsIfDirty();
 }
 

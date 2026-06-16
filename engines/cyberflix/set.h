@@ -244,6 +244,11 @@ public:
 			const Common::String &painting) const;
 	Common::SharedPtr<Script> paintingScriptShared(uint32 scene, const Common::String &view,
 			const Common::String &painting) const;
+	/** Resolve painting, scene, and set scripts together for hot sendtopainting dispatch. */
+	bool paintingDispatchScripts(uint32 scene, const Common::String &view,
+			const Common::String &painting, Common::SharedPtr<Script> &paintingScript,
+			Common::SharedPtr<Script> &sceneScript,
+			Common::SharedPtr<Script> &setScript) const;
 
 	/** Number of painting records in @p scene/@p view, or 0 if none. */
 	uint32 paintingCount(uint32 scene, const Common::String &view) const;
@@ -329,6 +334,12 @@ private:
 	int _sceneTable = -1;   ///< Archive index of the scene-table resource.
 	uint32 _setScriptId = 0;
 	Common::Array<Common::SharedPtr<Script> > _scripts;
+	// Single-entry cache for repeated idle/mouse messages to the same painting.
+	mutable bool _paintingScriptCacheValid = false;
+	mutable uint32 _paintingScriptCacheScene = 0;
+	mutable Common::String _paintingScriptCacheView;
+	mutable Common::String _paintingScriptCacheName;
+	mutable Common::SharedPtr<Script> _paintingScriptCacheScript;
 	uint32 _sceneCount = 0;
 	uint16 _width = 0;
 	uint16 _height = 0;

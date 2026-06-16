@@ -26,6 +26,11 @@
 
 namespace Cyberflix {
 
+static const Common::String &emptyScriptString() {
+	static const Common::String empty;
+	return empty;
+}
+
 Script::Script() : _valid(false), _terminated(false), _poolOffset(0), _defsScanned(false) {
 }
 
@@ -37,8 +42,11 @@ bool Script::parse(Common::SeekableReadStream *stream) {
 	_payload.clear();
 	_selfRelStringCache.clear();
 	_selfRelStringCached.clear();
+	_selfRelLowerStringCache.clear();
+	_selfRelLowerStringCached.clear();
 	_defsScanned = false;
 	_defs.clear();
+	_defIndexByName.clear();
 
 	if (!stream)
 		return false;
@@ -82,6 +90,8 @@ bool Script::parse(Common::SeekableReadStream *stream) {
 	// to decode every pool reference up front.
 	_selfRelStringCache.resize(_code.size());
 	_selfRelStringCached.resize(_code.size(), 0);
+	_selfRelLowerStringCache.resize(_code.size());
+	_selfRelLowerStringCached.resize(_code.size(), 0);
 	_valid = true;
 	return true;
 }
@@ -114,23 +124,40 @@ uint32 Script::getSplitOperand(uint32 index) const {
 }
 
 Common::String Script::getSelfRelString(uint32 index) const {
-	if (index >= _code.size())
-		return Common::String();
-	// This cache is deliberately below the public accessor so all VM call sites
-	// retain the same bounds checks and invalid-string behavior as the uncached
-	// path.
+	return getSelfRelStringRef(index);
+}
+
+const Common::String &Script::getSelfRelStringRef(uint32 index) const {
+	if (index >= _code.size() || index >= _selfRelStringCache.size())
+		return emptyScriptString();
+	// Script resources are immutable after parse, so hot VM paths can hold a
+	// reference to the cached pool string and avoid Common::String refcount churn
+	// for each decoded atom.
 	if (index < _selfRelStringCached.size() && _selfRelStringCached[index])
 		return _selfRelStringCache[index];
 	// The operand is relative to the instruction's opcode field, which sits 4
 	// bytes into the 8-byte record (after the leading operandB dword).
 	uint32 opcodeFieldOffset = index * 8 + 4;
 	uint32 rel = getSplitOperand(index);
-	Common::String result = getPoolString(opcodeFieldOffset + rel);
-	if (index < _selfRelStringCache.size()) {
-		_selfRelStringCache[index] = result;
-		_selfRelStringCached[index] = 1;
-	}
-	return result;
+	_selfRelStringCache[index] = getPoolString(opcodeFieldOffset + rel);
+	_selfRelStringCached[index] = 1;
+	return _selfRelStringCache[index];
+}
+
+Common::String Script::getSelfRelStringLowercase(uint32 index) const {
+	return getSelfRelStringLowercaseRef(index);
+}
+
+const Common::String &Script::getSelfRelStringLowercaseRef(uint32 index) const {
+	if (index >= _code.size() || index >= _selfRelLowerStringCache.size())
+		return emptyScriptString();
+	if (index < _selfRelLowerStringCached.size() && _selfRelLowerStringCached[index])
+		return _selfRelLowerStringCache[index];
+
+	_selfRelLowerStringCache[index] = getSelfRelStringRef(index);
+	_selfRelLowerStringCache[index].toLowercase();
+	_selfRelLowerStringCached[index] = 1;
+	return _selfRelLowerStringCache[index];
 }
 
 void Script::neutralizeRange(uint32 first, uint32 last) {
@@ -147,6 +174,8 @@ void Script::neutralizeRange(uint32 first, uint32 last) {
 			// coherent for any later diagnostics/disassembly of the edited span.
 			_selfRelStringCached[i] = 0;
 			_selfRelStringCache[i].clear();
+			_selfRelLowerStringCached[i] = 0;
+			_selfRelLowerStringCache[i].clear();
 		}
 	}
 }
@@ -661,16 +690,13 @@ const Common::Array<Script::Definition> &Script::definitions() const {
 		if (_code[headerAt].opcode == kOpPushSym &&
 				headerAt + 1 < n && _code[headerAt + 1].opcode == kOpOpenParen) {
 			Definition def;
-			def.name = getSelfRelString(headerAt);
-			def.name.toLowercase();
+			def.name = getSelfRelStringLowercase(headerAt);
 			int close = findCloseParen(headerAt + 1);
 			if (!def.name.empty() && close >= 0 && (uint32)close < next) {
 				// Formal parameters: symbols separated by kOpArgSep.
 				for (uint32 p = headerAt + 2; p < (uint32)close; ++p) {
 					if (_code[p].opcode == kOpPushSym) {
-						Common::String pn = getSelfRelString(p);
-						pn.toLowercase();
-						def.params.push_back(pn);
+						def.params.push_back(getSelfRelStringLowercase(p));
 					}
 				}
 				// The body starts after the header's trailing pushInt padding
@@ -680,6 +706,8 @@ const Common::Array<Script::Definition> &Script::definitions() const {
 				while (body < next && _code[body].opcode == kOpPushInt)
 					++body;
 				def.bodyStart = body;
+				if (!_defIndexByName.contains(def.name))
+					_defIndexByName[def.name] = _defs.size();
 				_defs.push_back(def);
 			}
 		}
@@ -707,9 +735,10 @@ const Script::Definition *Script::findDefinition(const Common::String &name) con
 	}
 
 	const Common::Array<Definition> &defs = definitions();
-	for (uint32 i = 0; i < defs.size(); ++i) {
-		if (defs[i].name == *key)
-			return &defs[i];
+	if (_defIndexByName.contains(*key)) {
+		uint32 index = _defIndexByName[*key];
+		if (index < defs.size())
+			return &defs[index];
 	}
 	return nullptr;
 }

@@ -648,6 +648,7 @@ private:
 	 * object scope chain is modelled.
 	 */
 	Value getVar(const Common::String &name) const;
+	Value getVar(const Common::String &name, const Common::String &lowerName) const;
 
 	/** Store @p v under @p name in the current scope (TI.EXE store 0x00413610). */
 	void setVar(const Common::String &name, const Value &v);

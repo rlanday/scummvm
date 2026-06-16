@@ -97,6 +97,10 @@ Value ScriptVM::getVar(const Common::String &name) const {
 	// harmlessly (lookup miss at 0x0041395b returns the name).
 	Common::String key = name;
 	key.toLowercase();
+	return getVar(name, key);
+}
+
+Value ScriptVM::getVar(const Common::String &name, const Common::String &key) const {
 	if (!_locals.empty() && _locals.back().contains(key)) {
 		Value v = _locals.back()[key];
 		if (key == "tour")
@@ -172,17 +176,18 @@ void ScriptVM::execute(const Script &script, uint32 index) {
 		// 0x0005: push a symbol reference. operandA is a self-relative offset to
 		// the symbol-name Pascal string (TI.EXE evaluator 0x00419cc0). The name
 		// is resolved against the variable scope at execution time.
-		Common::String sym = script.getSelfRelString(index);
+		const Common::String &sym = script.getSelfRelStringRef(index);
 		if (sym.empty())
-			sym = Common::String::format("@%#x", inst.operandA);
-		push(Value::makeSymbol(sym));
+			push(Value::makeSymbol(Common::String::format("@%#x", inst.operandA)));
+		else
+			push(Value::makeSymbol(sym));
 		break;
 	}
 
 	case Script::kOpPush3:
 	case Script::kOpPush4:
 		// Atom push variants that also carry a self-relative symbol/string.
-		push(Value::makeSymbol(script.getSelfRelString(index)));
+		push(Value::makeSymbol(script.getSelfRelStringRef(index)));
 		break;
 
 	default:
@@ -308,7 +313,8 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 
 	case Script::kOpPushSym:
 	case Script::kOpPush3: {
-		Common::String sym = script.getSelfRelString(pc);
+		const uint32 atomPc = pc;
+		const Common::String &sym = script.getSelfRelStringRef(atomPc);
 		uint16 headOp = inst.opcode;
 		pc++;
 		// A name immediately followed by '(' is a call atom: parse and evaluate
@@ -320,14 +326,14 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 			// A symbol head is a script-function call, dispatched against the
 			// library scope chain (TI.EXE 0x0041a609 -> FUN_0040b690).
 			if (headOp == Script::kOpPushSym)
-				return callFunction(sym, args);
+				return callFunction(script.getSelfRelStringLowercaseRef(atomPc), args);
 			return callMethod(headOp, sym, args);
 		}
 		// push3 (0x0003) is a string literal from the pool (type 3).
 		if (headOp == Script::kOpPush3)
 			return Value::makeString(sym);
 		// Otherwise a symbol reference evaluates to its bound value.
-		return getVar(sym);
+		return getVar(sym, script.getSelfRelStringLowercaseRef(atomPc));
 	}
 
 	default: {
@@ -371,7 +377,15 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	const uint32 count = script.getInstructionCount();
 	Value targets[3];
 	uint32 targetCount = 0;
-	Common::String message;
+	const Common::String empty;
+	// Non-owning alias to either `empty` or the immutable per-script lowercase
+	// string cache. This is deliberately a raw pointer instead of a
+	// Common::String copy/reference: the message atom is discovered inside the
+	// loop, the empty fallback must remain assignable, and copying here showed up
+	// as Common::String refcount churn in the decodeAtom() hot path. The pointed
+	// string never outlives this call; `script` is the active caller script and
+	// the cache entry is stable for the duration of dispatchMessageBuiltin().
+	const Common::String *message = &empty;
 	Common::Array<Value> msgArgs;
 
 	pc++; // consume '('
@@ -386,8 +400,9 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 		// caller-arg values before binding them to the callee's formals).
 		if (head.opcode == Script::kOpPushSym && pc + 1 < count &&
 				script.getInstruction(pc + 1).opcode == Script::kOpOpenParen) {
-			message = script.getSelfRelString(pc);
-			message.toLowercase();
+			// Alias the cached folded message name; sendto* dispatch consumes it
+			// synchronously below, so no ownership transfer is needed.
+			message = &script.getSelfRelStringLowercaseRef(pc);
 			pc++;
 			parseCallArgs(script, pc, msgArgs);
 		} else {
@@ -412,9 +427,8 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	}
 
 	if (_trace)
-		debug(0, "    message #%#06x -> %s(%u args)", opcode, message.c_str(), msgArgs.size());
+		debug(0, "    message #%#06x -> %s(%u args)", opcode, message->c_str(), msgArgs.size());
 
-	const Common::String empty;
 	const Common::String &target0 = targetCount > 0 ? targets[0].strValue : empty;
 	const Common::String &target1 = targetCount > 1 ? targets[1].strValue : empty;
 	const Common::String &target2 = targetCount > 2 ? targets[2].strValue : empty;
@@ -422,55 +436,55 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	switch (opcode) {
 	case Script::kMethodSendToStage: // sendtostage(message(...)) -> TI.EXE FUN_0040ad80
 		if (_host)
-			_host->sendToStage(message, msgArgs);
+			_host->sendToStage(*message, msgArgs);
 		break;
 	case Script::kMethodSendToBoot: // sendtoboot(message(...)) -> TI.EXE FUN_00439080/FUN_004390a0
 		if (_host)
-			_host->sendToBoot(message, msgArgs);
+			_host->sendToBoot(*message, msgArgs);
 		break;
 	case Script::kMethodSendToShop: // sendtoshop('file.shp', message) -> TI.EXE FUN_0042b2b0:
 	             // dispatch against [shop script, BOOTFILE res2].
 		if (_host)
-			_host->sendToShop(target0, message, msgArgs);
+			_host->sendToShop(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToShopFx: // sendtoshopfx('file.shp', message) -> return dispatch result.
 		if (_host)
-			return _host->sendToShopFx(target0, message, msgArgs);
+			return _host->sendToShopFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToProp: // sendtoprop('propname', message) -> TI.EXE FUN_0042ae80:
 	             // dispatch against [prop script, shop script, BOOTFILE res2].
 		if (_host)
-			_host->sendToProp(target0, message, msgArgs);
+			_host->sendToProp(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToActor: // sendtoactor(actor, message) -> actor script, then cast script.
 		if (_host)
-			_host->sendToActor(target0, message, msgArgs);
+			_host->sendToActor(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToCast: // sendtocast('file.cst', message) -> per-cast script dispatch.
 		if (_host)
-			_host->sendToCast(target0, message, msgArgs);
+			_host->sendToCast(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPuppet: // sendtopuppet(target, message) -> [PUP script, BOOTFILE res2].
 		if (_host)
-			_host->sendToPuppet(target0, message, msgArgs);
+			_host->sendToPuppet(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToScene: // sendtoscene(scene, message) -> TI.EXE FUN_004311e0/
 	             // FUN_00431200: dispatch against the scene's script chain.
 		if (_host)
-			_host->sendToScene(target0, message, msgArgs);
+			_host->sendToScene(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPainting: // sendtopainting(scene, view, painting, message) -> FUN_00432550/FUN_00432570
 		if (_host)
-			_host->sendToPainting(target0, target1, target2, message, msgArgs);
+			_host->sendToPainting(target0, target1, target2, *message, msgArgs);
 		break;
 	case Script::kMethodSendToButton: // sendtobutton(flat, button, message) -> FUN_0040a410/FUN_0040a430:
 	             // chain [button script, node script, stage script, res2].
 		if (_host)
-			_host->sendToButton(target0, target1, message, msgArgs);
+			_host->sendToButton(target0, target1, *message, msgArgs);
 		break;
 	case Script::kMethodSendToFlat: // sendtoflat(flat, message) -> FUN_0040a940/FUN_0040a960
 		if (_host)
-			_host->sendToFlat(target0, message, msgArgs);
+			_host->sendToFlat(target0, *message, msgArgs);
 		break;
 	default:
 		break;
@@ -1189,8 +1203,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 			bool global = (op == Script::kOpDeclGlobal) || _locals.empty();
 			pc++;
 			while (pc < count && script.getInstruction(pc).opcode == Script::kOpPushSym) {
-				Common::String var = script.getSelfRelString(pc);
-				var.toLowercase();
+				Common::String var = script.getSelfRelStringLowercase(pc);
 				if (global) {
 					if (!_vars.contains(var))
 						_vars[var] = Value();
@@ -1364,7 +1377,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 			// matching kOpForNext. Bind the variable and either enter the body
 			// or skip the whole construct when the range is empty.
 			uint32 p = pc + 1;
-			Common::String loopVar = script.getSelfRelString(p);
+			Common::String loopVar = script.getSelfRelStringLowercase(p);
 			p++;
 			if (p < count && script.getInstruction(p).opcode == Script::kOpEq)
 				p++; // '=' separator
@@ -1381,7 +1394,6 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 			// initprop() handlers also use `count`) cannot clobber it.
 			{
 				Common::String key = loopVar;
-				key.toLowercase();
 				if (!_locals.empty())
 					_locals.back()[key] = Value::makeInt(start.intValue);
 				else
@@ -1434,8 +1446,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 				uint32 p = pc + 1;
 				uint16 nextOp = (p < count) ? script.getInstruction(p).opcode : 0;
 				if (nextOp == Script::kOpEq) {
-					Common::String var = script.getSelfRelString(pc);
-					var.toLowercase();
+					Common::String var = script.getSelfRelStringLowercase(pc);
 					p++;
 					Value v = evaluateExpression(script, p);
 					setVar(var, v);
@@ -1445,7 +1456,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 					break;
 				}
 				if (nextOp == Script::kOpOpenParen) {
-					Common::String fn = script.getSelfRelString(pc);
+					Common::String fn = script.getSelfRelStringLowercase(pc);
 					Common::Array<Value> args;
 					parseCallArgs(script, p, args);
 					callFunction(fn, args);

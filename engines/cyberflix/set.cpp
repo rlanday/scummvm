@@ -30,6 +30,21 @@
 
 namespace Cyberflix {
 
+// Compare SET/STG Pascal names in-place. These lookups sit on idle/mouse hot
+// paths, so avoid constructing temporary Common::String objects for every
+// scene/view/painting table record just to do case-insensitive matching.
+static bool pascalEqualsIgnoreCase(const byte *p, const byte *end, const Common::String &name) {
+	if (!p || p >= end)
+		return false;
+	const uint len = *p;
+	if (p + 1 + len > end || len != name.size())
+		return false;
+	for (uint i = 0; i < len; ++i)
+		if (tolower((unsigned char)p[1 + i]) != tolower((unsigned char)name[i]))
+			return false;
+	return true;
+}
+
 const byte *Set::engineBase(uint32 index) const {
 	if (index >= _archive.getResourceCount())
 		return nullptr;
@@ -238,6 +253,8 @@ bool Set::open(const Common::String &name) {
 	_sceneCount = 0;
 	_setScriptId = 0;
 	_scripts.clear();
+	_paintingScriptCacheValid = false;
+	_paintingScriptCacheScript.reset();
 	_width = _height = 0;
 	_viewLeft = _viewTop = 0;
 	_name = name;
@@ -339,9 +356,11 @@ Common::String Set::sceneName(uint32 index) const {
 }
 
 int Set::findScene(const Common::String &name) const {
-	for (uint32 i = 0; i < _sceneCount; ++i)
-		if (sceneName(i).equalsIgnoreCase(name))
+	for (uint32 i = 0; i < _sceneCount; ++i) {
+		const byte *rec = sceneRecord(i);
+		if (rec && pascalEqualsIgnoreCase(rec + kSceneNameOffset, _fileData.end(), name))
 			return (int)i;
+	}
 	return -1;
 }
 
@@ -371,7 +390,7 @@ int Set::findView(uint32 scene, const Common::String &name) const {
 			break;
 		byte len = v[kViewNameOffset];
 		if (len && len < 16 &&
-				name.equalsIgnoreCase(Common::String((const char *)v + kViewNameOffset + 1, len)))
+				pascalEqualsIgnoreCase(v + kViewNameOffset, _fileData.end(), name))
 			return (int)i;
 	}
 	return -1;
@@ -580,7 +599,7 @@ bool Set::pointInPainting(uint32 scene, const Common::String &view,
 		const byte *rec = table + 8 + i * 0x24;
 		if (8 + i * 0x24 + 0x24 > length)
 			break;
-		if (!painting.equalsIgnoreCase(pascalString(rec + 0x14)))
+		if (!pascalEqualsIgnoreCase(rec + 0x14, _fileData.end(), painting))
 			continue;
 		int16 top = (int16)READ_LE_UINT16(rec + 0x08);
 		int16 left = (int16)READ_LE_UINT16(rec + 0x0a);
@@ -598,19 +617,63 @@ const Script *Set::paintingScript(uint32 scene, const Common::String &view,
 
 Common::SharedPtr<Script> Set::paintingScriptShared(uint32 scene, const Common::String &view,
 		const Common::String &painting) const {
+	Common::SharedPtr<Script> paintingScript, sceneScript, setScript;
+	if (!paintingDispatchScripts(scene, view, painting, paintingScript, sceneScript, setScript))
+		return Common::SharedPtr<Script>();
+	return paintingScript;
+}
+
+bool Set::paintingDispatchScripts(uint32 scene, const Common::String &view,
+		const Common::String &painting, Common::SharedPtr<Script> &paintingScript,
+		Common::SharedPtr<Script> &sceneScript,
+		Common::SharedPtr<Script> &setScript) const {
+	// sendtopainting is hit by idle/mouse SET scripts. Resolve all three scopes
+	// in one pass so the engine can keep them alive without building temporary
+	// Common::Array objects on every dispatch.
+	paintingScript = Common::SharedPtr<Script>();
+	sceneScript = Common::SharedPtr<Script>();
+	setScript = Common::SharedPtr<Script>();
+
 	const byte *v = viewRecord(scene, view);
+	if (!v)
+		return false;
+	const byte *sceneRec = sceneRecord(scene);
+	if (sceneRec)
+		sceneScript = scriptByIdShared(READ_LE_UINT32(sceneRec + kSceneScriptOffset));
+	setScript = scriptByIdShared(_setScriptId);
+
+	// The same painting commonly receives repeated setcursor/idle messages, and
+	// SET files are immutable while open, so caching the last painting-script
+	// lookup avoids rescanning Pascal painting records in the VM hot path.
+	if (_paintingScriptCacheValid && _paintingScriptCacheScene == scene &&
+			_paintingScriptCacheView.equalsIgnoreCase(view) &&
+			_paintingScriptCacheName.equalsIgnoreCase(painting)) {
+		paintingScript = _paintingScriptCacheScript;
+		return true;
+	}
+
+	Common::SharedPtr<Script> result;
 	uint32 count = 0, length = 0;
 	const byte *table = paintingTable(v, count, length);
-	if (!table)
-		return Common::SharedPtr<Script>();
-	for (uint32 i = 0; i < count; ++i) {
-		const byte *rec = table + 8 + i * 0x24;
-		if (8 + i * 0x24 + 0x24 > length)
-			break;
-		if (painting.equalsIgnoreCase(pascalString(rec + 0x14)))
-			return scriptByIdShared(READ_LE_UINT32(rec + 0x10));
+	if (table) {
+		for (uint32 i = 0; i < count; ++i) {
+			const byte *rec = table + 8 + i * 0x24;
+			if (8 + i * 0x24 + 0x24 > length)
+				break;
+			if (pascalEqualsIgnoreCase(rec + 0x14, _fileData.end(), painting)) {
+				result = scriptByIdShared(READ_LE_UINT32(rec + 0x10));
+				break;
+			}
+		}
 	}
-	return Common::SharedPtr<Script>();
+
+	_paintingScriptCacheValid = true;
+	_paintingScriptCacheScene = scene;
+	_paintingScriptCacheView = view;
+	_paintingScriptCacheName = painting;
+	_paintingScriptCacheScript = result;
+	paintingScript = result;
+	return true;
 }
 
 uint32 Set::paintingCount(uint32 scene, const Common::String &view) const {

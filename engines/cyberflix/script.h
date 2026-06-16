@@ -23,6 +23,8 @@
 #define CYBERFLIX_SCRIPT_H
 
 #include "common/array.h"
+#include "common/hash-str.h"
+#include "common/hashmap.h"
 #include "common/str.h"
 
 namespace Common {
@@ -396,6 +398,16 @@ public:
 	 * definitions whose pool lies beyond 64 KiB (spotmovie, premovie, ...).
 	 */
 	Common::String getSelfRelString(uint32 index) const;
+	const Common::String &getSelfRelStringRef(uint32 index) const;
+
+	/**
+	 * Lowercase form of getSelfRelString(@p index), cached per instruction.
+	 * ScummVM uses this for case-insensitive VM keys (dispatch names,
+	 * variables, formal params) so hot script paths do not repeatedly scan and
+	 * fold the same immutable pool strings.
+	 */
+	Common::String getSelfRelStringLowercase(uint32 index) const;
+	const Common::String &getSelfRelStringLowercaseRef(uint32 index) const;
 
 	/** Human-readable mnemonic for @p opcode. */
 	static const char *opcodeName(uint16 opcode);
@@ -422,8 +434,13 @@ private:
 	// strings without changing VM semantics.
 	mutable Common::Array<Common::String> _selfRelStringCache;
 	mutable Common::Array<byte> _selfRelStringCached;
-	mutable bool _defsScanned;                  ///< Lazy definitions() cache flag.
-	mutable Common::Array<Definition> _defs;    ///< Cached definition index.
+	mutable Common::Array<Common::String> _selfRelLowerStringCache;
+	mutable Common::Array<byte> _selfRelLowerStringCached;
+	mutable bool _defsScanned; ///< Lazy definitions() cache flag.
+	mutable Common::Array<Definition> _defs;
+	// Definition names are immutable after parsing, so dispatch can use this
+	// index instead of linearly scanning every handler on each nested sendto*.
+	mutable Common::HashMap<Common::String, uint32> _defIndexByName;
 };
 
 } // End of namespace Cyberflix

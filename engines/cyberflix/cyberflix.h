@@ -428,6 +428,10 @@ private:
 			const Common::String &self, const Common::String &targetProp,
 			const Common::String &message, const Common::Array<Value> &args,
 			const char *debugContext);
+	Value dispatchWithThreeScopesValue(const Script *scope1, const Script *scope2,
+			const Script *scope3, const Common::String &self,
+			const Common::String &targetProp, const Common::String &message,
+			const Common::Array<Value> &args, const char *debugContext);
 	void dispatchWithScopeChain(const Common::Array<const Script *> &scopes,
 			const Common::String &self, const Common::String &targetProp,
 			const Common::String &message, const Common::Array<Value> &args,
