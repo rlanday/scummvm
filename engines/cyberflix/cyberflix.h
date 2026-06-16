@@ -280,6 +280,9 @@ private:
 	void renderSetScene(int scene, int angle) { renderSetScene(scene, _setTable, angle); }
 	/** Composite a decoded SET background frame with the stage shell and props. */
 	void displaySetFrame(const FrameImage &frame);
+	/** Present retained SET pixels directly, avoiding a full-frame copy per transition frame. */
+	void displaySetFrame(const FrameSequence &frame);
+	void displaySetFramePixels(const byte *pixels, uint16 width, uint16 height);
 	/** Run the verified SET navigation actions used by currentscene(). */
 	void navigateSet(const Common::String &action);
 	/** Advance an active SET transition by one native frame. */
@@ -315,6 +318,8 @@ private:
 	Common::SharedPtr<Stage> _stage; ///< Currently open stage (DATA/*.STG), or null.
 	bool _stageVisible = false;      ///< DAT_00461156, queried by stagevisible().
 	Common::ScopedPtr<Set> _set;     ///< Currently open set (DATA/*.SET), or null.
+	FrameImage _stageShellFrame;     ///< Cached STG node 0 backing under SET viewports.
+	bool _stageShellFrameValid = false;
 	enum SetTransitionType {
 		kSetTransitionNone,
 		kSetTransitionTurn,
@@ -486,6 +491,8 @@ private:
 	void applyLiveAudioVolumes();
 	bool playSoundCue(const Common::String &name, Audio::SoundHandle &handle,
 			Common::String &currentCue, uint32 &currentResId);
+	void clearStageShellFrame();
+	const FrameImage *stageShellFrame();
 
 	Audio::SoundHandle _themeHandle;   ///< Theme channel (TI.EXE DAT_00460a88).
 	Common::String _themeTrackName;    ///< Track of the playing theme, or empty.

@@ -114,6 +114,46 @@ static void drawScaledCel(Graphics::Surface *screen, const CelImage &cel,
 	}
 }
 
+static void copyFramePixelsToScreen(Graphics::Surface &screen, const byte *pixels,
+		int width, int height, int dstX, int dstY) {
+	if (!pixels || width <= 0 || height <= 0)
+		return;
+
+	int srcX = 0;
+	int srcY = 0;
+	int copyWidth = width;
+	int copyHeight = height;
+	if (dstX < 0) {
+		srcX = -dstX;
+		copyWidth -= srcX;
+		dstX = 0;
+	}
+	if (dstY < 0) {
+		srcY = -dstY;
+		copyHeight -= srcY;
+		dstY = 0;
+	}
+	if (dstX + copyWidth > screen.w)
+		copyWidth = screen.w - dstX;
+	if (dstY + copyHeight > screen.h)
+		copyHeight = screen.h - dstY;
+	if (copyWidth <= 0 || copyHeight <= 0)
+		return;
+
+	// Frame backgrounds are fully opaque. Clip once, then copy whole rows; this
+	// avoids the per-pixel bounds checks in the SET transition hot path.
+	for (int y = 0; y < copyHeight; ++y) {
+		memcpy(screen.getBasePtr(dstX, dstY + y),
+				pixels + (uint)(srcY + y) * width + srcX, copyWidth);
+	}
+}
+
+static void copyFrameToScreen(Graphics::Surface &screen, const FrameImage &frame,
+		int dstX, int dstY) {
+	copyFramePixelsToScreen(screen, frame.pixels.begin(), frame.width,
+			frame.height, dstX, dstY);
+}
+
 // The runtime accesses every resource through a "record+8" data pointer (the
 // info tag), which is four bytes before the payload that Archive exposes via
 // dataOffset (== record+12). All master-header/table field offsets below are
@@ -524,6 +564,7 @@ void CyberflixEngine::openStageFile(const Common::String &name) {
 		debug(1, "Cyberflix: openstagefile('%s') failed", name.c_str());
 		return;
 	}
+	clearStageShellFrame();
 	_stage = stage;
 	_stageVisible = true;
 	debug(1, "Cyberflix: stage '%s' open (%u nodes)", name.c_str(), _stage->nodeCount());
@@ -550,6 +591,7 @@ void CyberflixEngine::closeStageFile() {
 	_stage.reset();
 	_stageNode = 0;
 	_stageVisible = false;
+	clearStageShellFrame();
 	blackScreen();
 }
 
@@ -602,6 +644,28 @@ Common::String CyberflixEngine::currentFlat() {
 	if (_stage && _stage->isOpen())
 		return _stage->nodeName((uint32)_stageNode);
 	return "None";
+}
+
+void CyberflixEngine::clearStageShellFrame() {
+	_stageShellFrame.width = 0;
+	_stageShellFrame.height = 0;
+	_stageShellFrame.pixels.clear();
+	_stageShellFrameValid = false;
+}
+
+const FrameImage *CyberflixEngine::stageShellFrame() {
+	if (!_stage || !_stage->isOpen())
+		return nullptr;
+	if (!_stageShellFrameValid) {
+		// SET navigation redraws many room frames over the same STG node-0 shell
+		// (the art-deco frame and inventory bar). Native keeps that as a backing
+		// surface; caching the decoded frame here avoids re-running the STG frame
+		// decompressor for every transition frame.
+		if (!_stage->renderNode(0, _stageShellFrame))
+			return nullptr;
+		_stageShellFrameValid = true;
+	}
+	return &_stageShellFrame;
 }
 
 // sendtostage(message(...)): deliver a message call to the stage's script
@@ -711,12 +775,7 @@ void CyberflixEngine::renderStageNode(int node) {
 	// Stage nodes are full-screen items: the compositor FUN_004436d0 clips
 	// them against the whole screen rect DAT_00460d58, not the set viewport,
 	// so they paint from the top-left corner (MAIN.STG is 512x384).
-	for (int y = 0; y < frame.height; ++y) {
-		for (int x = 0; x < frame.width; ++x) {
-			if (x < kScreenWidth && y < kScreenHeight)
-				*((byte *)screen->getBasePtr(x, y)) = frame.pixels[(uint)y * frame.width + x];
-		}
-	}
+	copyFrameToScreen(*screen, frame, 0, 0);
 	// CTL.STG and other flats can place screen-space SHOP props over the stage
 	// with propxy()/propvisible(); the native compositor draws those display
 	// items after the stage backing buffer.
@@ -746,6 +805,10 @@ void CyberflixEngine::renderStageNode(int node) {
 	_dirtyRects.clear();
 	_propsDirty = false;
 	_system->updateScreen();
+	if (node == 0) {
+		_stageShellFrame = frame;
+		_stageShellFrameValid = true;
+	}
 
 	debug(1, "Cyberflix: rendered stage '%s' node %d (%ux%u)",
 			_stage->name().c_str(), node, frame.width, frame.height);
@@ -1238,12 +1301,7 @@ static void copyPuppetGrabBackdropToScreen(const Common::Array<byte> &backdrop,
 		Graphics::Surface &screen) {
 	if (backdrop.size() != kScreenWidth * kScreenHeight)
 		return;
-	const int copyWidth = MIN<int>(screen.w, kScreenWidth);
-	const int copyHeight = MIN<int>(screen.h, kScreenHeight);
-	for (int y = 0; y < copyHeight; ++y) {
-		memcpy(screen.getBasePtr(0, y), backdrop.begin() + (uint)y * kScreenWidth,
-				copyWidth);
-	}
+	copyFramePixelsToScreen(screen, backdrop.begin(), kScreenWidth, kScreenHeight, 0, 0);
 }
 
 bool CyberflixEngine::capturePuppetGrabBackdrop(Common::Array<byte> &backdrop) {
@@ -3659,9 +3717,8 @@ void CyberflixEngine::navigateSet(const Common::String &action) {
 		}
 		if (!closeCurrentSceneForNavigation())
 			return;
-		FrameImage frame;
 		if (!_set->applyPanoramaFrame((uint32)_setScene, (uint32)table, (uint32)startAngle,
-				_setFrameSequence, frame)) {
+				_setFrameSequence)) {
 			warning("Cyberflix: set '%s' failed to start %s turn from view '%s'",
 					_set->name().c_str(), action.c_str(), _setView.c_str());
 			return;
@@ -3669,7 +3726,7 @@ void CyberflixEngine::navigateSet(const Common::String &action) {
 		_setTable = table;
 		_setAngle = startAngle;
 		_setTransitionType = kSetTransitionTurn;
-		displaySetFrame(frame);
+		displaySetFrame(_setFrameSequence);
 		return;
 	}
 
@@ -3685,8 +3742,7 @@ void CyberflixEngine::navigateSet(const Common::String &action) {
 		}
 		if (!closeCurrentSceneForNavigation())
 			return;
-		FrameImage frame;
-		if (!_set->applyTransitionFrame(transitionId, 0, _setFrameSequence, frame)) {
+		if (!_set->applyTransitionFrame(transitionId, 0, _setFrameSequence)) {
 			warning("Cyberflix: set '%s' failed to start forward transition %u",
 					_set->name().c_str(), transitionId);
 			return;
@@ -3694,7 +3750,7 @@ void CyberflixEngine::navigateSet(const Common::String &action) {
 		_setTransitionType = kSetTransitionForward;
 		_setTransitionResource = transitionId;
 		_setTransitionFrame = 0;
-		displaySetFrame(frame);
+		displaySetFrame(_setFrameSequence);
 	}
 }
 
@@ -3711,9 +3767,8 @@ void CyberflixEngine::advanceSetTransition() {
 		}
 
 		int nextAngle = (_setAngle + 1) % (int)count;
-		FrameImage frame;
 		if (!_set->applyPanoramaFrame((uint32)_setScene, (uint32)_setTable, (uint32)nextAngle,
-				_setFrameSequence, frame)) {
+				_setFrameSequence)) {
 			_setTransitionType = kSetTransitionNone;
 			warning("Cyberflix: failed to advance SET turn transition");
 			return;
@@ -3722,7 +3777,7 @@ void CyberflixEngine::advanceSetTransition() {
 		int viewIdx = _set->viewTagAtAngle((uint32)_setScene, (uint32)_setTable, (uint32)nextAngle);
 		if (viewIdx >= 0)
 			_setView = _set->viewName((uint32)_setScene, (uint32)viewIdx);
-		displaySetFrame(frame);
+		displaySetFrame(_setFrameSequence);
 
 		if (viewIdx >= 0) {
 			_setTransitionType = kSetTransitionNone;
@@ -3742,14 +3797,13 @@ void CyberflixEngine::advanceSetTransition() {
 			return;
 		}
 
-		FrameImage frame;
-		if (!_set->applyTransitionFrame(_setTransitionResource, nextFrame, _setFrameSequence, frame)) {
+		if (!_set->applyTransitionFrame(_setTransitionResource, nextFrame, _setFrameSequence)) {
 			_setTransitionType = kSetTransitionNone;
 			warning("Cyberflix: failed to advance SET forward transition %u", _setTransitionResource);
 			return;
 		}
 		_setTransitionFrame = nextFrame;
-		displaySetFrame(frame);
+		displaySetFrame(_setFrameSequence);
 
 		if (nextFrame == count - 1) {
 			uint32 scene = 0;
@@ -3780,8 +3834,7 @@ void CyberflixEngine::renderSetScene(int scene, int table, int angle, const Comm
 		return;
 	}
 
-	FrameImage frame;
-	if (!_set->renderScene((uint32)scene, (uint32)table, (uint32)angle, _setFrameSequence, frame))
+	if (!_set->renderScene((uint32)scene, (uint32)table, (uint32)angle, _setFrameSequence))
 		return;
 
 	_setScene = scene;
@@ -3803,28 +3856,36 @@ void CyberflixEngine::renderSetScene(int scene, int table, int angle, const Comm
 		programPalette(rgb);
 
 	if (_setVisible)
-		displaySetFrame(frame);
+		displaySetFrame(_setFrameSequence);
 
 	debug(1, "Cyberflix: rendered set '%s' scene %d '%s' angle %d (%ux%u)",
 			_set->name().c_str(), scene, _set->sceneName((uint32)scene).c_str(),
-			angle, frame.width, frame.height);
+			angle, _setFrameSequence.width(), _setFrameSequence.height());
 }
 
 void CyberflixEngine::displaySetFrame(const FrameImage &frame) {
+	displaySetFramePixels(frame.pixels.begin(), frame.width, frame.height);
+}
+
+void CyberflixEngine::displaySetFrame(const FrameSequence &frame) {
+	if (frame.empty())
+		return;
+	displaySetFramePixels(frame.pixels(), frame.width(), frame.height());
+}
+
+void CyberflixEngine::displaySetFramePixels(const byte *pixels, uint16 width, uint16 height) {
 	if (!_setVisible || !_set || !_set->isOpen())
 		return;
 
+	const FrameImage *stageBg = stageShellFrame();
 	Graphics::Surface *screen = _system->lockScreen();
 	// Base layer: the stage's UI shell (MAIN.STG node 0 — art-deco frame +
 	// inventory bar). The original's compositor keeps it on screen beneath
 	// the room: the redraw pass FUN_00442d90 repaints full-screen stage items
 	// (clipped to screen rect, FUN_004436d0) before world items, which clip
 	// to the set viewport DAT_00486760. Fall back to black with no stage.
-	FrameImage stageBg;
-	if (_stage && _stage->isOpen() && _stage->renderNode(0, stageBg)) {
-		for (int y = 0; y < stageBg.height && y < kScreenHeight; ++y)
-			for (int x = 0; x < stageBg.width && x < kScreenWidth; ++x)
-				*((byte *)screen->getBasePtr(x, y)) = stageBg.pixels[(uint)y * stageBg.width + x];
+	if (stageBg) {
+		copyFrameToScreen(*screen, *stageBg, 0, 0);
 	} else {
 		screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
 	}
@@ -3835,13 +3896,7 @@ void CyberflixEngine::displaySetFrame(const FrameImage &frame) {
 	// stage's inventory bar.
 	int x0 = _set->viewLeft();
 	int y0 = _set->viewTop();
-	for (int y = 0; y < frame.height; ++y) {
-		for (int x = 0; x < frame.width; ++x) {
-			int sx = x0 + x, sy = y0 + y;
-			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
-		}
-	}
+	copyFramePixelsToScreen(*screen, pixels, width, height, x0, y0);
 	// World/SET-space SHOP props (propset + propxyz) are projected through the
 	// active panorama camera before the screen-space inventory/UI overlays.
 	Set::CameraData cameraData;

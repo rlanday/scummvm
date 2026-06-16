@@ -170,7 +170,7 @@ const byte *Set::transitionTable(uint32 transitionId, uint32 &count) const {
 	return transition;
 }
 
-bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq, FrameImage &out) const {
+bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq) const {
 	int idx = resourceIndexById(frameId);
 	if (idx < 0) {
 		warning("Cyberflix: set '%s' references missing frame res %u", _name.c_str(), frameId);
@@ -184,6 +184,12 @@ bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq, FrameImage &out
 		warning("Cyberflix: set '%s' frame %u decode failed", _name.c_str(), frameId);
 		return false;
 	}
+	return true;
+}
+
+bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq, FrameImage &out) const {
+	if (!applyFrameResource(frameId, seq))
+		return false;
 	seq.copyTo(out);
 	return true;
 }
@@ -649,12 +655,7 @@ bool Set::transitionDestination(uint32 transitionId, uint32 &scene,
 	return !view.empty();
 }
 
-bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameImage &out) {
-	FrameSequence seq;
-	return renderScene(scene, table, angle, seq, out);
-}
-
-bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq, FrameImage &out) {
+bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq) {
 	uint32 count = 0;
 	const byte *pano = panoramaTable(scene, table, count);
 	if (!pano) {
@@ -679,14 +680,26 @@ bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &s
 		const byte *r = pano + 8 + a * kPanoramaRecordStride;
 		if (r + kPanoramaRecordStride > _fileData.end())
 			return false;
-		if (!applyFrameResource(READ_LE_UINT32(r + 0x2c), seq, out))
+		if (!applyFrameResource(READ_LE_UINT32(r + 0x2c), seq))
 			return false;
 	}
 
 	return true;
 }
 
-bool Set::applyPanoramaFrame(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq, FrameImage &out) {
+bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameImage &out) {
+	FrameSequence seq;
+	return renderScene(scene, table, angle, seq, out);
+}
+
+bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq, FrameImage &out) {
+	if (!renderScene(scene, table, angle, seq))
+		return false;
+	seq.copyTo(out);
+	return true;
+}
+
+bool Set::applyPanoramaFrame(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq) {
 	uint32 count = 0;
 	const byte *pano = panoramaTable(scene, table, count);
 	if (!pano || angle >= count)
@@ -694,7 +707,14 @@ bool Set::applyPanoramaFrame(uint32 scene, uint32 table, uint32 angle, FrameSequ
 	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
 	if (r + kPanoramaRecordStride > _fileData.end())
 		return false;
-	return applyFrameResource(READ_LE_UINT32(r + 0x2c), seq, out);
+	return applyFrameResource(READ_LE_UINT32(r + 0x2c), seq);
+}
+
+bool Set::applyPanoramaFrame(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq, FrameImage &out) {
+	if (!applyPanoramaFrame(scene, table, angle, seq))
+		return false;
+	seq.copyTo(out);
+	return true;
 }
 
 uint32 Set::transitionFrameCount(uint32 transitionId) const {
@@ -703,7 +723,7 @@ uint32 Set::transitionFrameCount(uint32 transitionId) const {
 	return count;
 }
 
-bool Set::applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence &seq, FrameImage &out) {
+bool Set::applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence &seq) {
 	uint32 count = 0;
 	const byte *transition = transitionTable(transitionId, count);
 	if (!transition || frame >= count)
@@ -711,7 +731,14 @@ bool Set::applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence 
 	const byte *r = transition + 0x0c + frame * kPanoramaRecordStride;
 	if (r + kPanoramaRecordStride > _fileData.end())
 		return false;
-	return applyFrameResource(READ_LE_UINT32(r + 0x2c), seq, out);
+	return applyFrameResource(READ_LE_UINT32(r + 0x2c), seq);
+}
+
+bool Set::applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence &seq, FrameImage &out) {
+	if (!applyTransitionFrame(transitionId, frame, seq))
+		return false;
+	seq.copyTo(out);
+	return true;
 }
 
 bool Set::loadSetPalette(byte *rgb) const {
