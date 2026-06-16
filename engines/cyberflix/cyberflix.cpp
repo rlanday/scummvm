@@ -1530,6 +1530,7 @@ void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
 	const Common::Array<byte> *cachedBackdrop =
 			capturePuppetGrabBackdrop(grabBackdrop) ? &grabBackdrop : nullptr;
 	Common::Event event;
+	const uint32 kPuppetActionPollCapMs = 33; // one native 30 fps puppet frame
 	for (;;) {
 		if (shouldQuit())
 			break;
@@ -1560,19 +1561,20 @@ void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
 				const uint32 nextFrameMs = (uint32)(((uint64)frame + 1) * 1000 + 29) / 30;
 				// Silent puppet actions are clocked from wall time at the same
 				// 30 fps cadence as speech. Sleep toward the next frame boundary
-				// instead of waking the backend event pump every 5 ms.
+				// instead of waking the backend event pump several times per
+				// frame; there is no cursor tracking during action playback.
 				_system->delayMillis(nextFrameMs > elapsed ?
-						MIN<uint32>(nextFrameMs - elapsed, 16) : 1);
+						MIN<uint32>(nextFrameMs - elapsed, kPuppetActionPollCapMs) : 1);
 				continue;
 			}
 			break;
 		}
 		const uint32 nextFrameMs = (uint32)(((uint64)frame + 1) * 1000 + 29) / 30;
 		// Speech playback is frame-clocked from the mixer at native 30 fps.
-		// Poll Esc promptly, but avoid 5 ms wakeups when the next animation
-		// frame cannot be due yet.
+		// Poll Esc at that same cadence, avoiding extra SDL/Cocoa event-pump
+		// wakeups between frames when the picture cannot change.
 		_system->delayMillis(nextFrameMs > elapsed ?
-				MIN<uint32>(nextFrameMs - elapsed, 16) : 1);
+				MIN<uint32>(nextFrameMs - elapsed, kPuppetActionPollCapMs) : 1);
 	}
 	_puppetCurrentFrame = frameCount - 1;
 	// If playback timing already presented the final frame, avoid one redundant
