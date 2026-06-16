@@ -1312,16 +1312,33 @@ bool CyberflixEngine::capturePuppetGrabBackdrop(Common::Array<byte> &backdrop) {
 	memset(backdrop.begin(), 0, backdrop.size());
 
 	if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
+		// TI.EXE FUN_00449150 copies from the retained SET backing surface
+		// (0x486770). ScummVM keeps that same surface in _setFrameSequence, so
+		// reuse it for puppetgrab instead of replaying the compressed panorama
+		// once per puppet action. Fall back to rendering only if a save/load or
+		// startup edge case reaches here before the retained surface exists.
 		FrameImage frame;
-		if (_set->renderScene((uint32)_setScene, (uint32)_setTable,
+		const byte *pixels = nullptr;
+		uint16 frameWidth = 0;
+		uint16 frameHeight = 0;
+		if (!_setFrameSequence.empty()) {
+			pixels = _setFrameSequence.pixels();
+			frameWidth = _setFrameSequence.width();
+			frameHeight = _setFrameSequence.height();
+		} else if (_set->renderScene((uint32)_setScene, (uint32)_setTable,
 				(uint32)_setAngle, _setFrameSequence, frame)) {
-			// TI.EXE FUN_00449150 copies the SET backing surface rect when a
-			// SET is open; it does not copy the stage/inventory-bar composite.
+			pixels = frame.pixels.begin();
+			frameWidth = frame.width;
+			frameHeight = frame.height;
+		}
+		if (pixels) {
+			// The native grab does not include stage/inventory-bar composite
+			// pixels or SHOP props; it copies just the current SET backing rect.
 			const int x0 = _set->viewLeft();
 			const int y0 = _set->viewTop();
 			int left = x0;
 			int srcX = 0;
-			int width = frame.width;
+			int width = frameWidth;
 			if (left < 0) {
 				srcX = -left;
 				width -= srcX;
@@ -1330,11 +1347,11 @@ bool CyberflixEngine::capturePuppetGrabBackdrop(Common::Array<byte> &backdrop) {
 			if (left + width > kScreenWidth)
 				width = kScreenWidth - left;
 			if (width > 0) {
-				for (int y = 0; y < frame.height; ++y) {
+				for (int y = 0; y < frameHeight; ++y) {
 					const int sy = y0 + y;
 					if (sy >= 0 && sy < kScreenHeight) {
 						memcpy(backdrop.begin() + (uint)sy * kScreenWidth + left,
-								frame.pixels.begin() + (uint)y * frame.width + srcX,
+								pixels + (uint)y * frameWidth + srcX,
 								width);
 					}
 				}
@@ -1540,12 +1557,22 @@ void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
 			break;
 		if (!_mixer->isSoundHandleActive(_puppetSpeechHandle)) {
 			if (pcm.empty() && frame + 1 < frameCount) {
-				_system->delayMillis(5);
+				const uint32 nextFrameMs = (uint32)(((uint64)frame + 1) * 1000 + 29) / 30;
+				// Silent puppet actions are clocked from wall time at the same
+				// 30 fps cadence as speech. Sleep toward the next frame boundary
+				// instead of waking the backend event pump every 5 ms.
+				_system->delayMillis(nextFrameMs > elapsed ?
+						MIN<uint32>(nextFrameMs - elapsed, 16) : 1);
 				continue;
 			}
 			break;
 		}
-		_system->delayMillis(5);
+		const uint32 nextFrameMs = (uint32)(((uint64)frame + 1) * 1000 + 29) / 30;
+		// Speech playback is frame-clocked from the mixer at native 30 fps.
+		// Poll Esc promptly, but avoid 5 ms wakeups when the next animation
+		// frame cannot be due yet.
+		_system->delayMillis(nextFrameMs > elapsed ?
+				MIN<uint32>(nextFrameMs - elapsed, 16) : 1);
 	}
 	_puppetCurrentFrame = frameCount - 1;
 	// If playback timing already presented the final frame, avoid one redundant
