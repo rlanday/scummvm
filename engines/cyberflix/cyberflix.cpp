@@ -5297,7 +5297,11 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 					: (_system->getMillis() - wallStartMs);
 			if (t >= frameEndMs)
 				break;
-			_system->delayMillis(5);
+			// Linear movies hide the cursor, so there is no software-cursor
+			// motion to present between frames. Poll often enough for skip/pause
+			// hotkeys to feel instant, but avoid waking the backend event pump
+			// every 5 ms while waiting for an authored frame deadline.
+			_system->delayMillis(MIN<uint32>(frameEndMs - t, 16));
 		}
 		if (nav == 2 && fi < pfNavTarget.size()) {
 			int idx = resolveFrameName(pfName, pfNavTarget[fi]);
