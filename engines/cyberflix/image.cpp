@@ -281,16 +281,33 @@ private:
 		while (_ok) {
 			int consume;            // number of code bits this symbol occupies
 			if (ax & 0x8000) {
-				// Most smooth gradients encode "same as predictor" as a single
-				// high bit. Test that bit directly instead of classifying the
-				// whole 16-bit window for every pixel in this hottest DPCM path.
-				dst[di] = dst[pe];
-				++di; ++pe;
-				ax = (uint16)((ax << 1) | (dxw >> 15));
-				--bits; --budget;
+				// Most smooth gradients encode "same as predictor" as consecutive
+				// one-bit symbols. Batch the leading 1 bits in the current window:
+				// reference-row prediction becomes a memcpy, while left prediction
+				// (pe == di - 1) becomes a fill of the previous output byte. Limit
+				// the batch to @c bits so reload/backtracking state stays identical
+				// to consuming the symbols one at a time.
+				uint16 inv = (uint16)~ax;
+				int run = inv ? 15 - Common::intLog2(inv) : 16;
+				if (run > bits)
+					run = bits;
+				if (run > budget)
+					run = budget;
+
+				if (pe + 1 == di)
+					memset(dst + di, dst[pe], run);
+				else
+					memcpy(dst + di, dst + pe, run);
+
+				if (run == 16)
+					ax = dxw;
+				else
+					ax = (uint16)((ax << run) | (dxw >> (16 - run)));
+				bits -= run;
+				di += run; pe += run; budget -= run;
 				if (budget == 0) break;
 				if (bits != 0)
-					dxw = (uint16)(dxw << 1);
+					dxw = (uint16)(dxw << run);
 				else { dxw = readWordBE(); bits = 16; }
 				continue;
 			}
