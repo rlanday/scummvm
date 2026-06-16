@@ -677,9 +677,8 @@ void CyberflixEngine::sendToStage(const Common::String &message, const Common::A
 		return;
 	}
 	Common::SharedPtr<Stage> dispatchStage = _stage;
-	Common::Array<const Script *> scopes;
-	scopes.push_back(dispatchStage->stageScript());
-	dispatchWithScopeChain(scopes, dispatchStage->name(), Common::String(), message, args, "stage");
+	dispatchWithScopes(dispatchStage->stageScript(), nullptr,
+			dispatchStage->name(), Common::String(), message, args, "stage");
 	refreshPropsIfDirty();
 }
 
@@ -691,9 +690,8 @@ void CyberflixEngine::sendToBoot(const Common::String &message, const Common::Ar
 		warning("Cyberflix: sendtoboot('%s') before BOOTFILE loaded", message.c_str());
 		return;
 	}
-	Common::Array<const Script *> scopes;
-	scopes.push_back(_bootScript.get());
-	dispatchWithScopeChain(scopes, "bootfile", Common::String(), message, args, "boot");
+	dispatchWithScopes(_bootScript.get(), nullptr, "bootfile", Common::String(),
+			message, args, "boot");
 	refreshPropsIfDirty();
 }
 
@@ -713,10 +711,8 @@ void CyberflixEngine::sendToFlat(const Common::String &flat, const Common::Strin
 		return;
 	}
 	Common::String flatName = dispatchStage->nodeName((uint32)node);
-	Common::Array<const Script *> scopes;
-	scopes.push_back(dispatchStage->nodeScript((uint32)node));
-	scopes.push_back(dispatchStage->stageScript());
-	dispatchWithScopeChain(scopes, flatName, flatName, message, args, "flat");
+	dispatchWithScopes(dispatchStage->nodeScript((uint32)node),
+			dispatchStage->stageScript(), flatName, flatName, message, args, "flat");
 	refreshPropsIfDirty();
 }
 
@@ -2220,16 +2216,41 @@ void CyberflixEngine::setCursorResource(const Common::String &resourceName) {
 // notably BOOTFILE res1 (the boot mousedown/idle handlers) is NOT part of a
 // prop/shop dispatch, so a prop without its own handler leaves the message
 // unhandled instead of recursing into the boot handler of the same name.
-// The 0xfba/0xfbb context atoms are saved and restored around the call.
+// The 0xfba/0xfbb context atoms are saved and restored around the call. The
+// fixed one/two-scope helper is used by hot scheduled-loop callbacks to avoid
+// first building a temporary "scopes" array that is immediately reversed again.
 void CyberflixEngine::dispatchWithScopes(const Script *scope1, const Script *scope2,
 		const Common::String &self, const Common::String &targetProp,
-		const Common::String &message, const Common::Array<Value> &args) {
-	Common::Array<const Script *> scopes;
-	if (scope1)
-		scopes.push_back(scope1);
+		const Common::String &message, const Common::Array<Value> &args,
+		const char *debugContext) {
+	dispatchWithScopesValue(scope1, scope2, self, targetProp, message, args, debugContext);
+}
+
+Value CyberflixEngine::dispatchWithScopesValue(const Script *scope1, const Script *scope2,
+		const Common::String &self, const Common::String &targetProp,
+		const Common::String &message, const Common::Array<Value> &args,
+		const char *debugContext) {
+	Common::String prevSelf = _vm.contextSelf();
+	Common::String prevProp = _vm.contextProp();
+	Common::Array<const Script *> chain;
+	chain.reserve(3);
+	if (_globalLib)
+		chain.push_back(_globalLib.get()); // "System: " tail, searched last
 	if (scope2)
-		scopes.push_back(scope2);
-	dispatchWithScopeChain(scopes, self, targetProp, message, args, "shop/prop");
+		chain.push_back(scope2);
+	if (scope1)
+		chain.push_back(scope1);
+	Common::Array<const Script *> prevChain = _vm.swapLibraries(chain);
+	_vm.setDispatchContext(self, targetProp);
+
+	bool handled = false;
+	Value result = _vm.callFunction(message, args, &handled);
+	if (!handled)
+		debug(1, "Cyberflix: %s message '%s' unhandled", debugContext, message.c_str());
+
+	_vm.setDispatchContext(prevSelf, prevProp);
+	_vm.swapLibraries(prevChain);
+	return result;
 }
 
 void CyberflixEngine::dispatchWithScopeChain(const Common::Array<const Script *> &scopes,
@@ -2246,6 +2267,7 @@ Value CyberflixEngine::dispatchWithScopeChainValue(const Common::Array<const Scr
 	Common::String prevSelf = _vm.contextSelf();
 	Common::String prevProp = _vm.contextProp();
 	Common::Array<const Script *> chain;
+	chain.reserve((_globalLib ? 1 : 0) + scopes.size());
 	if (_globalLib)
 		chain.push_back(_globalLib.get()); // "System: " tail, searched last
 	for (int i = (int)scopes.size() - 1; i >= 0; --i)
@@ -2267,24 +2289,19 @@ Value CyberflixEngine::dispatchWithScopeChainValue(const Common::Array<const Scr
 void CyberflixEngine::dispatchSetMessage(const Common::String &message, const Common::Array<Value> &args) {
 	if (!_set || !_set->isOpen() || message.empty())
 		return;
-	Common::Array<Common::SharedPtr<Script> > keepAlive;
-	keepAlive.push_back(_set->setScriptShared());
-	Common::Array<const Script *> scopes;
-	scopes.push_back(keepAlive[0].get());
-	dispatchWithScopeChain(scopes, _set->setName(), Common::String(), message, args, "set");
+	Common::SharedPtr<Script> setScript = _set->setScriptShared();
+	dispatchWithScopes(setScript.get(), nullptr, _set->setName(), Common::String(),
+			message, args, "set");
 }
 
 void CyberflixEngine::dispatchSceneMessage(uint32 scene, const Common::String &message,
 		const Common::Array<Value> &args) {
 	if (!_set || !_set->isOpen() || message.empty())
 		return;
-	Common::Array<Common::SharedPtr<Script> > keepAlive;
-	keepAlive.push_back(_set->sceneScriptShared(scene));
-	keepAlive.push_back(_set->setScriptShared());
-	Common::Array<const Script *> scopes;
-	scopes.push_back(keepAlive[0].get());
-	scopes.push_back(keepAlive[1].get());
-	dispatchWithScopeChain(scopes, _set->sceneName(scene), Common::String(), message, args, "scene");
+	Common::SharedPtr<Script> sceneScript = _set->sceneScriptShared(scene);
+	Common::SharedPtr<Script> setScript = _set->setScriptShared();
+	dispatchWithScopes(sceneScript.get(), setScript.get(), _set->sceneName(scene),
+			Common::String(), message, args, "scene");
 }
 
 bool CyberflixEngine::closeCurrentSceneForNavigation() {
@@ -3550,6 +3567,21 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 	debug(1, "Cyberflix: visualeffect(%#x, %d)", effect, duration);
 }
 
+CyberflixEngine::ScheduledLoop::Kind CyberflixEngine::scheduledLoopKind(
+		const Common::String &kind) {
+	if (kind.equalsIgnoreCase("scene"))
+		return ScheduledLoop::kScene;
+	if (kind.equalsIgnoreCase("flat"))
+		return ScheduledLoop::kFlat;
+	if (kind.equalsIgnoreCase("stage"))
+		return ScheduledLoop::kStage;
+	if (kind.equalsIgnoreCase("prop"))
+		return ScheduledLoop::kProp;
+	if (kind.equalsIgnoreCase("shop"))
+		return ScheduledLoop::kShop;
+	return ScheduledLoop::kUnknown;
+}
+
 void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String &target,
 		const Common::String &message, int delay) {
 	if (kind.empty() || message.empty()) {
@@ -3561,6 +3593,7 @@ void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String 
 	stopLoop(kind, target);
 
 	ScheduledLoop loop;
+	loop.kindId = scheduledLoopKind(kind);
 	loop.kind = kind;
 	loop.kind.toLowercase();
 	loop.target = target;
@@ -3575,9 +3608,13 @@ void CyberflixEngine::stopLoop(const Common::String &kind, const Common::String 
 	if (kind.empty())
 		return;
 	const bool all = kind.equalsIgnoreCase("all");
+	const ScheduledLoop::Kind kindId = scheduledLoopKind(kind);
 	for (int i = (int)_scheduledLoops.size() - 1; i >= 0; --i) {
 		const ScheduledLoop &loop = _scheduledLoops[(uint32)i];
-		if (all || (loop.kind.equalsIgnoreCase(kind) &&
+		const bool kindMatches = kindId == ScheduledLoop::kUnknown
+				? loop.kind.equalsIgnoreCase(kind)
+				: loop.kindId == kindId;
+		if (all || (kindMatches &&
 				(target.empty() || loop.target.equalsIgnoreCase(target))))
 			_scheduledLoops.remove_at((uint32)i);
 	}
@@ -3634,6 +3671,10 @@ void CyberflixEngine::processScheduledLoops() {
 	if (_loopsPaused || _scheduledLoops.empty())
 		return;
 
+	// Scheduled callbacks are commonly zero-argument "scene"/"flat" loops that
+	// fire from forceupdate(). Keep the hot path allocation-free except for the
+	// actual script dispatch work measured under this routine.
+	Common::Array<Value> noArgs;
 	for (uint32 i = 0; i < _scheduledLoops.size();) {
 		--_scheduledLoops[i].remainingPasses;
 		if (_scheduledLoops[i].remainingPasses > 0) {
@@ -3643,18 +3684,23 @@ void CyberflixEngine::processScheduledLoops() {
 
 		ScheduledLoop loop = _scheduledLoops[i];
 		_scheduledLoops.remove_at(i);
-		Common::Array<Value> noArgs;
-		if (loop.kind.equalsIgnoreCase("scene")) {
+		switch (loop.kindId) {
+		case ScheduledLoop::kScene:
 			sendToScene(loop.target, loop.message, noArgs);
-		} else if (loop.kind.equalsIgnoreCase("flat")) {
+			break;
+		case ScheduledLoop::kFlat:
 			sendToFlat(loop.target, loop.message, noArgs);
-		} else if (loop.kind.equalsIgnoreCase("stage")) {
+			break;
+		case ScheduledLoop::kStage:
 			sendToStage(loop.message, noArgs);
-		} else if (loop.kind.equalsIgnoreCase("prop")) {
+			break;
+		case ScheduledLoop::kProp:
 			sendToProp(loop.target, loop.message, noArgs);
-		} else if (loop.kind.equalsIgnoreCase("shop")) {
+			break;
+		case ScheduledLoop::kShop:
 			sendToShop(loop.target, loop.message, noArgs);
-		} else {
+			break;
+		default:
 			debug(1, "Cyberflix: makeloop kind '%s' unhandled", loop.kind.c_str());
 		}
 		refreshPropsIfDirty();

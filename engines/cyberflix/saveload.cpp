@@ -867,6 +867,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	for (uint i = 0; i < loopStates.size(); ++i) {
 		ScheduledLoop loop;
 		loop.kind = loopStates[i].kind;
+		loop.kindId = scheduledLoopKind(loop.kind);
 		loop.target = loopStates[i].target;
 		loop.message = loopStates[i].message;
 		loop.remainingPasses = loopStates[i].remainingPasses;

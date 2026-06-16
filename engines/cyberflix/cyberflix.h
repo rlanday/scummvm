@@ -421,7 +421,12 @@ private:
 	 */
 	void dispatchWithScopes(const Script *scope1, const Script *scope2,
 			const Common::String &self, const Common::String &targetProp,
-			const Common::String &message, const Common::Array<Value> &args);
+			const Common::String &message, const Common::Array<Value> &args,
+			const char *debugContext = "shop/prop");
+	Value dispatchWithScopesValue(const Script *scope1, const Script *scope2,
+			const Common::String &self, const Common::String &targetProp,
+			const Common::String &message, const Common::Array<Value> &args,
+			const char *debugContext);
 	void dispatchWithScopeChain(const Common::Array<const Script *> &scopes,
 			const Common::String &self, const Common::String &targetProp,
 			const Common::String &message, const Common::Array<Value> &args,
@@ -521,6 +526,15 @@ private:
 	bool _keyAborts = false;  ///< Global keyaborts() getter state.
 
 	struct ScheduledLoop {
+		enum Kind {
+			kUnknown,
+			kScene,
+			kFlat,
+			kStage,
+			kProp,
+			kShop
+		};
+		Kind kindId = kUnknown;
 		Common::String kind;
 		Common::String target;
 		Common::String message;
@@ -528,6 +542,7 @@ private:
 	};
 	Common::Array<ScheduledLoop> _scheduledLoops;
 	bool _loopsPaused = false;
+	static ScheduledLoop::Kind scheduledLoopKind(const Common::String &kind);
 	void processScheduledLoops();
 	int _frameRate = 3;       ///< DAT_00461126, scaled 60 Hz units between compositor passes.
 	int _lastFrameTick = 0;   ///< DAT_00486788, last completed compositor tick.
