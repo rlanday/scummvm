@@ -134,7 +134,7 @@ void StageRuntime::sendToStage(CyberflixEngine &engine, const Common::String &me
 	Common::SharedPtr<Stage> dispatchStage = stage();
 	engine.dispatchWithScopes(dispatchStage->stageScript(), nullptr,
 			dispatchStage->name(), Common::String(), message, args, "stage");
-	engine.refreshPropsIfDirty();
+	engine.propRuntime().refreshPropsIfDirty(engine);
 }
 
 Value StageRuntime::sendToStageFx(CyberflixEngine &engine, const Common::String &message, const Common::Array<Value> &args) {
@@ -163,7 +163,7 @@ void StageRuntime::sendToFlat(CyberflixEngine &engine, const Common::String &fla
 	Common::String flatName = dispatchStage->nodeName((uint32)dispatchNode);
 	engine.dispatchWithScopes(dispatchStage->nodeScript((uint32)dispatchNode),
 			dispatchStage->stageScript(), flatName, flatName, message, args, "flat");
-	engine.refreshPropsIfDirty();
+	engine.propRuntime().refreshPropsIfDirty(engine);
 }
 
 Value StageRuntime::sendToFlatFx(CyberflixEngine &engine, const Common::String &flat, const Common::String &message,
@@ -210,7 +210,7 @@ void StageRuntime::sendToButton(CyberflixEngine &engine, const Common::String &f
 			dispatchStage->nodeName((uint32)dispatchNode).c_str(), button.c_str(),
 			message.c_str(), args.size());
 	engine.dispatchWithScopeChain(scopes, button, button, message, args, "button");
-	engine.refreshPropsIfDirty();
+	engine.propRuntime().refreshPropsIfDirty(engine);
 }
 
 Value StageRuntime::sendToButtonFx(CyberflixEngine &engine, const Common::String &flat, const Common::String &button,
@@ -254,14 +254,14 @@ void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool
 	if (stage()->loadStagePalette(rgb) && !engine.paletteIsBlack())
 		engine.programPalette(rgb);
 
-	engine.advancePropPoses();
+	engine.propRuntime().advancePropPoses();
 	Graphics::Surface *screen = engine._system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
 	copyFrameToScreen(*screen, frame, 0, 0);
 
 	Common::Array<const Shop::Prop *> draw;
 	Common::Array<const Shop *> drawShop;
-	engine.collectScreenProps(draw, drawShop);
+	engine.propRuntime().collectScreenProps(draw, drawShop);
 	for (uint32 i = 0; i < draw.size(); ++i) {
 		Common::SharedPtr<CelImage> cel;
 		Common::Rect r;
@@ -295,10 +295,10 @@ void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
 		return;
 	}
 
-	engine.advancePropPoses();
+	engine.propRuntime().advancePropPoses();
 	Common::Array<const Shop::Prop *> draw;
 	Common::Array<const Shop *> drawShop;
-	engine.collectScreenProps(draw, drawShop);
+	engine.propRuntime().collectScreenProps(draw, drawShop);
 
 	Graphics::Surface *screen = engine._system->lockScreen();
 	for (uint32 r = 0; r < engine.propRuntime().dirtyRects().size(); ++r) {

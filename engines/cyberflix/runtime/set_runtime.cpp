@@ -101,7 +101,7 @@ void SetRuntime::sendToPainting(CyberflixEngine &engine, const Common::String &s
 	}
 	engine.dispatchWithThreeScopesValue(paintingScript.get(), sceneScript.get(), setScript.get(),
 			painting, painting, message, args, "painting");
-	engine.refreshPropsIfDirty();
+	engine.propRuntime().refreshPropsIfDirty(engine);
 }
 
 Value SetRuntime::sendToPaintingFx(CyberflixEngine &engine, const Common::String &sceneName,
@@ -316,7 +316,7 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 	if (!visible() || !set() || !set()->isOpen())
 		return;
 
-	engine.advancePropPoses();
+	engine.propRuntime().advancePropPoses();
 	const FrameImage *stageBg = engine.stageRuntime().stageShellFrame();
 	Graphics::Surface *screen = engine._system->lockScreen();
 	// Base layer: the stage's UI shell (MAIN.STG node 0 — art-deco frame +
@@ -356,8 +356,8 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		Common::Array<const Cast::Actor *> actorDraw;
 		Common::Array<const Cast *> actorCast;
 		Common::Array<int16> actorDepths;
-		engine.collectWorldProps(worldDraw, worldShop, worldDepths, camera);
-		engine.collectWorldActors(actorDraw, actorCast, actorDepths, camera);
+		engine.propRuntime().collectWorldProps(engine, worldDraw, worldShop, worldDepths, camera);
+		engine.actorRuntime().collectWorldActors(engine, actorDraw, actorCast, actorDepths, camera);
 		Common::Rect viewport(camera.viewportLeft, camera.viewportTop,
 				camera.viewportRight, camera.viewportBottom);
 		uint32 propIndex = 0, actorIndex = 0;
@@ -390,7 +390,7 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 	{
 		Common::Array<const Shop::Prop *> draw;
 		Common::Array<const Shop *> drawShop;
-		engine.collectScreenProps(draw, drawShop);
+		engine.propRuntime().collectScreenProps(draw, drawShop);
 		for (uint32 i = 0; i < draw.size(); ++i) {
 			Common::SharedPtr<CelImage> cel;
 			Common::Rect r;

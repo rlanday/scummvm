@@ -146,7 +146,7 @@ void CyberflixEngine::flushEvents() {
 }
 
 void CyberflixEngine::drawString(const Common::String &text, int32 packedPoint, int color, int size) {
-	const Graphics::Font *font = textFont(size);
+	const Graphics::Font *font = puppetRuntime().textFont(size);
 	if (!font)
 		return;
 
@@ -234,9 +234,9 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 	else if (duration > 1000)
 		duration = 1000;
 
-	refreshPropsIfDirty();
+	propRuntime().refreshPropsIfDirty(*this);
 	if (_puppetRuntime.isVisible()) {
-		renderCurrentPuppetFrame(false);
+		puppetRuntime().renderCurrentFrame(*this, false);
 	} else if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0) {
 		if (_setRuntime.transitionType() != kSetTransitionNone)
 			setRuntime().advanceSetTransition(*this);

@@ -352,40 +352,8 @@ private:
 	PropRuntime _propRuntime;
 
 	ActorRuntime _actorRuntime;
-	void refreshActorStarPositions();
 
 	PuppetRuntime _puppetRuntime;
-	const Graphics::Font *textFont(int size);
-	bool renderCurrentPuppetFrame(bool present);
-
-	/** Find an open shop by (case-insensitive) file name, or nullptr. */
-	Shop *findShop(const Common::String &name);
-	Common::SharedPtr<Shop> findShopShared(const Common::String &name);
-	/** Find a prop by name across all open shops (global array semantics).
-	 *  Optionally returns the owning shop. */
-	Shop::Prop *findProp(const Common::String &name, Shop **shopOut = nullptr);
-	Common::SharedPtr<Shop> findPropOwnerShared(const Common::String &name, Shop::Prop **propOut);
-	/**
-	 * Collect the visible screen-space props in paint order (most negative
-	 * depth first, stable) — the same display-item list the compositor builds
-	 * (FUN_0042bb90 / FUN_004434f0). Shared by renderSetScene (paints in list
-	 * order, deepest first) and hitTest (probes it backwards, topmost first,
-	 * like FUN_004430f0).
-	 */
-	void collectScreenProps(Common::Array<const Shop::Prop *> &draw,
-			Common::Array<const Shop *> &drawShop);
-	void advancePropPoses();
-	bool hasAnimatedScreenProps() const;
-	void collectWorldProps(Common::Array<const Shop::Prop *> &draw,
-			Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
-			const Shop::WorldCamera &camera);
-	void collectWorldActors(Common::Array<const Cast::Actor *> &draw,
-			Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
-			const Shop::WorldCamera &camera);
-	bool screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const;
-	void queueDirtyRect(const Common::Rect &rect);
-	void markPropDirty(const Shop &shop, const Shop::Prop &prop, const Common::Rect *oldRect);
-	void markShopDirty(const Shop &shop);
 	/**
 	 * Dispatch `message(args)` with temporary scope-chain entries pushed on
 	 * the VM (newest searched first), mirroring the original's per-dispatch
@@ -416,8 +384,6 @@ private:
 	void dispatchSceneMessage(uint32 scene, const Common::String &message,
 			const Common::Array<Value> &args);
 	bool closeCurrentSceneForNavigation();
-	/** Repaint the current set scene if prop state changed (post-dispatch). */
-	void refreshPropsIfDirty();
 	bool processPendingLoad();
 
 	/**

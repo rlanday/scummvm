@@ -137,14 +137,6 @@ bool CyberflixEngine::puppetVisible(const bool *newVisible) {
 	return _puppetRuntime.puppetVisible(*this, newVisible);
 }
 
-bool CyberflixEngine::renderCurrentPuppetFrame(bool present) {
-	return _puppetRuntime.renderCurrentFrame(*this, present);
-}
-
-const Graphics::Font *CyberflixEngine::textFont(int size) {
-	return _puppetRuntime.textFont(size);
-}
-
 int CyberflixEngine::puppetParam(int selector, const int *newValue) {
 	return _puppetRuntime.puppetParam(selector, newValue);
 }
@@ -155,10 +147,6 @@ int CyberflixEngine::countPuppets() {
 
 Common::String CyberflixEngine::indexToPuppet(int index) {
 	return _puppetRuntime.indexToPuppet(index);
-}
-
-void CyberflixEngine::refreshActorStarPositions() {
-	_actorRuntime.refreshActorStarPositions(*this);
 }
 
 void CyberflixEngine::openCastFile(const Common::String &name) {
@@ -252,58 +240,6 @@ void CyberflixEngine::actorTurn(const Common::String &name, int turn) {
 
 int CyberflixEngine::starXYZ(const Common::String &name, int selector) {
 	return _actorRuntime.starXYZ(*this, name, selector);
-}
-
-Shop *CyberflixEngine::findShop(const Common::String &name) {
-	return _propRuntime.findShop(name);
-}
-
-Common::SharedPtr<Shop> CyberflixEngine::findShopShared(const Common::String &name) {
-	return _propRuntime.findShopShared(name);
-}
-
-Shop::Prop *CyberflixEngine::findProp(const Common::String &name, Shop **shopOut) {
-	return _propRuntime.findProp(name, shopOut);
-}
-
-Common::SharedPtr<Shop> CyberflixEngine::findPropOwnerShared(const Common::String &name,
-		Shop::Prop **propOut) {
-	return _propRuntime.findPropOwnerShared(name, propOut);
-}
-
-void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw,
-		Common::Array<const Shop *> &drawShop) {
-	_propRuntime.collectScreenProps(draw, drawShop);
-}
-
-void CyberflixEngine::advancePropPoses() {
-	_propRuntime.advancePropPoses();
-}
-
-bool CyberflixEngine::hasAnimatedScreenProps() const {
-	return _propRuntime.hasAnimatedScreenProps();
-}
-
-void CyberflixEngine::collectWorldProps(Common::Array<const Shop::Prop *> &draw,
-		Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
-		const Shop::WorldCamera &camera) {
-	_propRuntime.collectWorldProps(*this, draw, drawShop, depths, camera);
-}
-
-bool CyberflixEngine::screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const {
-	return _propRuntime.screenPropRect(shop, prop, rect);
-}
-
-void CyberflixEngine::queueDirtyRect(const Common::Rect &rect) {
-	_propRuntime.queueDirtyRect(rect);
-}
-
-void CyberflixEngine::markPropDirty(const Shop &shop, const Shop::Prop &prop, const Common::Rect *oldRect) {
-	_propRuntime.markPropDirty(shop, prop, oldRect);
-}
-
-void CyberflixEngine::markShopDirty(const Shop &shop) {
-	_propRuntime.markShopDirty(shop);
 }
 
 void CyberflixEngine::openShopFile(const Common::String &name) {
@@ -400,10 +336,6 @@ int CyberflixEngine::countProps() {
 
 Common::String CyberflixEngine::indexToProp(int index) {
 	return _propRuntime.indexToProp(index);
-}
-
-void CyberflixEngine::refreshPropsIfDirty() {
-	_propRuntime.refreshPropsIfDirty(*this);
 }
 
 void CyberflixEngine::openTrackFile(const Common::String &name) {
@@ -586,7 +518,7 @@ void CyberflixEngine::sendToBoot(const Common::String &message, const Common::Ar
 	}
 	dispatchWithScopes(_bootScript.get(), nullptr, "bootfile", Common::String(),
 			message, args, "boot");
-	refreshPropsIfDirty();
+	propRuntime().refreshPropsIfDirty(*this);
 }
 
 Value CyberflixEngine::sendToBootFx(const Common::String &message, const Common::Array<Value> &args) {
@@ -628,12 +560,6 @@ Value CyberflixEngine::sendToButtonFx(const Common::String &flat, const Common::
 // array (DAT_0046112c/DAT_00461130) across all open casts; lookups and
 // countactors/indextoactor therefore span open casts in open order.
 
-void CyberflixEngine::collectWorldActors(Common::Array<const Cast::Actor *> &draw,
-		Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
-		const Shop::WorldCamera &camera) {
-	_actorRuntime.collectWorldActors(*this, draw, drawCast, depths, camera);
-}
-
 static bool isReplacementStage(const Common::SharedPtr<Stage> &stage) {
 	return stage && stage->isOpen() && !stage->name().equalsIgnoreCase("main.stg");
 }
@@ -661,7 +587,7 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 
 	Common::Array<const Shop::Prop *> draw;
 	Common::Array<const Shop *> drawShop;
-	collectScreenProps(draw, drawShop);
+	propRuntime().collectScreenProps(draw, drawShop);
 	for (int i = (int)draw.size() - 1; i >= 0; --i) {
 		Common::SharedPtr<CelImage> cel;
 		Common::Rect r;
@@ -687,8 +613,8 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 			Common::Array<const Cast::Actor *> actorDraw;
 			Common::Array<const Cast *> actorCast;
 			Common::Array<int16> actorDepths;
-			collectWorldProps(worldDraw, worldShop, worldDepths, camera);
-			collectWorldActors(actorDraw, actorCast, actorDepths, camera);
+			propRuntime().collectWorldProps(*this, worldDraw, worldShop, worldDepths, camera);
+			actorRuntime().collectWorldActors(*this, actorDraw, actorCast, actorDepths, camera);
 			Common::Array<byte> itemType;
 			Common::Array<uint32> itemIndex;
 			uint32 propIndex = 0, actorIndex = 0;
@@ -970,11 +896,11 @@ void CyberflixEngine::forceUpdate() {
 	const bool cursorMoved = pumpCursorMotionEvents();
 	bool presented = false;
 	processScheduledLoops();
-	if (!_propRuntime.dirty() && isReplacementStage(_stageRuntime.stage()) && hasAnimatedScreenProps())
+	if (!_propRuntime.dirty() && isReplacementStage(_stageRuntime.stage()) && propRuntime().hasAnimatedScreenProps())
 		_propRuntime.setDirty(true);
-	refreshPropsIfDirty();
+	propRuntime().refreshPropsIfDirty(*this);
 	if (_puppetRuntime.isVisible()) {
-		renderCurrentPuppetFrame(true);
+		puppetRuntime().renderCurrentFrame(*this, true);
 		_setRuntime.screenUpdatePending() = false;
 		_framePacingRuntime.noteForceUpdatePresented(true);
 		presented = true;
@@ -1154,7 +1080,7 @@ Common::Error CyberflixEngine::run() {
 					if (!handled)
 						warning("Cyberflix: boot script has no %s handler",
 								event.kbdRepeat ? "keyrepeat" : "keydown");
-					refreshPropsIfDirty();
+					propRuntime().refreshPropsIfDirty(*this);
 				}
 			}
 		}
@@ -1164,7 +1090,7 @@ Common::Error CyberflixEngine::run() {
 		_framePacingRuntime.beginIdle();
 		_vm.callFunction("idle", Common::Array<Value>(), &handled);
 		const bool propsDirtyAfterIdle = _propRuntime.dirty();
-		refreshPropsIfDirty();
+		propRuntime().refreshPropsIfDirty(*this);
 		if (!_framePacingRuntime.forceUpdatePresentedDuringIdle() || propsDirtyAfterIdle)
 			_system->updateScreen();
 		if (_framePacingRuntime.frameRate() == 0 && _setRuntime.transitionType() == kSetTransitionNone)

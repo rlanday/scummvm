@@ -62,7 +62,7 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 	debug(1, "Cyberflix: set '%s' open (%u scenes, name '%s', default scene '%s' view '%s')",
 			name.c_str(), set()->sceneCount(), set()->setName().c_str(),
 			set()->defaultScene().c_str(), set()->defaultView().c_str());
-	engine.refreshActorStarPositions();
+	engine.actorRuntime().refreshActorStarPositions(engine);
 
 	// FUN_004307f0: when no scene/view argument is given, the defaults come
 	// from the set's master header (+0xa0e / +0xa1e).

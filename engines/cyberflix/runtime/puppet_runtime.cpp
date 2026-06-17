@@ -128,7 +128,7 @@ void PuppetRuntime::sendToPuppet(CyberflixEngine &engine, const Common::String &
 	// fixed helper instead of building a transient scope-chain array each time.
 	engine.dispatchWithScopes(script.get(), nullptr, _puppet->sourceName(), Common::String(),
 			message, args, "puppet");
-	engine.refreshPropsIfDirty();
+	engine.propRuntime().refreshPropsIfDirty(engine);
 }
 
 Value PuppetRuntime::sendToPuppetFx(CyberflixEngine &engine, const Common::String &puppetName,
