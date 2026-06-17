@@ -278,8 +278,6 @@ private:
 	 */
 	bool setGameCursor(const Common::String &name);
 	bool pumpCursorMotionEvents();
-	bool shouldTraceBridgeCursor() const;
-	void debugBridgeCursorHit(int16 x, int16 y, const char *kind, const Common::String &name) const;
 
 	/** Lazily open the game's TI.EXE for resource access. Returns nullptr if
 	 *  it cannot be found (the game can still run without a custom cursor). */

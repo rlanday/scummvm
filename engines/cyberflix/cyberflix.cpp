@@ -551,17 +551,6 @@ bool CyberflixEngine::setGameCursor(const Common::String &name) {
 	return true;
 }
 
-bool CyberflixEngine::shouldTraceBridgeCursor() const {
-	return _stage && _stage->isOpen() && _stage->name().equalsIgnoreCase("bridge.stg");
-}
-
-void CyberflixEngine::debugBridgeCursorHit(int16 x, int16 y, const char *kind,
-		const Common::String &name) const {
-	if (shouldTraceBridgeCursor())
-		debug(1, "Cyberflix: bridge hover hittest(%d,%d) -> %s '%s'",
-				x, y, kind, name.c_str());
-}
-
 // openstagefile(name): open a DATA/*.STG deck. The boot script calls this for
 // MAIN.STG just before sendtostage(0). Mirrors TI.EXE FUN_004090b0 (which parses
 // via FUN_00409150). See files/decomp/stage-notes.md.
@@ -825,9 +814,6 @@ void CyberflixEngine::renderStageNode(int node, bool resetCursor) {
 		warning("Cyberflix: sendtostage(%d) with no stage open", node);
 		return;
 	}
-	if (shouldTraceBridgeCursor())
-		debug(1, "Cyberflix: bridge renderStageNode(%d, resetCursor=%d)",
-				node, resetCursor ? 1 : 0);
 	_stageNode = node;
 
 	FrameImage frame;
@@ -891,8 +877,6 @@ void CyberflixEngine::renderStageNode(int node, bool resetCursor) {
 void CyberflixEngine::repaintDirtyStageRects() {
 	if (!_stage || !_stage->isOpen() || _dirtyRects.empty())
 		return;
-	if (shouldTraceBridgeCursor())
-		debug(1, "Cyberflix: bridge repaintDirtyStageRects(%u)", _dirtyRects.size());
 
 	FrameImage frame;
 	if (!_stage->renderNode((uint32)_stageNode, frame)) {
@@ -2305,7 +2289,6 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 		if (!cel.isOpaque(x - r.left, y - r.top))
 			continue;
 		_hitKind = "prop";
-		debugBridgeCursorHit(x, y, _hitKind.c_str(), draw[i]->name);
 		return draw[i]->name;
 	}
 
@@ -2357,7 +2340,6 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 				if (!cel.isOpaque(srcX, srcY))
 					continue;
 				_hitKind = itemType[(uint)i] ? "actor" : "prop";
-				debugBridgeCursorHit(x, y, _hitKind.c_str(), name);
 				return name;
 			}
 		}
@@ -2367,13 +2349,10 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 		Common::String button = _stage->hitTestButton((uint32)_stageNode, x, y);
 		if (!button.empty()) {
 			_hitKind = "button";
-			debugBridgeCursorHit(x, y, _hitKind.c_str(), button);
 			return button;
 		}
 		_hitKind = "flat";
-		Common::String flat = _stage->nodeName((uint32)_stageNode);
-		debugBridgeCursorHit(x, y, _hitKind.c_str(), flat);
-		return flat;
+		return _stage->nodeName((uint32)_stageNode);
 	}
 
 	if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
@@ -2383,14 +2362,11 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 				Common::String painting = _set->hitTestPainting((uint32)_setScene, _setView, x, y);
 				if (!painting.empty()) {
 					_hitKind = "painting";
-					debugBridgeCursorHit(x, y, _hitKind.c_str(), painting);
 					return painting;
 				}
 			}
 			_hitKind = "scene";
-			Common::String scene = _set->sceneName((uint32)_setScene);
-			debugBridgeCursorHit(x, y, _hitKind.c_str(), scene);
-			return scene;
+			return _set->sceneName((uint32)_setScene);
 		}
 	}
 
@@ -2398,17 +2374,13 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 		Common::String button = _stage->hitTestButton((uint32)_stageNode, x, y);
 		if (!button.empty()) {
 			_hitKind = "button";
-			debugBridgeCursorHit(x, y, _hitKind.c_str(), button);
 			return button;
 		}
 		_hitKind = "flat";
-		Common::String flat = _stage->nodeName((uint32)_stageNode);
-		debugBridgeCursorHit(x, y, _hitKind.c_str(), flat);
-		return flat;
+		return _stage->nodeName((uint32)_stageNode);
 	}
 
 	_hitKind = "None";
-	debugBridgeCursorHit(x, y, _hitKind.c_str(), Common::String());
 	return Common::String();
 }
 
@@ -2509,9 +2481,6 @@ int CyberflixEngine::calcMod(int a, int b) {
 // cursor(...) -> TI.EXE FUN_00446920, with the script name already resolved
 // to a PE resource name by the VM (see VMHost::setCursorResource).
 void CyberflixEngine::setCursorResource(const Common::String &resourceName) {
-	if (shouldTraceBridgeCursor())
-		debug(1, "Cyberflix: bridge hover cursor request '%s' after %s hit",
-				resourceName.c_str(), _hitKind.c_str());
 	if (setGameCursor(resourceName))
 		CursorMan.showMouse(true);
 	else
