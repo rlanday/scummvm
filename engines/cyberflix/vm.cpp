@@ -859,6 +859,72 @@ bool ScriptVM::callPropMethod(uint16 opcode, const Common::Array<Value> &args, V
 	}
 }
 
+bool ScriptVM::callPuppetMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
+	switch (opcode) {
+	case Script::kMethodOpenPuppetFile: // openpuppetfile('name.pup') -> FUN_004473c0/FUN_00447470
+		_host->openPuppetFile(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodPuppetClear: // puppetclear(): native display-list clear, rendering pending
+		_host->puppetClear();
+		return true;
+	case Script::kMethodClosePuppetFile: // closepuppetfile() -> FUN_00447880
+		_host->closePuppetFile();
+		return true;
+	case Script::kMethodPuppetSpeak: // puppetspeak(name[, mode]) -> FUN_00447ce0/FUN_00448b60
+		_host->puppetSpeak(args.empty() ? Common::String() : args[0].strValue,
+				args.size() > 1 ? args[1].intValue : 0);
+		return true;
+	case Script::kMethodPuppetBevel: // puppetbevel(name[, mode]) -> FUN_00447b30
+		_host->puppetBevel(args.empty() ? Common::String() : args[0].strValue,
+				args.size() > 1 ? args[1].intValue : 0);
+		return true;
+	case Script::kMethodPuppetGrab: // puppetgrab(bool) -> FUN_00447e30 stores DAT_00461248.
+		_host->puppetGrab(!args.empty() && isTruthy(args[0]));
+		return true;
+	case Script::kMethodPuppetScript: // puppetscript(name) -> FUN_004482c0
+		_host->puppetScript(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodCurrentPuppet: // currentpuppet() -> current puppet name or 'none'
+		result = Value::makeString(_host->currentPuppet());
+		return true;
+	case Script::kMethodPuppetParam: { // puppetparam(selector[, value]) -> FUN_00448730/FUN_004485f0
+		if (args.empty()) {
+			result = Value::makeInt(0);
+			return true;
+		}
+		if (args.size() >= 2) {
+			int value = args[1].intValue;
+			result = Value::makeInt(_host->puppetParam(args[0].intValue, &value));
+		} else {
+			result = Value::makeInt(_host->puppetParam(args[0].intValue, nullptr));
+		}
+		return true;
+	}
+	case Script::kMethodPuppetVisible: { // puppetvisible([flag]) -> FUN_00448550/FUN_004485b0
+		bool visible = !args.empty() && args[0].intValue != 0;
+		const bool *newVisible = args.empty() ? nullptr : &visible;
+		result = Value::makeBool(_host->puppetVisible(newVisible));
+		return true;
+	}
+	case Script::kMethodPuppetBase: { // puppetbase([name]) -> FUN_00447ee0
+		const Common::String *base = args.empty() ? nullptr : &args[0].strValue;
+		result = Value::makeString(_host->puppetBase(base));
+		return true;
+	}
+	case Script::kMethodCountPuppets: // countpuppets() -> FUN_00448380: PUP resource-2 script count
+		result = Value::makeInt(_host->countPuppets());
+		return true;
+	case Script::kMethodIndexToPuppet: // indextopuppet(i) -> FUN_004483f0, 1-based
+		result = Value::makeString(_host->indexToPuppet(args.empty() ? 0 : args[0].intValue));
+		return true;
+	case Script::kMethodPuppetEvent: // puppetevent(timeout) -> FUN_00449e40 waits for a clicked bevel id
+		result = Value::makeInt(_host->puppetEvent(args.empty() ? -1 : args[0].intValue));
+		return true;
+	default:
+		return false;
+	}
+}
+
 Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args) {
 	// Dispatch a builtin method by opcode. The interpreter routes 0x2Exx/0x2Fxx
 	// through dispatch B and 0x3Exx/0x4Exx through dispatch A (files/opcode-map.md
@@ -894,6 +960,8 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return result;
 		if (callPropMethod(opcode, args, result))
 			return result;
+		if (callPuppetMethod(opcode, args, result))
+			return result;
 
 		switch (opcode) {
 		case Script::kMethodMessage: // message(text) -> FUN_00446240
@@ -901,9 +969,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			break;
 		case Script::kMethodPlayMovie: // playmovie('name.mov')
 			_host->playMovie(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodOpenPuppetFile: // openpuppetfile('name.pup') -> FUN_004473c0/FUN_00447470
-			_host->openPuppetFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
 		case Script::kMethodOpenStageFile: // openstagefile('name.stg')
 			_host->openStageFile(args.empty() ? Common::String() : args[0].strValue);
@@ -927,26 +992,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		// parenthesised message and routes through dispatchMessageBuiltin.)
 		case Script::kMethodClut: // clut(name): snap the hardware palette (FUN_00446500)
 			_host->setClut(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodPuppetClear: // puppetclear(): native display-list clear, rendering pending
-			_host->puppetClear();
-			break;
-		case Script::kMethodClosePuppetFile: // closepuppetfile() -> FUN_00447880
-			_host->closePuppetFile();
-			break;
-		case Script::kMethodPuppetSpeak: // puppetspeak(name[, mode]) -> FUN_00447ce0/FUN_00448b60
-			_host->puppetSpeak(args.empty() ? Common::String() : args[0].strValue,
-					args.size() > 1 ? args[1].intValue : 0);
-			break;
-		case Script::kMethodPuppetBevel: // puppetbevel(name[, mode]) -> FUN_00447b30
-			_host->puppetBevel(args.empty() ? Common::String() : args[0].strValue,
-					args.size() > 1 ? args[1].intValue : 0);
-			break;
-		case Script::kMethodPuppetGrab: // puppetgrab(bool) -> FUN_00447e30 stores DAT_00461248.
-			_host->puppetGrab(!args.empty() && isTruthy(args[0]));
-			break;
-		case Script::kMethodPuppetScript: // puppetscript(name) -> FUN_004482c0
-			_host->puppetScript(args.empty() ? Common::String() : args[0].strValue);
 			break;
 		case Script::kMethodBlackScreen: // blackscreen(): fill the window with black pixels (FUN_00446b80)
 			_host->blackScreen();
@@ -1024,26 +1069,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			const Common::String *target = args.empty() ? nullptr : &args[0].strValue;
 			return Value::makeString(_host->currentScene(target));
 		}
-		case Script::kMethodCurrentPuppet: // currentpuppet() -> current puppet name or 'none'
-			return Value::makeString(_host->currentPuppet());
-		case Script::kMethodPuppetParam: { // puppetparam(selector[, value]) -> FUN_00448730/FUN_004485f0
-			if (args.empty())
-				return Value::makeInt(0);
-			if (args.size() >= 2) {
-				int value = args[1].intValue;
-				return Value::makeInt(_host->puppetParam(args[0].intValue, &value));
-			}
-			return Value::makeInt(_host->puppetParam(args[0].intValue, nullptr));
-		}
-		case Script::kMethodPuppetVisible: { // puppetvisible([flag]) -> FUN_00448550/FUN_004485b0
-			bool visible = !args.empty() && args[0].intValue != 0;
-			const bool *newVisible = args.empty() ? nullptr : &visible;
-			return Value::makeBool(_host->puppetVisible(newVisible));
-		}
-		case Script::kMethodPuppetBase: { // puppetbase([name]) -> FUN_00447ee0
-			const Common::String *base = args.empty() ? nullptr : &args[0].strValue;
-			return Value::makeString(_host->puppetBase(base));
-		}
 		case Script::kMethodSetVisible: { // setvisible([flag]) -> current SET visibility flag
 			bool visible = args.empty() ? false : (args[0].intValue != 0);
 			const bool *newVisible = args.empty() ? nullptr : &visible;
@@ -1103,12 +1128,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() >= 2)
 				return Value::makeBool(_host->roadAhead(args[0].strValue, args[1].strValue));
 			return Value::makeBool(false);
-		case Script::kMethodCountPuppets: // countpuppets() -> FUN_00448380: PUP resource-2 script count
-			return Value::makeInt(_host->countPuppets());
-		case Script::kMethodIndexToPuppet: // indextopuppet(i) -> FUN_004483f0, 1-based
-			return Value::makeString(_host->indexToPuppet(args.empty() ? 0 : args[0].intValue));
-		case Script::kMethodPuppetEvent: // puppetevent(timeout) -> FUN_00449e40 waits for a clicked bevel id
-			return Value::makeInt(_host->puppetEvent(args.empty() ? -1 : args[0].intValue));
 		case Script::kMethodPointInButton: // pointinbutton(flat, button, point) -> FUN_0040a0d0
 			if (args.size() >= 3)
 				return Value::makeBool(_host->pointInButton(args[0].strValue,
