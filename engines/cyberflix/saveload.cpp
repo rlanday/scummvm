@@ -514,7 +514,8 @@ static bool parseCricketChunk(Common::SeekableReadStream &in, int64 end,
 }
 
 bool CyberflixEngine::canSaveGameStateCurrently(Common::U32String *msg) {
-	return (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) || (_setRuntime.set() && _setRuntime.set()->isOpen());
+	return (stageRuntime().stage() && stageRuntime().stage()->isOpen()) ||
+			(setRuntime().set() && setRuntime().set()->isOpen());
 }
 
 bool CyberflixEngine::canLoadGameStateCurrently(Common::U32String *msg) {
@@ -658,20 +659,8 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	_audioRuntime.clearTracks();
 	_propRuntime.clear();
 	_loopRuntime.clear();
-	_stageRuntime.stage().reset();
-	stageRuntime().clearShellFrame();
-	_stageRuntime.visible() = false;
-	_stageRuntime.node() = 0;
-	_setRuntime.set().reset();
-	_setRuntime.scene() = -1;
-	_setRuntime.table() = 0;
-	_setRuntime.angle() = 0;
-	_setRuntime.view().clear();
-	_setRuntime.transitionType() = kSetTransitionNone;
-	_setRuntime.transitionResource() = 0;
-	_setRuntime.transitionFrame() = 0;
-	_setRuntime.frameSequence().clear();
-	_setRuntime.visible() = false;
+	stageRuntime().reset();
+	setRuntime().reset();
 	_propRuntime.setDirty(false);
 
 	for (uint i = 0; i < ARRAYSIZE(pathSlots); ++i) {
@@ -799,57 +788,33 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		_loopRuntime.restoreCricket(cricketStates[i]);
 	}
 
-	if (!header.stageName.empty()) {
-		Common::SharedPtr<Stage> stage(new Stage());
-		if (stage->open(header.stageName)) {
-			// loadGameState() reopens the stage directly rather than going through
-			// openStageFile(), so invalidate any cached MAIN.STG/node-0 shell from
-			// the pre-load room. Otherwise SET redraw after loading can copy stale
-			// inventory-bar pixels and recolor them with the restored cabin palette.
-			stageRuntime().clearShellFrame();
-			_stageRuntime.stage() = stage;
-			_stageRuntime.visible() = true;
-			_stageRuntime.node() = header.stageNode;
-			if (_stageRuntime.node() < 0 || (uint32)_stageRuntime.node() >= _stageRuntime.stage()->nodeCount()) {
-				int node = _stageRuntime.stage()->findNode(header.flatName);
-				_stageRuntime.node() = node >= 0 ? node : 0;
-			}
-		} else {
-			warning("Cyberflix: load could not reopen stage '%s'", header.stageName.c_str());
-		}
-	}
+	StageRuntime::Snapshot stageSnapshot;
+	stageSnapshot.stageName = header.stageName;
+	stageSnapshot.node = header.stageNode;
+	stageSnapshot.flatName = header.flatName;
+	stageSnapshot.visible = !header.stageName.empty();
+	stageRuntime().restoreSnapshot(stageSnapshot);
 
-	if (!header.setFileName.empty()) {
-		Common::ScopedPtr<Set> set(new Set());
-		if (set->open(header.setFileName)) {
-			_setRuntime.set().reset(set.release());
-			_setRuntime.scene() = header.setScene;
-			if (_setRuntime.scene() < 0 || (uint32)_setRuntime.scene() >= _setRuntime.set()->sceneCount())
-				_setRuntime.scene() = _setRuntime.set()->findScene(header.sceneName);
-			_setRuntime.table() = header.setTable;
-			if (_setRuntime.table() < 0 || _setRuntime.table() > 1)
-				_setRuntime.table() = 0;
-			_setRuntime.angle() = header.setAngle;
-			if (_setRuntime.scene() >= 0) {
-				uint32 angleCount = _setRuntime.set()->angleCount((uint32)_setRuntime.scene(), (uint32)_setRuntime.table());
-				if (angleCount && ((uint32)_setRuntime.angle() >= angleCount))
-					_setRuntime.angle() = 0;
-			}
-			_setRuntime.view() = header.setView;
-			_setRuntime.visible() = header.setVisible;
-			_setRuntime.transitionType() = header.setTransitionType <= kSetTransitionForward ?
-					(SetTransitionType)header.setTransitionType : kSetTransitionNone;
-			_setRuntime.transitionResource() = header.setTransitionResource;
-			_setRuntime.transitionFrame() = header.setTransitionFrame;
-		} else {
-			warning("Cyberflix: load could not reopen set '%s'", header.setFileName.c_str());
-		}
-	}
+	SetRuntime::Snapshot setSnapshot;
+	setSnapshot.fileName = header.setFileName;
+	setSnapshot.setName = header.setName;
+	setSnapshot.scene = header.setScene;
+	setSnapshot.sceneName = header.sceneName;
+	setSnapshot.table = header.setTable;
+	setSnapshot.angle = header.setAngle;
+	setSnapshot.view = header.setView;
+	setSnapshot.visible = header.setVisible;
+	setSnapshot.transitionType = header.setTransitionType <= kSetTransitionForward ?
+			(SetTransitionType)header.setTransitionType : kSetTransitionNone;
+	setSnapshot.transitionResource = header.setTransitionResource;
+	setSnapshot.transitionFrame = header.setTransitionFrame;
+	setRuntime().restoreSnapshot(setSnapshot);
 
-	if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0 && !isLoadedReplacementStage(_stageRuntime.stage())) {
-		setRuntime().renderSetScene(*this, _setRuntime.scene(), _setRuntime.table(), _setRuntime.angle(), _setRuntime.view());
-	} else if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) {
-		stageRuntime().renderStageNode(*this, _stageRuntime.node());
+	if (setRuntime().visible() && setRuntime().set() && setRuntime().set()->isOpen() && setRuntime().scene() >= 0 &&
+			!isLoadedReplacementStage(stageRuntime().stage())) {
+		setRuntime().renderSetScene(*this, setRuntime().scene(), setRuntime().table(), setRuntime().angle(), setRuntime().view());
+	} else if (stageRuntime().stage() && stageRuntime().stage()->isOpen()) {
+		stageRuntime().renderStageNode(*this, stageRuntime().node());
 	} else {
 		blackScreen();
 	}
@@ -889,23 +854,23 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		writeSaveString(payload, _hitKind);
 		payload.writeUint16LE(_actionFrameMask);
 
-		writeSaveString(payload, _stageRuntime.stage() && _stageRuntime.stage()->isOpen() ? _stageRuntime.stage()->name() : Common::String());
-		payload.writeSint32LE(_stageRuntime.node());
-		writeSaveString(payload, _stageRuntime.stage() && _stageRuntime.stage()->isOpen()
-				? _stageRuntime.stage()->nodeName((uint32)_stageRuntime.node()) : Common::String());
+		const StageRuntime::Snapshot stageSnapshot = stageRuntime().snapshot();
+		writeSaveString(payload, stageSnapshot.stageName);
+		payload.writeSint32LE(stageSnapshot.node);
+		writeSaveString(payload, stageSnapshot.flatName);
 
-		writeSaveString(payload, _setRuntime.set() && _setRuntime.set()->isOpen() ? _setRuntime.set()->name() : Common::String());
-		writeSaveString(payload, _setRuntime.set() && _setRuntime.set()->isOpen() ? _setRuntime.set()->setName() : Common::String());
-		payload.writeSint32LE(_setRuntime.scene());
-		writeSaveString(payload, (_setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0)
-				? _setRuntime.set()->sceneName((uint32)_setRuntime.scene()) : Common::String());
-		payload.writeSint32LE(_setRuntime.table());
-		payload.writeSint32LE(_setRuntime.angle());
-		writeSaveString(payload, _setRuntime.view());
-		payload.writeByte(_setRuntime.visible() ? 1 : 0);
-		payload.writeUint32LE((uint32)_setRuntime.transitionType());
-		payload.writeUint32LE(_setRuntime.transitionResource());
-		payload.writeUint32LE(_setRuntime.transitionFrame());
+		const SetRuntime::Snapshot setSnapshot = setRuntime().snapshot();
+		writeSaveString(payload, setSnapshot.fileName);
+		writeSaveString(payload, setSnapshot.setName);
+		payload.writeSint32LE(setSnapshot.scene);
+		writeSaveString(payload, setSnapshot.sceneName);
+		payload.writeSint32LE(setSnapshot.table);
+		payload.writeSint32LE(setSnapshot.angle);
+		writeSaveString(payload, setSnapshot.view);
+		payload.writeByte(setSnapshot.visible ? 1 : 0);
+		payload.writeUint32LE((uint32)setSnapshot.transitionType);
+		payload.writeUint32LE(setSnapshot.transitionResource);
+		payload.writeUint32LE(setSnapshot.transitionFrame);
 
 		writeChunk(*saveFile, "HEAD", payload);
 	}

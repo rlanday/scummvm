@@ -36,6 +36,13 @@ struct Value;
 
 class StageRuntime {
 public:
+	struct Snapshot {
+		Common::String stageName;
+		int32 node = 0;
+		Common::String flatName;
+		bool visible = false;
+	};
+
 	Common::SharedPtr<Stage> &stage() { return _stage; }
 	const Common::SharedPtr<Stage> &stage() const { return _stage; }
 	bool &visible() { return _visible; }
@@ -69,6 +76,8 @@ public:
 	void renderStageNode(CyberflixEngine &engine, int node, bool resetCursor = true);
 	void repaintDirtyStageRects(CyberflixEngine &engine);
 	bool pointInButton(const Common::String &flat, const Common::String &button, int32 packedPoint) const;
+	Snapshot snapshot() const;
+	bool restoreSnapshot(const Snapshot &snapshot);
 
 	void clearShellFrame() {
 		_shellFrame.width = 0;

@@ -115,6 +115,39 @@ Common::String StageRuntime::currentFlat() const {
 	return "None";
 }
 
+StageRuntime::Snapshot StageRuntime::snapshot() const {
+	Snapshot state;
+	if (stage() && stage()->isOpen()) {
+		state.stageName = stage()->name();
+		state.node = node();
+		if (node() >= 0 && (uint32)node() < stage()->nodeCount())
+			state.flatName = stage()->nodeName((uint32)node());
+		state.visible = visible();
+	}
+	return state;
+}
+
+bool StageRuntime::restoreSnapshot(const Snapshot &snapshot) {
+	reset();
+	if (snapshot.stageName.empty())
+		return true;
+
+	Common::SharedPtr<Stage> newStage(new Stage());
+	if (!newStage->open(snapshot.stageName)) {
+		warning("Cyberflix: load could not reopen stage '%s'", snapshot.stageName.c_str());
+		return false;
+	}
+
+	stage() = newStage;
+	visible() = snapshot.visible;
+	node() = snapshot.node;
+	if (node() < 0 || (uint32)node() >= stage()->nodeCount()) {
+		int foundNode = stage()->findNode(snapshot.flatName);
+		node() = foundNode >= 0 ? foundNode : 0;
+	}
+	return true;
+}
+
 const FrameImage *StageRuntime::stageShellFrame() {
 	if (!stage() || !stage()->isOpen())
 		return nullptr;

@@ -149,6 +149,58 @@ void SetRuntime::closeSetFile(CyberflixEngine &engine) {
 	visible() = false;
 }
 
+SetRuntime::Snapshot SetRuntime::snapshot() const {
+	Snapshot state;
+	if (set() && set()->isOpen()) {
+		state.fileName = set()->name();
+		state.setName = set()->setName();
+		state.scene = scene();
+		if (scene() >= 0 && (uint32)scene() < set()->sceneCount())
+			state.sceneName = set()->sceneName((uint32)scene());
+		state.table = table();
+		state.angle = angle();
+		state.view = view();
+		state.visible = visible();
+		state.transitionType = transitionType();
+		state.transitionResource = transitionResource();
+		state.transitionFrame = transitionFrame();
+	}
+	return state;
+}
+
+bool SetRuntime::restoreSnapshot(const Snapshot &snapshot) {
+	reset();
+	if (snapshot.fileName.empty())
+		return true;
+
+	Common::ScopedPtr<Set> newSet(new Set());
+	if (!newSet->open(snapshot.fileName)) {
+		warning("Cyberflix: load could not reopen set '%s'", snapshot.fileName.c_str());
+		return false;
+	}
+
+	set().reset(newSet.release());
+	scene() = snapshot.scene;
+	if (scene() < 0 || (uint32)scene() >= set()->sceneCount())
+		scene() = set()->findScene(snapshot.sceneName);
+	table() = snapshot.table;
+	if (table() < 0 || table() > 1)
+		table() = 0;
+	angle() = snapshot.angle;
+	if (scene() >= 0) {
+		uint32 angleCount = set()->angleCount((uint32)scene(), (uint32)table());
+		if (angleCount && (uint32)angle() >= angleCount)
+			angle() = 0;
+	}
+	view() = snapshot.view;
+	visible() = snapshot.visible;
+	transitionType() = snapshot.transitionType <= kSetTransitionForward ?
+			snapshot.transitionType : kSetTransitionNone;
+	transitionResource() = snapshot.transitionResource;
+	transitionFrame() = snapshot.transitionFrame;
+	return true;
+}
+
 // currentset(): the open set's EMBEDDED name (master header +0x070, e.g.
 // 'bedsit1' -- no '.set'), or 'none' (TI.EXE builtin 0x4e55 returns the set
 // record's name field, copied from the header by FUN_004307f0; setupsound,

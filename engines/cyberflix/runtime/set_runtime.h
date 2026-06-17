@@ -42,6 +42,20 @@ enum SetTransitionType {
 
 class SetRuntime {
 public:
+	struct Snapshot {
+		Common::String fileName;
+		Common::String setName;
+		int32 scene = -1;
+		Common::String sceneName;
+		int32 table = 0;
+		int32 angle = 0;
+		Common::String view;
+		bool visible = false;
+		SetTransitionType transitionType = kSetTransitionNone;
+		uint32 transitionResource = 0;
+		uint32 transitionFrame = 0;
+	};
+
 	Common::ScopedPtr<Set> &set() { return _set; }
 	const Common::ScopedPtr<Set> &set() const { return _set; }
 	int &scene() { return _scene; }
@@ -97,6 +111,8 @@ public:
 	void displaySetFrame(CyberflixEngine &engine, const FrameSequence &frame);
 	void displaySetFramePixels(CyberflixEngine &engine, const byte *pixels, uint16 width, uint16 height);
 	bool presentPendingScreenUpdate(CyberflixEngine &engine);
+	Snapshot snapshot() const;
+	bool restoreSnapshot(const Snapshot &snapshot);
 
 	void clearNavigation() {
 		_scene = -1;
