@@ -23,6 +23,7 @@
 #define CYBERFLIX_SHOP_H
 
 #include "common/array.h"
+#include "common/hashmap.h"
 #include "common/ptr.h"
 #include "common/rect.h"
 #include "common/str.h"
@@ -182,17 +183,18 @@ public:
 	 * screen rectangle (top = y - regV, left = x - regH; FUN_0042bed0 +
 	 * FUN_0042bb90). Returns false if the prop has no drawable cell.
 	 */
-	bool renderProp(const Prop &prop, CelImage &cel, Common::Rect &rect) const;
+	bool renderProp(const Prop &prop, Common::SharedPtr<CelImage> &cel, Common::Rect &rect) const;
 	bool renderWorldProp(const Prop &prop, const WorldCamera &camera,
-			const Common::String &setName, CelImage &cel, Common::Rect &rect,
-			int16 &depth) const;
+			const Common::String &setName, Common::SharedPtr<CelImage> &cel,
+			Common::Rect &rect, int16 &depth) const;
 
 private:
 	const byte *engineBase(uint32 index) const;
 	int resourceIndexById(uint32 id) const;
 	/** Read the Pascal string at @p p (bounded by the file buffer). */
 	Common::String pascalString(const byte *p) const;
-	bool resolvePropCel(const Prop &prop, int angle, CelImage &cel,
+	Common::SharedPtr<CelImage> celResource(uint32 resId) const;
+	bool resolvePropCel(const Prop &prop, int angle, Common::SharedPtr<CelImage> &cel,
 			Common::Rect &cellRect, int16 &regV, int16 &regH,
 			int16 &cellScale) const;
 
@@ -202,6 +204,7 @@ private:
 	int _master = -1;
 	Common::ScopedPtr<Script> _script;
 	Common::Array<Prop> _props;
+	mutable Common::HashMap<uint32, Common::SharedPtr<CelImage> > _celCache;
 };
 
 } // End of namespace Cyberflix

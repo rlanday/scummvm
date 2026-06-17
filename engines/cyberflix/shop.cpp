@@ -62,6 +62,7 @@ Common::String Shop::pascalString(const byte *p) const {
 bool Shop::open(const Common::String &name) {
 	_master = -1;
 	_props.clear();
+	_celCache.clear();
 	_script.reset();
 	_name = name;
 
@@ -214,6 +215,34 @@ bool Shop::shapePoseCount(const Prop &prop, const Common::String &shape, uint16 
 	return false;
 }
 
+Common::SharedPtr<CelImage> Shop::celResource(uint32 resId) const {
+	Common::HashMap<uint32, Common::SharedPtr<CelImage> >::const_iterator cached =
+			_celCache.find(resId);
+	if (cached != _celCache.end())
+		return cached->_value;
+
+	int idx = resourceIndexById(resId);
+	if (idx < 0)
+		return Common::SharedPtr<CelImage>();
+	const Archive::Resource &res = _archive.getResource((uint32)idx);
+	uint16 width = (uint16)(res.info >> 16);
+	uint16 height = (uint16)(res.info & 0xffff);
+	if (!width || !height)
+		return Common::SharedPtr<CelImage>();
+
+	Common::SeekableReadStream *s = _archive.createReadStreamForResource((uint32)idx);
+	if (!s)
+		return Common::SharedPtr<CelImage>();
+	Common::SharedPtr<CelImage> cel(new CelImage());
+	bool ok = decodeCel(*s, width, height, *cel);
+	delete s;
+	if (!ok)
+		return Common::SharedPtr<CelImage>();
+
+	_celCache[resId] = cel;
+	return cel;
+}
+
 // Angular distance with wraparound, mirroring the cell selector's 0..255 metric
 // (FUN_00426250).
 static int angleDistance(int a, int b) {
@@ -243,7 +272,7 @@ static int nativePointAngle(int dx, int dy) {
 	return deg;
 }
 
-bool Shop::resolvePropCel(const Prop &prop, int angle, CelImage &cel,
+bool Shop::resolvePropCel(const Prop &prop, int angle, Common::SharedPtr<CelImage> &cel,
 		Common::Rect &cellRect, int16 &regV, int16 &regH,
 		int16 &cellScale) const {
 	// Resolve the current shape resource (FUN_0042bed0).
@@ -297,18 +326,8 @@ bool Shop::resolvePropCel(const Prop &prop, int angle, CelImage &cel,
 
 	// Cel frame resource: info tag packs the dimensions (width = info >> 16).
 	uint32 frameRes = READ_LE_UINT32(best + kCellFrameResOffset);
-	int fIdx = resourceIndexById(frameRes);
-	if (fIdx < 0)
-		return false;
-	const Archive::Resource &fres = _archive.getResource((uint32)fIdx);
-	uint16 w = (uint16)(fres.info >> 16);
-	uint16 h = (uint16)(fres.info & 0xffff);
-	Common::SeekableReadStream *fs = _archive.createReadStreamForResource((uint32)fIdx);
-	if (!fs)
-		return false;
-	bool ok = decodeCel(*fs, w, h, cel);
-	delete fs;
-	if (!ok) {
+	cel = celResource(frameRes);
+	if (!cel) {
 		debug(1, "Cyberflix: renderProp('%s'): cel res %u decode failed",
 				prop.name.c_str(), frameRes);
 		return false;
@@ -324,7 +343,7 @@ bool Shop::resolvePropCel(const Prop &prop, int angle, CelImage &cel,
 	return true;
 }
 
-bool Shop::renderProp(const Prop &prop, CelImage &cel, Common::Rect &rect) const {
+bool Shop::renderProp(const Prop &prop, Common::SharedPtr<CelImage> &cel, Common::Rect &rect) const {
 	Common::Rect cellRect;
 	int16 regV = 0, regH = 0, cellScale = 0;
 	if (!resolvePropCel(prop, prop.angle, cel, cellRect, regV, regH, cellScale))
@@ -340,8 +359,8 @@ bool Shop::renderProp(const Prop &prop, CelImage &cel, Common::Rect &rect) const
 }
 
 bool Shop::renderWorldProp(const Prop &prop, const WorldCamera &camera,
-		const Common::String &setName, CelImage &cel, Common::Rect &rect,
-		int16 &depth) const {
+		const Common::String &setName, Common::SharedPtr<CelImage> &cel,
+		Common::Rect &rect, int16 &depth) const {
 	if (!prop.visible || prop.mode == 0 || !prop.setName.equalsIgnoreCase(setName))
 		return false;
 

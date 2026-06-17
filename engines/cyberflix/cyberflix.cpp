@@ -114,6 +114,28 @@ static void drawScaledCel(Graphics::Surface *screen, const CelImage &cel,
 	}
 }
 
+static void drawCel(Graphics::Surface *screen, const CelImage &cel,
+		const Common::Rect &dest, const Common::Rect &clip) {
+	Common::Rect paint = dest;
+	paint.clip(clip);
+	paint.clip(Common::Rect(dest.left, dest.top, dest.left + cel.width, dest.top + cel.height));
+	if (paint.isEmpty() || cel.width == 0 || cel.height == 0)
+		return;
+
+	const int copyWidth = paint.width();
+	for (int y = paint.top; y < paint.bottom; ++y) {
+		const int srcY = y - dest.top;
+		const int srcX = paint.left - dest.left;
+		const byte *src = cel.pixels.begin() + (uint)srcY * cel.width + srcX;
+		const byte *opaque = cel.opaque.begin() + (uint)srcY * cel.width + srcX;
+		byte *dst = (byte *)screen->getBasePtr(paint.left, y);
+		for (int x = 0; x < copyWidth; ++x) {
+			if (opaque[x])
+				dst[x] = src[x];
+		}
+	}
+}
+
 static void copyFramePixelsToScreen(Graphics::Surface &screen, const byte *pixels,
 		int width, int height, int dstX, int dstY) {
 	if (!pixels || width <= 0 || height <= 0)
@@ -842,18 +864,11 @@ void CyberflixEngine::renderStageNode(int node, bool resetCursor) {
 	Common::Array<const Shop *> drawShop;
 	collectScreenProps(draw, drawShop);
 	for (uint32 i = 0; i < draw.size(); ++i) {
-		CelImage cel;
+		Common::SharedPtr<CelImage> cel;
 		Common::Rect r;
 		if (!drawShop[i]->renderProp(*draw[i], cel, r))
 			continue;
-		for (int y = 0; y < cel.height; ++y) {
-			for (int x = 0; x < cel.width; ++x) {
-				int sx = r.left + x, sy = r.top + y;
-				if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight &&
-						cel.isOpaque(x, y))
-					*((byte *)screen->getBasePtr(sx, sy)) = cel.pixels[(uint)y * cel.width + x];
-			}
-		}
+		drawCel(screen, *cel, r, Common::Rect(kScreenWidth, kScreenHeight));
 	}
 	_system->unlockScreen();
 
@@ -908,20 +923,13 @@ void CyberflixEngine::repaintDirtyStageRects() {
 		}
 
 		for (uint32 i = 0; i < draw.size(); ++i) {
-			CelImage cel;
+			Common::SharedPtr<CelImage> cel;
 			Common::Rect propRect;
 			if (!drawShop[i]->renderProp(*draw[i], cel, propRect))
 				continue;
 			if (!dirty.intersects(propRect))
 				continue;
-			Common::Rect paint = dirty.findIntersectingRect(propRect);
-			for (int y = paint.top; y < paint.bottom; ++y) {
-				for (int x = paint.left; x < paint.right; ++x) {
-					if (cel.isOpaque(x - propRect.left, y - propRect.top))
-						*((byte *)screen->getBasePtr(x, y)) =
-								cel.pixels[(uint)(y - propRect.top) * cel.width + (x - propRect.left)];
-				}
-			}
+			drawCel(screen, *cel, propRect, dirty);
 		}
 	}
 	_system->unlockScreen();
@@ -2142,7 +2150,7 @@ void CyberflixEngine::collectWorldProps(Common::Array<const Shop::Prop *> &draw,
 			const Shop::Prop &p = _shops[s]->prop(i);
 			if (!p.visible || p.mode == 0 || !p.setName.equalsIgnoreCase(setName))
 				continue;
-			CelImage cel;
+			Common::SharedPtr<CelImage> cel;
 			Common::Rect rect;
 			int16 depth = 0;
 			if (!_shops[s]->renderWorldProp(p, camera, setName, cel, rect, depth))
@@ -2211,7 +2219,7 @@ bool CyberflixEngine::screenPropRect(const Shop &shop, const Shop::Prop &prop, C
 	if (!prop.visible || prop.mode != 0)
 		return false;
 
-	CelImage cel;
+	Common::SharedPtr<CelImage> cel;
 	if (!shop.renderProp(prop, cel, rect))
 		return false;
 	rect.clip(Common::Rect(kScreenWidth, kScreenHeight));
@@ -2280,13 +2288,13 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 	Common::Array<const Shop *> drawShop;
 	collectScreenProps(draw, drawShop);
 	for (int i = (int)draw.size() - 1; i >= 0; --i) {
-		CelImage cel;
+		Common::SharedPtr<CelImage> cel;
 		Common::Rect r;
 		if (!drawShop[i]->renderProp(*draw[i], cel, r))
 			continue;
 		if (x < r.left || x >= r.right || y < r.top || y >= r.bottom)
 			continue;
-		if (!cel.isOpaque(x - r.left, y - r.top))
+		if (!cel->isOpaque(x - r.left, y - r.top))
 			continue;
 		_hitKind = "prop";
 		return draw[i]->name;
@@ -2316,28 +2324,32 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 				itemIndex.push_back(useActor ? actorIndex++ : propIndex++);
 			}
 			for (int i = (int)itemType.size() - 1; i >= 0; --i) {
-				CelImage cel;
+				const CelImage *cel = nullptr;
+				CelImage actorCel;
+				Common::SharedPtr<CelImage> propCel;
 				Common::Rect r;
 				int16 depth = 0;
 				Common::String name;
 				if (itemType[(uint)i]) {
 					uint32 idx = itemIndex[(uint)i];
 					if (!actorCast[idx]->renderWorldActor(*actorDraw[idx], camera,
-							_set->setName(), cel, r, depth))
+							_set->setName(), actorCel, r, depth))
 						continue;
+					cel = &actorCel;
 					name = actorDraw[idx]->name;
 				} else {
 					uint32 idx = itemIndex[(uint)i];
 					if (!worldShop[idx]->renderWorldProp(*worldDraw[idx], camera,
-							_set->setName(), cel, r, depth))
+							_set->setName(), propCel, r, depth))
 						continue;
+					cel = propCel.get();
 					name = worldDraw[idx]->name;
 				}
 				if (x < r.left || x >= r.right || y < r.top || y >= r.bottom)
 					continue;
-				int srcX = (int)((int64)(x - r.left) * cel.width / r.width());
-				int srcY = (int)((int64)(y - r.top) * cel.height / r.height());
-				if (!cel.isOpaque(srcX, srcY))
+				int srcX = (int)((int64)(x - r.left) * cel->width / r.width());
+				int srcY = (int)((int64)(y - r.top) * cel->height / r.height());
+				if (!cel->isOpaque(srcX, srcY))
 					continue;
 				_hitKind = itemType[(uint)i] ? "actor" : "prop";
 				return name;
@@ -4640,18 +4652,19 @@ void CyberflixEngine::displaySetFramePixels(const byte *pixels, uint16 width, ui
 		while (propIndex < worldDraw.size() || actorIndex < actorDraw.size()) {
 			const bool drawActor = actorIndex < actorDraw.size() &&
 					(propIndex >= worldDraw.size() || actorDepths[actorIndex] >= worldDepths[propIndex]);
-			CelImage cel;
+			CelImage actorCel;
+			Common::SharedPtr<CelImage> propCel;
 			Common::Rect r;
 			int16 depth = 0;
 			if (drawActor) {
 				if (actorCast[actorIndex]->renderWorldActor(*actorDraw[actorIndex],
-						camera, _set->setName(), cel, r, depth))
-					drawScaledCel(screen, cel, r, viewport);
+						camera, _set->setName(), actorCel, r, depth))
+					drawScaledCel(screen, actorCel, r, viewport);
 				++actorIndex;
 			} else {
 				if (worldShop[propIndex]->renderWorldProp(*worldDraw[propIndex], camera,
-						_set->setName(), cel, r, depth))
-					drawScaledCel(screen, cel, r, viewport);
+						_set->setName(), propCel, r, depth))
+					drawScaledCel(screen, *propCel, r, viewport);
 				++propIndex;
 			}
 		}
@@ -4667,18 +4680,11 @@ void CyberflixEngine::displaySetFramePixels(const byte *pixels, uint16 width, ui
 		Common::Array<const Shop *> drawShop;
 		collectScreenProps(draw, drawShop);
 		for (uint32 i = 0; i < draw.size(); ++i) {
-			CelImage cel;
+			Common::SharedPtr<CelImage> cel;
 			Common::Rect r;
 			if (!drawShop[i]->renderProp(*draw[i], cel, r))
 				continue;
-			for (int y = 0; y < cel.height; ++y) {
-				for (int x = 0; x < cel.width; ++x) {
-					int sx = r.left + x, sy = r.top + y;
-					if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight &&
-							cel.isOpaque(x, y))
-						*((byte *)screen->getBasePtr(sx, sy)) = cel.pixels[(uint)y * cel.width + x];
-				}
-			}
+			drawCel(screen, *cel, r, Common::Rect(kScreenWidth, kScreenHeight));
 		}
 	}
 	_propsDirty = false;
