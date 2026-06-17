@@ -1,24 +1,24 @@
 MODULE := engines/cyberflix
 
 MODULE_OBJS = \
-	archive.o \
-	audio_runtime.o \
-	actors.o \
-	cast.o \
-	console.o \
+	audio/audio_runtime.o \
+	audio/cbx_audio.o \
 	cyberflix.o \
-	image.o \
 	metaengine.o \
-	movie.o \
-	props.o \
-	puppet.o \
+	resources/archive.o \
+	resources/cast.o \
+	resources/image.o \
+	resources/puppet.o \
+	resources/set.o \
+	resources/shop.o \
+	resources/stage.o \
+	runtime/actors.o \
+	runtime/movie.o \
+	runtime/props.o \
 	saveload.o \
-	script.o \
-	set.o \
-	shop.o \
-	cbx_audio.o \
-	stage.o \
-	vm.o
+	ui/console.o \
+	vm/script.o \
+	vm/vm.o
 
 # This module can be built as a plugin
 ifeq ($(ENABLE_CYBERFLIX), DYNAMIC_PLUGIN)
