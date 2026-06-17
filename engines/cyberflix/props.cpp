@@ -23,8 +23,13 @@
 
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/set.h"
+#include "cyberflix/stage.h"
 
 namespace Cyberflix {
+
+static bool isReplacementStageForProps(const Common::SharedPtr<Stage> &stage) {
+	return stage && stage->isOpen() && !stage->name().equalsIgnoreCase("main.stg");
+}
 
 // ---- Shop/prop subsystem (TI.EXE FUN_00428450 and friends) ----------------
 // RE notes: files/renderer-notes.md "Shop/prop subsystem". The original keeps
@@ -315,6 +320,310 @@ Value CyberflixEngine::sendToPropFx(const Common::String &propName, const Common
 	}
 	return dispatchWithScopesValue(prop->script.get(), shopOwner->shopScript(),
 			prop->name, prop->name, message, args, "propfx");
+}
+
+static bool shouldLogInterfaceProp(const Common::String &name) {
+	return name.equalsIgnoreCase("life") ||
+			name.equalsIgnoreCase("watch") ||
+			name.equalsIgnoreCase("bag") ||
+			name.equalsIgnoreCase("map") ||
+			name.equalsIgnoreCase("lid") ||
+			name.equalsIgnoreCase("light") ||
+			name.equalsIgnoreCase("invenhelp");
+}
+
+bool CyberflixEngine::propVisible(const Common::String &name) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
+		return false;
+	}
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propvisible('%s') -> %s", name.c_str(),
+				prop->visible ? "true" : "false");
+	return prop->visible;
+}
+
+void CyberflixEngine::propVisible(const Common::String &name, bool visible) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
+		return;
+	}
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propvisible('%s', %s) old=%s", name.c_str(),
+				visible ? "true" : "false", prop->visible ? "true" : "false");
+	if (prop->visible != visible) {
+		Common::Rect oldRect;
+		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
+		prop->visible = visible;
+		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+	}
+}
+
+Common::String CyberflixEngine::propView(const Common::String &name) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propview('%s'): no such prop", name.c_str());
+		return Common::String();
+	}
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propview('%s') -> '%s'", name.c_str(),
+				prop->shapeName.c_str());
+	return prop->shapeName;
+}
+
+void CyberflixEngine::propView(const Common::String &name, const Common::String &shape) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propview('%s'): no such prop", name.c_str());
+		return;
+	}
+	// FUN_004293a0 validates the shape against the prop master (FUN_0042c0c0)
+	// and leaves the prop on the shape's LAST pose (+0x20 = poseCount - 1).
+	uint16 poseCount = 0;
+	if (!shop->shapePoseCount(*prop, shape, poseCount)) {
+		warning("Cyberflix: propview('%s'): no shape '%s'", name.c_str(), shape.c_str());
+		return;
+	}
+	Common::String key = shape;
+	key.toLowercase();
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propview('%s', '%s') old='%s'", name.c_str(),
+				key.c_str(), prop->shapeName.c_str());
+	uint16 newPoseIndex = poseCount ? poseCount - 1 : 0;
+	if (prop->shapeName != key || prop->poseCount != poseCount || prop->poseIndex != newPoseIndex) {
+		Common::Rect oldRect;
+		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
+		prop->shapeName = key;
+		prop->poseCount = poseCount;
+		prop->poseIndex = newPoseIndex;
+		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+	}
+}
+
+int CyberflixEngine::propXY(const Common::String &name, int selector) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propxy('%s', %d): no such prop", name.c_str(), selector);
+		return 0;
+	}
+	switch (selector) {
+	case 1:
+		return prop->x;
+	case 2:
+		return prop->y;
+	case 3:
+		return ((int32)prop->x << 16) | ((int32)prop->y & 0xffff);
+	default:
+		warning("Cyberflix: propxy('%s', %d): bad selector", name.c_str(), selector);
+		return 0;
+	}
+}
+
+void CyberflixEngine::setPropXY(const Common::String &name, int x, int y) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propxy('%s'): no such prop", name.c_str());
+		return;
+	}
+	// FUN_0042a370: screen-space placement — mode = 0, depth = -1 when the
+	// prop was world-space (>= 0), anchor = (x, y) (record +0x16/+0x14).
+	Common::Rect oldRect;
+	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
+	prop->mode = 0;
+	if (prop->depth >= 0)
+		prop->depth = -1;
+	prop->x = (int16)x;
+	prop->y = (int16)y;
+	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+}
+
+void CyberflixEngine::propSet(const Common::String &name, const Common::String &setName) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propset('%s'): no such prop", name.c_str());
+		return;
+	}
+	Common::String key = setName;
+	key.toLowercase();
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propset('%s', '%s') mode %u -> 1", name.c_str(),
+				key.c_str(), prop->mode);
+	Common::Rect oldRect;
+	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
+	prop->setName = key;
+	prop->mode = 1; // FUN_00428c20 writes record +0x12 = 1 for SET placement.
+	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+}
+
+void CyberflixEngine::propXYZ(const Common::String &name, int x, int y, int z) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propxyz('%s'): no such prop", name.c_str());
+		return;
+	}
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propxyz('%s', %d, %d, %d) mode %u -> 1",
+				name.c_str(), x, y, z, prop->mode);
+	Common::Rect oldRect;
+	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
+	prop->mode = 1; // FUN_0042a140: world/SET-space placement.
+	prop->x = (int16)x;
+	prop->y = (int16)y;
+	prop->z = (int16)z;
+	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+}
+
+void CyberflixEngine::propScale(const Common::String &name, int scale) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propscale('%s'): no such prop", name.c_str());
+		return;
+	}
+	Common::Rect oldRect;
+	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
+	prop->scale = scale < 0 ? 0 : scale;
+	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+}
+
+void CyberflixEngine::propZClip(const Common::String &name, int dist) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propzclip('%s'): no such prop", name.c_str());
+		return;
+	}
+	Common::Rect oldRect;
+	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
+	prop->zClip = dist;
+	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+}
+
+void CyberflixEngine::propDist(const Common::String &name, int dist) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propdist('%s'): no such prop", name.c_str());
+		return;
+	}
+	// FUN_004295c0: only applied to screen-space props with a negative value.
+	if (prop->mode == 0 && dist < 0) {
+		debug(1, "Cyberflix: propdist('%s', %d) depth %d -> %d",
+				name.c_str(), dist, prop->depth, dist);
+		Common::Rect oldRect;
+		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
+		prop->depth = (int16)dist;
+		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+	}
+}
+
+int CyberflixEngine::propDeg(const Common::String &name, const int *newDeg) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
+		return 0;
+	}
+	if (newDeg && prop->angle != (int16)(*newDeg & 0xff)) {
+		Common::Rect oldRect;
+		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
+		prop->angle = (int16)(*newDeg & 0xff);
+		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+	}
+	return prop->angle;
+}
+
+Common::String CyberflixEngine::propOwner(const Common::String &name, const Common::String *newOwner) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propowner('%s'): no such prop", name.c_str());
+		return Common::String();
+	}
+	if (newOwner)
+		prop->owner = *newOwner; // FUN_00428d40: copy into record +0x8c
+	if (shouldLogInterfaceProp(name))
+		debug(1, "Cyberflix: propowner('%s'%s%s%s) -> '%s'", name.c_str(),
+				newOwner ? ", '" : "", newOwner ? newOwner->c_str() : "",
+				newOwner ? "'" : "",
+				prop->owner.c_str());
+	return prop->owner;
+}
+
+int CyberflixEngine::propValue(const Common::String &name, const int *newValue) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propvalue('%s'): no such prop", name.c_str());
+		return 0;
+	}
+	if (newValue)
+		prop->value = *newValue; // FUN_00428e00: copy int to record +0x46
+	return prop->value;
+}
+
+int CyberflixEngine::countProps() {
+	int total = 0;
+	for (uint32 i = 0; i < _shops.size(); ++i)
+		total += (int)_shops[i]->propCount();
+	return total;
+}
+
+Common::String CyberflixEngine::indexToProp(int index) {
+	// 1-based index into the global prop array (FUN_0042b550).
+	int i = index - 1;
+	for (uint32 s = 0; s < _shops.size(); ++s) {
+		if (i >= 0 && i < (int)_shops[s]->propCount())
+			return _shops[s]->prop((uint32)i).name;
+		i -= (int)_shops[s]->propCount();
+	}
+	return Common::String();
+}
+
+void CyberflixEngine::refreshPropsIfDirty() {
+	// The original recomposites the display list every tick; this engine
+	// renders on demand, so repaint the current room after a dispatch that
+	// changed prop state. While no scene is up yet (boot-time initprops) the
+	// props are picked up by the next renderSetScene.
+	if (!_propsDirty)
+		return;
+	if (_puppet && _puppet->isOpen() && _puppetVisible) {
+		// Native sendtoprop/sendtoshop dispatch does not repaint immediately.
+		// The next forceupdate() takes the puppet compositor branch, so keep
+		// SET prop dirtiness queued until the puppet is hidden or closed.
+		return;
+	}
+	if (!_setVisible || isReplacementStageForProps(_stage)) {
+		if (_stage && _stage->isOpen()) {
+			if (!_dirtyRects.empty())
+				repaintDirtyStageRects();
+			else {
+				// Prop refresh without dirty bounds is still a compositor repaint,
+				// not navigation to a new flat, so keep the current script cursor.
+				renderStageNode(_stageNode, false);
+			}
+		}
+		_dirtyRects.clear();
+		_propsDirty = false;
+		return;
+	}
+	if (_set && _set->isOpen() && _setScene >= 0) {
+		// ScummVM-only optimization matching the native backing-surface model:
+		// prop mutations do not change the SET background, and the current
+		// decoded/transitioned background is already retained in _setFrameSequence.
+		// Recompose that surface with live props instead of re-decoding the same
+		// compressed panorama/transition frame for every sendtoprop() refresh.
+		if (!_setFrameSequence.empty())
+			displaySetFrame(_setFrameSequence);
+		else
+			renderSetScene(_setScene, _setAngle);
+	}
+	_dirtyRects.clear();
 }
 
 } // End of namespace Cyberflix
