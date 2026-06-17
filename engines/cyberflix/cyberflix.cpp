@@ -70,159 +70,8 @@
 
 namespace Cyberflix {
 
-class CyberflixVMHost : public VMHost {
-public:
-	explicit CyberflixVMHost(CyberflixEngine &engine) : _engine(engine) {}
-
-	void playMovie(const Common::String &name) override { _engine.playMovie(name); }
-	void openStageFile(const Common::String &name) override { _engine.openStageFile(name); }
-	void closeStageFile() override { _engine.closeStageFile(); }
-	void gotoFlat(const Value &flat) override { _engine.gotoFlat(flat); }
-	Common::String currentStage() override { return _engine.currentStage(); }
-	bool stageVisible(const bool *newVisible) override { return _engine.stageVisible(newVisible); }
-	Common::String currentFlat() override { return _engine.currentFlat(); }
-	void sendToStage(const Common::String &message, const Common::Array<Value> &args) override { _engine.sendToStage(message, args); }
-	Value sendToStageFx(const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToStageFx(message, args); }
-	void sendToBoot(const Common::String &message, const Common::Array<Value> &args) override { _engine.sendToBoot(message, args); }
-	Value sendToBootFx(const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToBootFx(message, args); }
-	void sendToFlat(const Common::String &flat, const Common::String &message, const Common::Array<Value> &args) override { _engine.sendToFlat(flat, message, args); }
-	Value sendToFlatFx(const Common::String &flat, const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToFlatFx(flat, message, args); }
-	void sendToButton(const Common::String &flat, const Common::String &button, const Common::String &message, const Common::Array<Value> &args) override { _engine.sendToButton(flat, button, message, args); }
-	Value sendToButtonFx(const Common::String &flat, const Common::String &button, const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToButtonFx(flat, button, message, args); }
-	void openSetFile(const Common::String &name, const Common::String &scene, const Common::String &view) override { _engine.openSetFile(name, scene, view); }
-	void closeSetFile() override { _engine.closeSetFile(); }
-	Common::String currentSet() override { return _engine.currentSet(); }
-	Value sendToSetFx(const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToSetFx(message, args); }
-	Common::String currentView() override { return _engine.currentView(); }
-	Common::String currentScene(const Common::String *target) override { return _engine.currentScene(target); }
-	bool setVisible(const bool *newVisible) override { return _engine.setVisible(newVisible); }
-	Common::String currentPuppet() override { return _engine.currentPuppet(); }
-	void openPuppetFile(const Common::String &name) override { _engine.openPuppetFile(name); }
-	void closePuppetFile() override { _engine.closePuppetFile(); }
-	void sendToPuppet(const Common::String &puppet, const Common::String &message, const Common::Array<Value> &args) override { _engine.sendToPuppet(puppet, message, args); }
-	Value sendToPuppetFx(const Common::String &puppet, const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToPuppetFx(puppet, message, args); }
-	void puppetScript(const Common::String &name) override { _engine.puppetScript(name); }
-	void puppetClear() override { _engine.puppetClear(); }
-	void puppetSpeak(const Common::String &name, int mode) override { _engine.puppetSpeak(name, mode); }
-	void puppetBevel(const Common::String &name, int mode) override { _engine.puppetBevel(name, mode); }
-	void puppetGrab(bool enabled) override { _engine.puppetGrab(enabled); }
-	int puppetEvent(int timeout) override { return _engine.puppetEvent(timeout); }
-	Common::String puppetBase(const Common::String *newBase) override { return _engine.puppetBase(newBase); }
-	bool puppetVisible(const bool *newVisible) override { return _engine.puppetVisible(newVisible); }
-	int puppetParam(int selector, const int *newValue) override { return _engine.puppetParam(selector, newValue); }
-	int countPuppets() override { return _engine.countPuppets(); }
-	Common::String indexToPuppet(int index) override { return _engine.indexToPuppet(index); }
-	void sendToScene(const Common::String &scene, const Common::String &message, const Common::Array<Value> &args) override { _engine.sendToScene(scene, message, args); }
-	Value sendToSceneFx(const Common::String &scene, const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToSceneFx(scene, message, args); }
-	void sendToPainting(const Common::String &scene, const Common::String &view, const Common::String &painting, const Common::String &message, const Common::Array<Value> &args) override { _engine.sendToPainting(scene, view, painting, message, args); }
-	Value sendToPaintingFx(const Common::String &scene, const Common::String &view, const Common::String &painting, const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToPaintingFx(scene, view, painting, message, args); }
-	int countPaintings(const Common::String &scene, const Common::String &view) override { return _engine.countPaintings(scene, view); }
-	Common::String indexToPainting(const Common::String &scene, const Common::String &view, int index) override { return _engine.indexToPainting(scene, view, index); }
-	bool roadAhead(const Common::String &scene, const Common::String &view) override { return _engine.roadAhead(scene, view); }
-	bool actionFrame(int n) override { return _engine.actionFrame(n); }
-	int randomNumber(int n) override { return _engine.randomNumber(n); }
-	int frameRate(const int *newRate) override { return _engine.frameRate(newRate); }
-	void setClut(const Common::String &name) override { _engine.setClut(name); }
-	void blackScreen() override { _engine.blackScreen(); }
-	void forceUpdate() override { _engine.forceUpdate(); }
-	void message(const Common::String &text) override { _engine.message(text); }
-	void flushEvents() override { _engine.flushEvents(); }
-	void drawString(const Common::String &text, int32 packedPoint, int color, int size) override { _engine.drawString(text, packedPoint, color, size); }
-	void fadePalette(const Common::String &target, int steps, bool toBlack) override { _engine.fadePalette(target, steps, toBlack); }
-	void setVisualEffect(uint16 effect, int duration) override { _engine.setVisualEffect(effect, duration); }
-	void makeLoop(const Common::String &kind, const Common::String &target, const Common::String &message, int delay) override { _engine.makeLoop(kind, target, message, delay); }
-	void stopLoop(const Common::String &kind, const Common::String &target) override { _engine.stopLoop(kind, target); }
-	void pauseLoop(const Common::String &kind, bool paused) override { _engine.pauseLoop(kind, paused); }
-	void makeCricket(const Common::String &name) override { _engine.makeCricket(name); }
-	void stopCricket(const Common::String &name) override { _engine.stopCricket(name); }
-	void pauseCricket(const Common::String &kind, bool paused) override { _engine.pauseCricket(kind, paused); }
-	void openTrackFile(const Common::String &name) override { _engine.openTrackFile(name); }
-	void closeTrackFile(const Common::String &name) override { _engine.closeTrackFile(name); }
-	void playTheme(const Common::String &name) override { _engine.playTheme(name); }
-	void haltTheme() override { _engine.haltTheme(); }
-	void playSound(const Common::String &name, int mode) override { _engine.playSound(name, mode); }
-	void playVoice(const Common::String &name) override { _engine.playVoice(name); }
-	void haltSound(int which) override { _engine.haltSound(which); }
-	void haltVoice() override { _engine.haltVoice(); }
-	void themeVolume(const Common::String &name, int volume) override { _engine.themeVolume(name, volume); }
-	int waveVolume(const int *newLevel) override { return _engine.waveVolume(newLevel); }
-	int soundVolume(const Common::String &name, const int *newVolume) override { return _engine.soundVolume(name, newVolume); }
-	Common::String currentTheme(int which) override { return _engine.currentTheme(which); }
-	Common::String currentSound(int which) override { return _engine.currentSound(which); }
-	Common::String currentVoice() override { return _engine.currentVoice(); }
-	bool keyAborts(const Common::String *resource, const Common::String *key, const bool *enabled) override { return _engine.keyAborts(resource, key, enabled); }
-	bool optionKey() override { return _engine.optionKey(); }
-	Common::String pathSlot(int slot, const Common::String *newPath) override { return _engine.pathSlot(slot, newPath); }
-	Common::String currentCD(const Common::String *requested) override { return _engine.currentCD(requested); }
-	void openCastFile(const Common::String &name) override { _engine.openCastFile(name); }
-	void closeCastFile(const Common::String &name) override { _engine.closeCastFile(name); }
-	void sendToCast(const Common::String &cast, const Common::String &message, const Common::Array<Value> &args) override { _engine.sendToCast(cast, message, args); }
-	Value sendToCastFx(const Common::String &cast, const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToCastFx(cast, message, args); }
-	void sendToActor(const Common::String &actor, const Common::String &message, const Common::Array<Value> &args) override { _engine.sendToActor(actor, message, args); }
-	Value sendToActorFx(const Common::String &actor, const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToActorFx(actor, message, args); }
-	int countActors() override { return _engine.countActors(); }
-	Common::String indexToActor(int index) override { return _engine.indexToActor(index); }
-	bool actorVisible(const Common::String &name, const bool *newVisible) override { return _engine.actorVisible(name, newVisible); }
-	Common::String actorSet(const Common::String &name, const Common::String *newSet) override { return _engine.actorSet(name, newSet); }
-	Common::String actorStar(const Common::String &name, const Common::String *newStar) override { return _engine.actorStar(name, newStar); }
-	Common::String actorPose(const Common::String &name, const Common::String *newPose) override { return _engine.actorPose(name, newPose); }
-	void actorXYZ(const Common::String &name, int x, int y, int z) override { _engine.actorXYZ(name, x, y, z); }
-	int actorXYZ(const Common::String &name, int selector) override { return _engine.actorXYZ(name, selector); }
-	int actorDeg(const Common::String &name, const int *newDeg) override { return _engine.actorDeg(name, newDeg); }
-	int actorValue(const Common::String &name, const int *newValue) override { return _engine.actorValue(name, newValue); }
-	Common::String actorOwner(const Common::String &name, const Common::String *newOwner) override { return _engine.actorOwner(name, newOwner); }
-	void actorZClip(const Common::String &name, int zClip) override { _engine.actorZClip(name, zClip); }
-	void actorSpeed(const Common::String &name, int speed) override { _engine.actorSpeed(name, speed); }
-	void actorScale(const Common::String &name, int scale) override { _engine.actorScale(name, scale); }
-	void actorTurn(const Common::String &name, int turn) override { _engine.actorTurn(name, turn); }
-	int starXYZ(const Common::String &name, int selector) override { return _engine.starXYZ(name, selector); }
-	void openShopFile(const Common::String &name) override { _engine.openShopFile(name); }
-	void closeShopFile(const Common::String &name) override { _engine.closeShopFile(name); }
-	void propInstance(const Common::String &source, const Common::String &newName) override { _engine.propInstance(source, newName); }
-	void sendToShop(const Common::String &shop, const Common::String &message, const Common::Array<Value> &args) override { _engine.sendToShop(shop, message, args); }
-	Value sendToShopFx(const Common::String &shop, const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToShopFx(shop, message, args); }
-	void sendToProp(const Common::String &prop, const Common::String &message, const Common::Array<Value> &args) override { _engine.sendToProp(prop, message, args); }
-	Value sendToPropFx(const Common::String &prop, const Common::String &message, const Common::Array<Value> &args) override { return _engine.sendToPropFx(prop, message, args); }
-	bool propVisible(const Common::String &name) override { return _engine.propVisible(name); }
-	void propVisible(const Common::String &name, bool visible) override { _engine.propVisible(name, visible); }
-	Common::String propView(const Common::String &name) override { return _engine.propView(name); }
-	void propView(const Common::String &name, const Common::String &shape) override { _engine.propView(name, shape); }
-	void propSet(const Common::String &name, const Common::String &setName) override { _engine.propSet(name, setName); }
-	void propXYZ(const Common::String &name, int x, int y, int z) override { _engine.propXYZ(name, x, y, z); }
-	int propXY(const Common::String &name, int selector) override { return _engine.propXY(name, selector); }
-	void setPropXY(const Common::String &name, int x, int y) override { _engine.setPropXY(name, x, y); }
-	void propScale(const Common::String &name, int scale) override { _engine.propScale(name, scale); }
-	void propZClip(const Common::String &name, int dist) override { _engine.propZClip(name, dist); }
-	void propDist(const Common::String &name, int dist) override { _engine.propDist(name, dist); }
-	int propDeg(const Common::String &name, const int *newDeg) override { return _engine.propDeg(name, newDeg); }
-	Common::String propOwner(const Common::String &name, const Common::String *newOwner) override { return _engine.propOwner(name, newOwner); }
-	int propValue(const Common::String &name, const int *newValue) override { return _engine.propValue(name, newValue); }
-	int countProps() override { return _engine.countProps(); }
-	Common::String indexToProp(int index) override { return _engine.indexToProp(index); }
-	bool pointInButton(const Common::String &flat, const Common::String &button, int32 packedPoint) override { return _engine.pointInButton(flat, button, packedPoint); }
-	bool pointInPainting(const Common::String &scene, const Common::String &view, const Common::String &painting, int32 packedPoint) override { return _engine.pointInPainting(scene, view, painting, packedPoint); }
-	Common::String hitTest(int32 packedPoint) override { return _engine.hitTest(packedPoint); }
-	Common::String hitTestResult() override { return _engine.hitTestResult(); }
-	int32 mousePoint() override { return _engine.mousePoint(); }
-	int32 makePoint(int x, int y) override { return _engine.makePoint(x, y); }
-	bool buttonDown() override { return _engine.buttonDown(); }
-	bool stillDown() override { return _engine.stillDown(); }
-	int tick() override { return _engine.tick(); }
-	int calcDeg(int32 a, int32 b) override { return _engine.calcDeg(a, b); }
-	int calcMod(int a, int b) override { return _engine.calcMod(a, b); }
-	void setCursorResource(const Common::String &resourceName) override { _engine.setCursorResource(resourceName); }
-	void saveGame(const Common::String &signature) override { _engine.saveGame(signature); }
-	void openGame(const Common::String &signature) override { _engine.openGame(signature); }
-	bool questionDialog(const Common::String &message) override { return _engine.questionDialog(message); }
-	void requestQuit() override { _engine.requestQuit(); }
-
-private:
-	CyberflixEngine &_engine;
-};
-
 CyberflixEngine::CyberflixEngine(OSystem *syst, const CyberflixGameDescription *gameDesc) :
-		Engine(syst), _gameDescription(gameDesc), _rnd("cyberflix"), _console(nullptr),
-		_vmHost(new CyberflixVMHost(*this)) {
+		Engine(syst), _gameDescription(gameDesc), _rnd("cyberflix"), _console(nullptr) {
 }
 
 CyberflixEngine::~CyberflixEngine() {
@@ -1170,7 +1019,7 @@ Common::Error CyberflixEngine::run() {
 	if (!exciseBootCdCheck(*_bootScript))
 		warning("Cyberflix: boot script CD check not found; running unmodified");
 
-	_vm.setHost(_vmHost.get());
+	_vm.setHost(this);
 	// Searched newest-first: boot res1 handlers shadow the global library,
 	// matching the per-dispatch chain order in TI.EXE FUN_0040ad80.
 	if (_globalLib)
