@@ -162,66 +162,6 @@ bool CyberflixEngine::hasFeature(EngineFeature f) const {
 			(f == kSupportsSavingDuringRuntime);
 }
 
-// The cursor bitmaps are copyrighted game art, so they are loaded at runtime
-// from the player's own TI.EXE rather than shipped with ScummVM. TI.EXE is the
-// CyberFlix "Bicycle" runtime; in an installed game it lives under INSTALL/BINX
-// (or INSTALL/BIN). It is a Win32 PE whose RT_GROUP_CURSOR resources are named
-// CURS.ARROW, CURS.HAND, CURS.GOUP, ... (see files/decomp/movie-playback.md).
-Common::PEResources *CyberflixEngine::gameExe() {
-	if (_exeTried)
-		return _exe.get();
-	_exeTried = true;
-
-	const Common::FSNode gameDir(ConfMan.getPath("path"));
-	static const char *const candidates[][3] = {
-		{ "INSTALL", "BINX", "TI.EXE" },
-		{ "INSTALL", "BIN", "TI.EXE" }
-	};
-	for (uint c = 0; c < ARRAYSIZE(candidates); ++c) {
-		Common::FSNode node = gameDir.getChild(candidates[c][0])
-				.getChild(candidates[c][1]).getChild(candidates[c][2]);
-		if (!node.exists())
-			continue;
-		Common::SeekableReadStream *stream = node.createReadStream();
-		if (!stream)
-			continue;
-		Common::ScopedPtr<Common::PEResources> exe(new Common::PEResources());
-		if (exe->loadFromEXE(stream, DisposeAfterUse::YES)) {
-			_exe.reset(exe.release());
-			return _exe.get();
-		}
-		// exe (and the stream it owns) is freed as it goes out of scope.
-	}
-	warning("Cyberflix: could not locate TI.EXE for cursor resources");
-	return nullptr;
-}
-
-bool CyberflixEngine::setGameCursor(const Common::String &name) {
-	if (_activeCursor == name && _cursorCache.contains(name))
-		return true;
-
-	Common::SharedPtr<Graphics::WinCursorGroup> group;
-	if (_cursorCache.contains(name)) {
-		group = _cursorCache[name];
-	} else {
-		Common::PEResources *exe = gameExe();
-		if (!exe)
-			return false;
-		group = Common::SharedPtr<Graphics::WinCursorGroup>(
-				Graphics::WinCursorGroup::createCursorGroup(exe, Common::WinResourceID(name)));
-		_cursorCache[name] = group; // cache even null to avoid re-parsing
-	}
-	if (!group || group->cursors.empty()) {
-		debug(1, "Cyberflix: cursor '%s' missing/empty in TI.EXE", name.c_str());
-		return false;
-	}
-
-	CursorMan.replaceCursor(group->cursors[0].cursor);
-	_activeCursor = name;
-	debug(1, "Cyberflix: cursor -> %s", name.c_str());
-	return true;
-}
-
 // openstagefile(name): open a DATA/*.STG deck. The boot script calls this for
 // MAIN.STG just before sendtostage(0). Mirrors TI.EXE FUN_004090b0 (which parses
 // via FUN_00409150). See files/decomp/stage-notes.md.
