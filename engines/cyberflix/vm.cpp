@@ -996,6 +996,103 @@ bool ScriptVM::callStageSetMethod(uint16 opcode, const Common::Array<Value> &arg
 	}
 }
 
+bool ScriptVM::callInputMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
+	switch (opcode) {
+	case Script::kMethodKeyAborts: { // keyaborts([resource, key, flag]) -> FUN_00435a00/FUN_00446e10
+		bool enabled = args.size() > 2 && args[2].intValue != 0;
+		result = Value::makeBool(_host->keyAborts(
+				args.size() > 0 ? &args[0].strValue : nullptr,
+				args.size() > 1 ? &args[1].strValue : nullptr,
+				args.size() > 2 ? &enabled : nullptr));
+		return true;
+	}
+	case Script::kMethodPointX: // pointx(point) -> high word of packed (x << 16) | y
+		result = Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue >> 16));
+		return true;
+	case Script::kMethodPointY: // pointy(point) -> low word of packed (x << 16) | y
+		result = Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue & 0xffff));
+		return true;
+	case Script::kMethodMakePoint: // makepoint(x, y) -> packed (x << 16) | y
+		result = Value::makeInt(_host->makePoint(args.size() > 0 ? args[0].intValue : 0,
+				args.size() > 1 ? args[1].intValue : 0));
+		return true;
+	case Script::kMethodButton: // button() -> FUN_00436880: live left mouse button state
+		result = Value::makeBool(_host->buttonDown());
+		return true;
+	case Script::kMethodStillDown: // stilldown() -> FUN_00436920: live mouse button state
+		result = Value::makeBool(_host->stillDown());
+		return true;
+	case Script::kMethodTick: // tick() -> FUN_004368f0: native 60 Hz timer
+		result = Value::makeInt(_host->tick());
+		return true;
+	case Script::kMethodQuestionDialog: // questiondialog(text) -> FUN_004363f0/FUN_00409030
+		result = Value::makeBool(_host->questionDialog(
+				args.empty() ? Common::String() : args[0].strValue));
+		return true;
+	case Script::kMethodOptionKey: // optionkey() -> FUN_004376e0/GetAsyncKeyState(VK_SHIFT)
+		result = Value::makeBool(_host->optionKey());
+		return true;
+	case Script::kMethodPointInButton: // pointinbutton(flat, button, point) -> FUN_0040a0d0
+		result = args.size() >= 3 ?
+				Value::makeBool(_host->pointInButton(args[0].strValue,
+						args[1].strValue, args[2].intValue)) :
+				Value::makeBool(false);
+		return true;
+	case Script::kMethodPointInPainting: // pointinpainting(scene, view, painting, point) -> FUN_004322e0
+		result = args.size() >= 4 ?
+				Value::makeBool(_host->pointInPainting(args[0].strValue,
+						args[1].strValue, args[2].strValue, args[3].intValue)) :
+				Value::makeBool(false);
+		return true;
+	case Script::kMethodHitTest: // hittest(point) -> FUN_00435e70: name of the topmost item
+	             // under the packed point; kind stored for result()
+		if (!args.empty())
+			result = Value::makeString(_host->hitTest(args[0].intValue));
+		return true;
+	case Script::kMethodCalcDeg: // calcdeg(pointA, pointB) -> FUN_00435c70
+		result = args.size() >= 2 ?
+				Value::makeInt(_host->calcDeg(args[0].intValue, args[1].intValue)) :
+				Value::makeInt(0);
+		return true;
+	case Script::kMethodStarXYZ: // starxyz(name, selector) -> FUN_00435a60/FUN_00432fc0
+		result = args.size() >= 2 ?
+				Value::makeInt(_host->starXYZ(args[0].strValue, args[1].intValue)) :
+				Value::makeInt(0);
+		return true;
+	case Script::kMethodCalcMod: // calcmod(a, b) -> FUN_004358f0
+		result = args.size() >= 2 ?
+				Value::makeInt(_host->calcMod(args[0].intValue, args[1].intValue)) :
+				Value::makeInt(0);
+		return true;
+	case Script::kMethodResult: // result() -> FUN_004366a0: last hittest kind (DAT_00461298)
+		result = Value::makeString(_host->hitTestResult());
+		return true;
+	case Script::kMethodMouse: // mouse() -> FUN_004368b0: current mouse point, packed
+		result = Value::makeInt(_host->mousePoint());
+		return true;
+	case Script::kMethodCursor: // cursor(id|name) -> FUN_00446920. Resource-name mapping
+	             // verified against TI.EXE (see VMHost::setCursorResource):
+	             // int -> CURS<n>; "arrow" -> CURS.ARROW; "watch" ->
+	             // CURS2002; other names -> CURS.<NAME>.
+		if (!args.empty()) {
+			Common::String res;
+			if (args[0].type == Value::kInt)
+				res = Common::String::format("CURS%d", args[0].intValue);
+			else if (args[0].strValue.equalsIgnoreCase("arrow"))
+				res = "CURS.ARROW";
+			else if (args[0].strValue.equalsIgnoreCase("watch"))
+				res = "CURS2002";
+			else
+				res = Common::String("CURS.") + args[0].strValue;
+			res.toUppercase();
+			_host->setCursorResource(res);
+		}
+		return true;
+	default:
+		return false;
+	}
+}
+
 Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args) {
 	// Dispatch a builtin method by opcode. The interpreter routes 0x2Exx/0x2Fxx
 	// through dispatch B and 0x3Exx/0x4Exx through dispatch A (files/opcode-map.md
@@ -1034,6 +1131,8 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		if (callPuppetMethod(opcode, args, result))
 			return result;
 		if (callStageSetMethod(opcode, args, result))
+			return result;
+		if (callInputMethod(opcode, args, result))
 			return result;
 
 		switch (opcode) {
@@ -1112,13 +1211,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			const int *newRate = args.empty() ? nullptr : &rate;
 			return Value::makeInt(_host->frameRate(newRate));
 		}
-		case Script::kMethodKeyAborts: { // keyaborts([resource, key, flag]) -> FUN_00435a00/FUN_00446e10
-			bool enabled = args.size() > 2 && args[2].intValue != 0;
-			return Value::makeBool(_host->keyAborts(
-					args.size() > 0 ? &args[0].strValue : nullptr,
-					args.size() > 1 ? &args[1].strValue : nullptr,
-					args.size() > 2 ? &enabled : nullptr));
-		}
 		case Script::kMethodPath: { // path(slot[, value]) -> FUN_004462a0/FUN_00438450
 			int slot = args.empty() ? 0 : args[0].intValue;
 			const Common::String *newPath = args.size() >= 2 ? &args[1].strValue : nullptr;
@@ -1128,73 +1220,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			const Common::String *requested = args.empty() ? nullptr : &args[0].strValue;
 			return Value::makeString(_host->currentCD(requested));
 		}
-		case Script::kMethodPointX: // pointx(point) -> high word of packed (x << 16) | y
-			return Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue >> 16));
-		case Script::kMethodPointY: // pointy(point) -> low word of packed (x << 16) | y
-			return Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue & 0xffff));
-		case Script::kMethodMakePoint: // makepoint(x, y) -> packed (x << 16) | y
-			return Value::makeInt(_host->makePoint(args.size() > 0 ? args[0].intValue : 0,
-					args.size() > 1 ? args[1].intValue : 0));
-		case Script::kMethodButton: // button() -> FUN_00436880: live left mouse button state
-			return Value::makeBool(_host->buttonDown());
-		case Script::kMethodStillDown: // stilldown() -> FUN_00436920: live mouse button state
-			return Value::makeBool(_host->stillDown());
-		case Script::kMethodTick: // tick() -> FUN_004368f0: native 60 Hz timer
-			return Value::makeInt(_host->tick());
-		case Script::kMethodQuestionDialog: // questiondialog(text) -> FUN_004363f0/FUN_00409030
-			return Value::makeBool(_host->questionDialog(
-					args.empty() ? Common::String() : args[0].strValue));
-		case Script::kMethodOptionKey: // optionkey() -> FUN_004376e0/GetAsyncKeyState(VK_SHIFT)
-			return Value::makeBool(_host->optionKey());
-		case Script::kMethodPointInButton: // pointinbutton(flat, button, point) -> FUN_0040a0d0
-			if (args.size() >= 3)
-				return Value::makeBool(_host->pointInButton(args[0].strValue,
-						args[1].strValue, args[2].intValue));
-			return Value::makeBool(false);
-		case Script::kMethodPointInPainting: // pointinpainting(scene, view, painting, point) -> FUN_004322e0
-			if (args.size() >= 4)
-				return Value::makeBool(_host->pointInPainting(args[0].strValue,
-						args[1].strValue, args[2].strValue, args[3].intValue));
-			return Value::makeBool(false);
-		case Script::kMethodHitTest: // hittest(point) -> FUN_00435e70: name of the topmost item
-		             // under the packed point; kind stored for result()
-			if (!args.empty())
-				return Value::makeString(_host->hitTest(args[0].intValue));
-			break;
-		case Script::kMethodCalcDeg: // calcdeg(pointA, pointB) -> FUN_00435c70
-			if (args.size() >= 2)
-				return Value::makeInt(_host->calcDeg(args[0].intValue, args[1].intValue));
-			return Value::makeInt(0);
-		case Script::kMethodStarXYZ: // starxyz(name, selector) -> FUN_00435a60/FUN_00432fc0
-			if (args.size() >= 2)
-				return Value::makeInt(_host->starXYZ(args[0].strValue, args[1].intValue));
-			return Value::makeInt(0);
-		case Script::kMethodCalcMod: // calcmod(a, b) -> FUN_004358f0
-			if (args.size() >= 2)
-				return Value::makeInt(_host->calcMod(args[0].intValue, args[1].intValue));
-			return Value::makeInt(0);
-		case Script::kMethodResult: // result() -> FUN_004366a0: last hittest kind (DAT_00461298)
-			return Value::makeString(_host->hitTestResult());
-		case Script::kMethodMouse: // mouse() -> FUN_004368b0: current mouse point, packed
-			return Value::makeInt(_host->mousePoint());
-		case Script::kMethodCursor: // cursor(id|name) -> FUN_00446920. Resource-name mapping
-		             // verified against TI.EXE (see VMHost::setCursorResource):
-		             // int -> CURS<n>; "arrow" -> CURS.ARROW; "watch" ->
-		             // CURS2002; other names -> CURS.<NAME>.
-			if (!args.empty()) {
-				Common::String res;
-				if (args[0].type == Value::kInt)
-					res = Common::String::format("CURS%d", args[0].intValue);
-				else if (args[0].strValue.equalsIgnoreCase("arrow"))
-					res = "CURS.ARROW";
-				else if (args[0].strValue.equalsIgnoreCase("watch"))
-					res = "CURS2002";
-				else
-					res = Common::String("CURS.") + args[0].strValue;
-				res.toUppercase();
-				_host->setCursorResource(res);
-			}
-			break;
 		case Script::kMethodSaveGame: // savegame(signature) -> FUN_00426620/FUN_00426790
 			_host->saveGame(args.empty() ? Common::String() : args[0].strValue);
 			break;
