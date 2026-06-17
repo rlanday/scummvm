@@ -1093,6 +1093,107 @@ bool ScriptVM::callInputMethod(uint16 opcode, const Common::Array<Value> &args, 
 	}
 }
 
+bool ScriptVM::callRuntimeMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
+	switch (opcode) {
+	case Script::kMethodMessage: // message(text) -> FUN_00446240
+		_host->message(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodPlayMovie: // playmovie('name.mov')
+		_host->playMovie(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodClut: // clut(name): snap the hardware palette (FUN_00446500)
+		_host->setClut(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodBlackScreen: // blackscreen(): fill the window with black pixels (FUN_00446b80)
+		_host->blackScreen();
+		return true;
+	case Script::kMethodForceUpdate: // forceupdate() -> FUN_00446910 -> FUN_00423a60
+		_host->forceUpdate();
+		return true;
+	case Script::kMethodFlushEvents: // flushevents() -> FUN_00446cb0/FUN_00405110
+		_host->flushEvents();
+		return true;
+	case Script::kMethodDrawString: // drawstring(text, point, color, size) -> FUN_004460c0
+		if (args.size() >= 2)
+			_host->drawString(args[0].strValue, args[1].intValue,
+					args.size() > 2 ? args[2].intValue : 0,
+					args.size() > 3 ? args[3].intValue : 12);
+		return true;
+	case Script::kMethodQuit: // quit() -> FUN_00446c80: restore cursor, set native quit flag
+		_host->requestQuit();
+		return true;
+	case Script::kMethodBlackToScreen: // blacktoscreen(target, steps): palette fade black -> target
+		_host->fadePalette(args.size() > 0 ? args[0].strValue : Common::String("current"),
+				args.size() > 1 ? args[1].intValue : 1, false);
+		return true;
+	case Script::kMethodScreenToBlack: // screentoblack(target, steps): palette fade target -> black
+		_host->fadePalette(args.size() > 0 ? args[0].strValue : Common::String("current"),
+				args.size() > 1 ? args[1].intValue : 1, true);
+		return true;
+	case Script::kMethodVisualEffect: // visualeffect(effect, dur): set default transition (FUN_00446400)
+		// The effect names ('plain', ...) are bare method opcodes 0x5dc1..
+		// 0x5dd5 used as atoms; decodeAtom yields Value() for them, so the
+		// effect code is not currently propagated. Only 'plain' is used by
+		// the boot scripts; forward the duration.
+		_host->setVisualEffect(0x5dce, args.size() > 1 ? args[1].intValue : 0);
+		return true;
+	case Script::kMethodMakeLoop: // makeloop(kind, target, message, delay) -> FUN_00423e60
+		if (args.size() >= 4)
+			_host->makeLoop(args[0].strValue, args[1].strValue,
+					args[2].strValue, args[3].intValue);
+		return true;
+	case Script::kMethodStopLoop: // stoploop(kind[, target]) -> FUN_00446d30/FUN_00423bf0
+		if (!args.empty())
+			_host->stopLoop(args[0].strValue,
+					args.size() > 1 ? args[1].strValue : Common::String());
+		return true;
+	case Script::kMethodPauseLoop: // pauseloop(kind, flag)
+		if (args.size() >= 2)
+			_host->pauseLoop(args[0].strValue, args[1].intValue != 0);
+		return true;
+	case Script::kMethodMakeCricket: // makecricket(name, x, y, dist, angle, delay) -> FUN_00425640
+		if (!args.empty())
+			_host->makeCricket(args[0].strValue);
+		return true;
+	case Script::kMethodStopCricket: // stopcricket(name) -> FUN_00446db0/FUN_00423c80
+		if (!args.empty())
+			_host->stopCricket(args[0].strValue);
+		return true;
+	case Script::kMethodPauseCricket: // pausecricket(kind, flag)
+		if (args.size() >= 2)
+			_host->pauseCricket(args[0].strValue, args[1].intValue != 0);
+		return true;
+	case Script::kMethodActionFrame: // actionframe(n) -> bool, FUN_004362c0 (n must be 1 or 2)
+		result = Value::makeBool(_host->actionFrame(args.empty() ? 0 : args[0].intValue));
+		return true;
+	case Script::kMethodFrameRate: { // framerate([n]) -> DAT_00461126
+		int rate = args.empty() ? 0 : args[0].intValue;
+		const int *newRate = args.empty() ? nullptr : &rate;
+		result = Value::makeInt(_host->frameRate(newRate));
+		return true;
+	}
+	case Script::kMethodPath: { // path(slot[, value]) -> FUN_004462a0/FUN_00438450
+		int slot = args.empty() ? 0 : args[0].intValue;
+		const Common::String *newPath = args.size() >= 2 ? &args[1].strValue : nullptr;
+		result = Value::makeString(_host->pathSlot(slot, newPath));
+		return true;
+	}
+	case Script::kMethodCurrentCD: { // currentcd([name]) -> FUN_00439df0/FUN_0043a290
+		const Common::String *requested = args.empty() ? nullptr : &args[0].strValue;
+		result = Value::makeString(_host->currentCD(requested));
+		return true;
+	}
+	case Script::kMethodSaveGame: // savegame(signature) -> FUN_00426620/FUN_00426790
+		_host->saveGame(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodOpenGame: // opengame(signature) -> FUN_004266e0/FUN_00426f00
+		_host->openGame(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	default:
+		return false;
+	}
+}
+
 Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args) {
 	// Dispatch a builtin method by opcode. The interpreter routes 0x2Exx/0x2Fxx
 	// through dispatch B and 0x3Exx/0x4Exx through dispatch A (files/opcode-map.md
@@ -1134,101 +1235,8 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return result;
 		if (callInputMethod(opcode, args, result))
 			return result;
-
-		switch (opcode) {
-		case Script::kMethodMessage: // message(text) -> FUN_00446240
-			_host->message(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodPlayMovie: // playmovie('name.mov')
-			_host->playMovie(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodClut: // clut(name): snap the hardware palette (FUN_00446500)
-			_host->setClut(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodBlackScreen: // blackscreen(): fill the window with black pixels (FUN_00446b80)
-			_host->blackScreen();
-			break;
-		case Script::kMethodForceUpdate: // forceupdate() -> FUN_00446910 -> FUN_00423a60
-			_host->forceUpdate();
-			break;
-		case Script::kMethodFlushEvents: // flushevents() -> FUN_00446cb0/FUN_00405110
-			_host->flushEvents();
-			break;
-		case Script::kMethodDrawString: // drawstring(text, point, color, size) -> FUN_004460c0
-			if (args.size() >= 2)
-				_host->drawString(args[0].strValue, args[1].intValue,
-						args.size() > 2 ? args[2].intValue : 0,
-						args.size() > 3 ? args[3].intValue : 12);
-			break;
-		case Script::kMethodQuit: // quit() -> FUN_00446c80: restore cursor, set native quit flag
-			_host->requestQuit();
-			break;
-		case Script::kMethodBlackToScreen: // blacktoscreen(target, steps): palette fade black -> target
-			_host->fadePalette(args.size() > 0 ? args[0].strValue : Common::String("current"),
-					args.size() > 1 ? args[1].intValue : 1, false);
-			break;
-		case Script::kMethodScreenToBlack: // screentoblack(target, steps): palette fade target -> black
-			_host->fadePalette(args.size() > 0 ? args[0].strValue : Common::String("current"),
-					args.size() > 1 ? args[1].intValue : 1, true);
-			break;
-		case Script::kMethodVisualEffect: // visualeffect(effect, dur): set default transition (FUN_00446400)
-			// The effect names ('plain', ...) are bare method opcodes 0x5dc1..
-			// 0x5dd5 used as atoms; decodeAtom yields Value() for them, so the
-			// effect code is not currently propagated. Only 'plain' is used by
-			// the boot scripts; forward the duration.
-			_host->setVisualEffect(0x5dce, args.size() > 1 ? args[1].intValue : 0);
-			break;
-		case Script::kMethodMakeLoop: // makeloop(kind, target, message, delay) -> FUN_00423e60
-			if (args.size() >= 4)
-				_host->makeLoop(args[0].strValue, args[1].strValue,
-						args[2].strValue, args[3].intValue);
-			break;
-		case Script::kMethodStopLoop: // stoploop(kind[, target]) -> FUN_00446d30/FUN_00423bf0
-			if (!args.empty())
-				_host->stopLoop(args[0].strValue,
-						args.size() > 1 ? args[1].strValue : Common::String());
-			break;
-		case Script::kMethodPauseLoop: // pauseloop(kind, flag)
-			if (args.size() >= 2)
-				_host->pauseLoop(args[0].strValue, args[1].intValue != 0);
-			break;
-		case Script::kMethodMakeCricket: // makecricket(name, x, y, dist, angle, delay) -> FUN_00425640
-			if (!args.empty())
-				_host->makeCricket(args[0].strValue);
-			break;
-		case Script::kMethodStopCricket: // stopcricket(name) -> FUN_00446db0/FUN_00423c80
-			if (!args.empty())
-				_host->stopCricket(args[0].strValue);
-			break;
-		case Script::kMethodPauseCricket: // pausecricket(kind, flag)
-			if (args.size() >= 2)
-				_host->pauseCricket(args[0].strValue, args[1].intValue != 0);
-			break;
-		case Script::kMethodActionFrame: // actionframe(n) -> bool, FUN_004362c0 (n must be 1 or 2)
-			return Value::makeBool(_host->actionFrame(args.empty() ? 0 : args[0].intValue));
-		case Script::kMethodFrameRate: { // framerate([n]) -> DAT_00461126
-			int rate = args.empty() ? 0 : args[0].intValue;
-			const int *newRate = args.empty() ? nullptr : &rate;
-			return Value::makeInt(_host->frameRate(newRate));
-		}
-		case Script::kMethodPath: { // path(slot[, value]) -> FUN_004462a0/FUN_00438450
-			int slot = args.empty() ? 0 : args[0].intValue;
-			const Common::String *newPath = args.size() >= 2 ? &args[1].strValue : nullptr;
-			return Value::makeString(_host->pathSlot(slot, newPath));
-		}
-		case Script::kMethodCurrentCD: { // currentcd([name]) -> FUN_00439df0/FUN_0043a290
-			const Common::String *requested = args.empty() ? nullptr : &args[0].strValue;
-			return Value::makeString(_host->currentCD(requested));
-		}
-		case Script::kMethodSaveGame: // savegame(signature) -> FUN_00426620/FUN_00426790
-			_host->saveGame(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodOpenGame: // opengame(signature) -> FUN_004266e0/FUN_00426f00
-			_host->openGame(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		default:
-			break;
-		}
+		if (callRuntimeMethod(opcode, args, result))
+			return result;
 	}
 	return Value();
 }
