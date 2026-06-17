@@ -48,17 +48,6 @@ static const int kAudioSampleRate = 22050;
 /** Sample-rate field value selecting the native (non-upsampled) 22050 Hz path. */
 static const uint32 kAudioRate22050 = 0x5622;
 
-/**
- * Master header resource tag (@c info==0x40000). A linear movie's first
- * resource. Among other things it references two cue tables that drive audio:
- * a MUSIC table (continuous score, played from t=0) and an SFX/event table
- * (named one-shots triggered by individual video frames). The engine reads the
- * header through a data pointer at @c record+8 (== payload-4), so a field at
- * engine byte offset @c X is at @c payload[X-4]. See
- * files/decomp/movie-playback.md for the full reverse-engineering record.
- */
-static const uint32 kMasterHeaderInfoTag = 0x00040000;
-
 struct CbxAudioInfo {
 	uint32 blockSamples = 0;
 	uint32 blockCount = 0;

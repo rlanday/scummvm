@@ -62,7 +62,7 @@
 #include "cyberflix/runtime/set_helpers.h"
 #include "cyberflix/script.h"
 #include "cyberflix/set.h"
-#include "cyberflix/cbx_audio.h"
+#include "cyberflix/audio/cbx_audio.h"
 #include "cyberflix/stage.h"
 #include "cyberflix/vm.h"
 
@@ -400,6 +400,62 @@ Common::String CyberflixEngine::indexToProp(int index) {
 
 void CyberflixEngine::refreshPropsIfDirty() {
 	_propRuntime.refreshPropsIfDirty(*this);
+}
+
+void CyberflixEngine::openTrackFile(const Common::String &name) {
+	_audioRuntime.openTrackFile(name);
+}
+
+void CyberflixEngine::closeTrackFile(const Common::String &name) {
+	_audioRuntime.closeTrackFile(name);
+}
+
+void CyberflixEngine::playTheme(const Common::String &name) {
+	_audioRuntime.playTheme(*this, name);
+}
+
+void CyberflixEngine::haltTheme() {
+	_audioRuntime.haltTheme(*this);
+}
+
+void CyberflixEngine::playSound(const Common::String &name, int mode) {
+	_audioRuntime.playSound(*this, name, mode);
+}
+
+void CyberflixEngine::playVoice(const Common::String &name) {
+	_audioRuntime.playVoice(*this, name);
+}
+
+void CyberflixEngine::haltSound(int which) {
+	_audioRuntime.haltSound(*this, which);
+}
+
+void CyberflixEngine::haltVoice() {
+	_audioRuntime.haltVoice(*this);
+}
+
+void CyberflixEngine::themeVolume(const Common::String &name, int volume) {
+	_audioRuntime.themeVolume(*this, name, volume);
+}
+
+int CyberflixEngine::waveVolume(const int *newLevel) {
+	return _audioRuntime.waveVolume(*this, newLevel);
+}
+
+int CyberflixEngine::soundVolume(const Common::String &name, const int *newVolume) {
+	return _audioRuntime.soundVolume(*this, name, newVolume);
+}
+
+Common::String CyberflixEngine::currentTheme(int which) {
+	return _audioRuntime.currentTheme(*this, which);
+}
+
+Common::String CyberflixEngine::currentSound(int which) {
+	return _audioRuntime.currentSound(*this, which);
+}
+
+Common::String CyberflixEngine::currentVoice() {
+	return _audioRuntime.currentVoice(*this);
 }
 
 int CyberflixEngine::getGameType() const {

@@ -519,7 +519,7 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 		Audio::SeekableAudioStream *stream = makeOwnedRawPcmStream(pcm);
 		if (stream) {
 			engine._mixer->playStream(Audio::Mixer::kSpeechSoundType, &_speechHandle, stream);
-			engine._mixer->setChannelVolume(_speechHandle, engine.effectiveAudioVolume(255));
+			engine._mixer->setChannelVolume(_speechHandle, engine._audioRuntime.effectiveAudioVolume(255));
 		}
 	}
 

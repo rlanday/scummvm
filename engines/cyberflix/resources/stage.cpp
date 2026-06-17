@@ -27,7 +27,7 @@
 #include "common/ptr.h"
 
 #include "cyberflix/stage.h"
-#include "cyberflix/cbx_audio.h" // kMasterHeaderInfoTag
+#include "cyberflix/resource_helpers.h" // kMasterHeaderInfoTag
 #include "cyberflix/resource_helpers.h"
 
 namespace Cyberflix {

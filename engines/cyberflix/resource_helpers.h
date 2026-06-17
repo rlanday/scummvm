@@ -30,6 +30,14 @@
 
 namespace Cyberflix {
 
+/**
+ * Master header resource tag (@c info==0x40000). Archive formats use this for
+ * their top-level descriptor records; callers interpret the record-specific
+ * fields through a data pointer at @c record+8 (== payload-4), so a field at
+ * engine byte offset @c X is at @c payload[X-4].
+ */
+static const uint32 kMasterHeaderInfoTag = 0x00040000;
+
 inline const byte *resourceEngineBase(const Common::Array<byte> &fileData,
 		const Archive::Resource &res) {
 	if (res.empty || res.dataOffset < 4 || res.dataOffset > fileData.size())

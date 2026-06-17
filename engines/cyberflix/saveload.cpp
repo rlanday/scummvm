@@ -41,11 +41,13 @@
 #include "cyberflix/detection.h"
 #include "cyberflix/set.h"
 #include "cyberflix/shop.h"
-#include "cyberflix/cbx_audio.h"
+#include "cyberflix/audio/cbx_audio.h"
 #include "cyberflix/stage.h"
 #include "cyberflix/vm.h"
 
 namespace Cyberflix {
+
+typedef AudioRuntime::ThemeTrack ThemeTrack;
 
 enum {
 	kCyberflixSaveVersion = 1
@@ -653,7 +655,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	haltTheme();
 	haltSound(3);
 	haltVoice();
-	_tracks.clear();
+	_audioRuntime.clearTracks();
 	_propRuntime.clear();
 	_loopRuntime.clear();
 	_stage.reset();
@@ -747,37 +749,37 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 			cue.length = trackStates[i].sfxCues[c].length;
 			track->sfxCues.push_back(cue);
 		}
-		_tracks.push_back(track);
+		_audioRuntime.tracks().push_back(track);
 	}
 
 	if (settingsState.seen) {
-		_waveVolumeLevel = CLIP(settingsState.waveVolumeLevel, 0, 9);
+		_audioRuntime.setWaveVolumeLevel(settingsState.waveVolumeLevel);
 		_keyAborts = settingsState.keyAborts;
 	} else {
-		_waveVolumeLevel = 9;
+		_audioRuntime.setWaveVolumeLevel(9);
 		_keyAborts = false;
 	}
 
 	for (uint i = 0; i < cueVolumeStates.size(); ++i) {
-		for (uint t = 0; t < _tracks.size(); ++t) {
+		for (uint t = 0; t < _audioRuntime.tracks().size(); ++t) {
 			if (!cueVolumeStates[i].trackName.empty() &&
-					!_tracks[t]->name.equalsIgnoreCase(cueVolumeStates[i].trackName) &&
-					!_tracks[t]->sourceName.equalsIgnoreCase(cueVolumeStates[i].trackName))
+					!_audioRuntime.tracks()[t]->name.equalsIgnoreCase(cueVolumeStates[i].trackName) &&
+					!_audioRuntime.tracks()[t]->sourceName.equalsIgnoreCase(cueVolumeStates[i].trackName))
 				continue;
-			for (uint c = 0; c < _tracks[t]->sfxCues.size(); ++c) {
-				if (_tracks[t]->sfxCues[c].name.equalsIgnoreCase(cueVolumeStates[i].cueName))
-					_tracks[t]->sfxCues[c].volume = CLIP(cueVolumeStates[i].volume, 0, 255);
+			for (uint c = 0; c < _audioRuntime.tracks()[t]->sfxCues.size(); ++c) {
+				if (_audioRuntime.tracks()[t]->sfxCues[c].name.equalsIgnoreCase(cueVolumeStates[i].cueName))
+					_audioRuntime.tracks()[t]->sfxCues[c].volume = CLIP(cueVolumeStates[i].volume, 0, 255);
 			}
 		}
 	}
 
 	auto restoreTheme = [&](const Common::String &name, uint32 elapsedMillis) {
-		Common::SharedPtr<ThemeTrack> track = findTrackRef(name);
+		Common::SharedPtr<ThemeTrack> track = _audioRuntime.findTrackRef(name);
 		if (!track || track->playlist.empty())
 			return;
 
 		const uint32 startSample = (uint32)((uint64)elapsedMillis * kAudioSampleRate / 1000);
-		startThemeStream(track, startSample);
+		_audioRuntime.startThemeStream(*this, track, startSample);
 	};
 
 	if (audioState.seen) {
@@ -927,7 +929,7 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		payload.writeSint32LE(_waveVolumeLevel);
+		payload.writeSint32LE(_audioRuntime.waveVolumeLevel());
 		payload.writeByte(_keyAborts ? 1 : 0);
 		writeChunk(*saveFile, "SETT", payload);
 	}
@@ -981,9 +983,9 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 			}
 		};
 
-		payload.writeUint32LE((uint32)_tracks.size());
-		for (uint t = 0; t < _tracks.size(); ++t) {
-			const ThemeTrack &track = *_tracks[t];
+		payload.writeUint32LE((uint32)_audioRuntime.tracks().size());
+		for (uint t = 0; t < _audioRuntime.tracks().size(); ++t) {
+			const ThemeTrack &track = *_audioRuntime.tracks()[t];
 			writeSaveString(payload, track.sourceName);
 			writeSaveString(payload, track.name);
 			writeSaveData(payload, track.fileData);
@@ -1001,11 +1003,11 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
 		uint32 count = 0;
-		for (uint t = 0; t < _tracks.size(); ++t)
-			count += _tracks[t]->sfxCues.size();
+		for (uint t = 0; t < _audioRuntime.tracks().size(); ++t)
+			count += _audioRuntime.tracks()[t]->sfxCues.size();
 		payload.writeUint32LE(count);
-		for (uint t = 0; t < _tracks.size(); ++t) {
-			const ThemeTrack &track = *_tracks[t];
+		for (uint t = 0; t < _audioRuntime.tracks().size(); ++t) {
+			const ThemeTrack &track = *_audioRuntime.tracks()[t];
 			for (uint c = 0; c < track.sfxCues.size(); ++c) {
 				writeSaveString(payload, track.name);
 				writeSaveString(payload, track.sfxCues[c].name);
@@ -1026,19 +1028,20 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 			payload.writeUint32LE(0);
 		};
 
-		const bool themeActive = !_themeTrackName.empty() && _mixer->isSoundHandleActive(_themeHandle);
+		const bool themeActive = !_audioRuntime.themeTrackName().empty() &&
+				_mixer->isSoundHandleActive(_audioRuntime.themeHandle());
 		const uint32 themeElapsedMillis = themeActive ?
-				_mixer->getSoundElapsedTime(_themeHandle) +
-				(uint32)((uint64)_themeStartSample * 1000 / kAudioSampleRate) : 0;
+				_mixer->getSoundElapsedTime(_audioRuntime.themeHandle()) +
+				(uint32)((uint64)_audioRuntime.themeStartSample() * 1000 / kAudioSampleRate) : 0;
 		payload.writeByte(themeActive ? 1 : 0);
-		writeSaveString(payload, themeActive ? _themeTrackName : Common::String());
+		writeSaveString(payload, themeActive ? _audioRuntime.themeTrackName() : Common::String());
 		payload.writeUint32LE(themeElapsedMillis);
-		payload.writeUint32LE(_themeIntroSamples);
-		payload.writeUint32LE(_themeLoopSamples);
-		payload.writeUint32LE((uint32)_themeSpans.size());
-		for (uint i = 0; i < _themeSpans.size(); ++i) {
-			payload.writeUint32LE(_themeSpans[i].startSample);
-			writeSaveString(payload, _themeSpans[i].name);
+		payload.writeUint32LE(_audioRuntime.themeIntroSamples());
+		payload.writeUint32LE(_audioRuntime.themeLoopSamples());
+		payload.writeUint32LE((uint32)_audioRuntime.themeSpans().size());
+		for (uint i = 0; i < _audioRuntime.themeSpans().size(); ++i) {
+			payload.writeUint32LE(_audioRuntime.themeSpans()[i].startSample);
+			writeSaveString(payload, _audioRuntime.themeSpans()[i].name);
 		}
 		writeInactiveSoundSlot();
 		writeInactiveSoundSlot();

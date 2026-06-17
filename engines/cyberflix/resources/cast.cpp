@@ -28,7 +28,7 @@
 
 #include "cyberflix/cast.h"
 #include "cyberflix/image.h"
-#include "cyberflix/cbx_audio.h" // kMasterHeaderInfoTag
+#include "cyberflix/resource_helpers.h" // kMasterHeaderInfoTag
 #include "cyberflix/resource_helpers.h"
 
 #include <math.h>

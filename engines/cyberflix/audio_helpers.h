@@ -28,7 +28,7 @@
 #include "audio/audiostream.h"
 #include "audio/decoders/raw.h"
 
-#include "cyberflix/cbx_audio.h"
+#include "cyberflix/audio/cbx_audio.h"
 
 namespace Cyberflix {
 

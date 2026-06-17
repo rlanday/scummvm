@@ -21,7 +21,7 @@
 
 #include "common/endian.h"
 
-#include "cyberflix/cbx_audio.h"
+#include "cyberflix/audio/cbx_audio.h"
 
 namespace Cyberflix {
 

@@ -41,7 +41,7 @@
 #include "cyberflix/console.h"
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/image.h"
-#include "cyberflix/cbx_audio.h"
+#include "cyberflix/audio/cbx_audio.h"
 #include "cyberflix/resource_helpers.h"
 
 namespace Cyberflix {
@@ -504,7 +504,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			} else {
 				_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, stream);
 			}
-			_mixer->setChannelVolume(audioHandle, effectiveAudioVolume(255));
+			_mixer->setChannelVolume(audioHandle, _audioRuntime.effectiveAudioVolume(255));
 			hasMovieAudio = true;
 		}
 	}
@@ -560,7 +560,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		if ((int)fi == actionCue2)
 			_actionFrameMask |= 2;
 		if (playFrameSfxLive && fi < pfFrameSfx.size() && pfFrameSfx[fi])
-			playMovieFrameSfx(_mixer, frameSfxHandles, *pfFrameSfx[fi], effectiveAudioVolume(255));
+			playMovieFrameSfx(_mixer, frameSfxHandles, *pfFrameSfx[fi], _audioRuntime.effectiveAudioVolume(255));
 
 		// Current playback clock: real audio position while the track plays,
 		// else elapsed wall time (covers the post-music fade and silent movies).

@@ -31,6 +31,7 @@
 
 #include "audio/mixer.h"
 
+#include "cyberflix/audio/audio_runtime.h"
 #include "cyberflix/cast.h"
 #include "cyberflix/detection.h"
 #include "cyberflix/image.h"
@@ -265,6 +266,7 @@ public:
 	void requestQuit() override;
 
 private:
+	friend class AudioRuntime;
 	friend class ActorRuntime;
 	friend class LoopRuntime;
 	friend class PropRuntime;
@@ -461,72 +463,9 @@ private:
 	 */
 	uint16 _actionFrameMask = 0;
 
-	/**
-	 * A loaded .TRK track file (TI.EXE track record, FUN_00411cc0). Holds the
-	 * raw container plus parsed theme/SFX cue directories: the theme playlist
-	 * (play order, 1-based cue indices) and the loop index (playlist position
-	 * the chain loops back to after the last entry, so the leading cues play
-	 * once and the tail repeats forever), plus named SFX cues for sound/voice
-	 * builtins. See files/audio-re-notes.md.
-	 */
-	struct ThemeTrack {
-		Common::String sourceName;    ///< Lowercased file name requested by opentrackfile().
-		Common::String name;          ///< Lowercased logical track name from master.
-		Common::Array<byte> fileData; ///< Whole container; cue payloads point in.
-		struct Cue {
-			Common::String name;      ///< Cue label ('prelude.01').
-			uint32 resId = 0;         ///< Archive resource id (native cue priority key).
-			byte flags = 0;           ///< SFX flags byte; theme cues leave this zero.
-			uint32 dataOffset = 0;    ///< Absolute payload offset in fileData.
-			uint32 length = 0;        ///< Payload length.
-			int volume = 255;         ///< soundvol() per-cue volume (0-255).
-		};
-		Common::Array<Cue> cues;        ///< Theme cue directory.
-		Common::Array<Cue> sfxCues;     ///< SFX cue directory.
-		Common::Array<uint16> playlist; ///< Play order, 1-based indices into cues.
-		uint32 loopIdx = 0;             ///< Playlist index of the loop target.
-		int volume = 255;               ///< themevol() setting (0-255).
-	};
-
-	/** Open track files, in opentrackfile order (TI.EXE list DAT_0046114c). */
-	Common::Array<Common::SharedPtr<ThemeTrack> > _tracks;
-
-	/** Find an open track by (case-insensitive) file name, or nullptr. */
-	Common::SharedPtr<ThemeTrack> findTrackRef(const Common::String &name);
-	ThemeTrack *findTrack(const Common::String &name);
-	const ThemeTrack::Cue *findSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr);
-	ThemeTrack::Cue *findMutableSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr);
-	byte effectiveAudioVolume(int baseVolume) const;
-	void applyLiveAudioVolumes();
-	void prepareThemeSpans(const ThemeTrack &track);
-	bool startThemeStream(const Common::SharedPtr<ThemeTrack> &track, uint32 startSample);
-	bool playSoundCue(const Common::String &name, Audio::SoundHandle &handle,
-			Common::String &currentCue, uint32 &currentResId);
+	AudioRuntime _audioRuntime;
 	void clearStageShellFrame();
 	const FrameImage *stageShellFrame();
-
-	class ThemeAudioStream;
-	Audio::SoundHandle _themeHandle;   ///< Theme channel (TI.EXE DAT_00460a88).
-	Common::String _themeTrackName;    ///< Track of the playing theme, or empty.
-
-	/** Cue boundaries of the playing theme, for currenttheme(1). */
-	struct ThemeCueSpan {
-		uint32 startSample;
-		Common::String name;
-	};
-	Common::Array<ThemeCueSpan> _themeSpans;
-	uint32 _themeIntroSamples = 0; ///< Samples before the loop region.
-	uint32 _themeLoopSamples = 0;  ///< Length of the looping region.
-	uint32 _themeStartSample = 0;  ///< Virtual sample offset used after restoring a theme mid-stream.
-
-	struct SoundSlot {
-		Audio::SoundHandle handle;
-		Common::String cueName;
-		uint32 resId = 0;
-	};
-	SoundSlot _soundSlots[2]; ///< Normal sound slots (TI.EXE DAT_00460a58/70).
-	SoundSlot _voiceSlot;     ///< Voice slot (TI.EXE DAT_00460aa0).
-	int _waveVolumeLevel = 9; ///< Global wave volume level, native scale 0..9.
 	bool _keyAborts = false;  ///< Global keyaborts() getter state.
 
 	LoopRuntime _loopRuntime;
