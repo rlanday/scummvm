@@ -576,9 +576,12 @@ private:
 		Common::String target;
 		Common::String message;
 		int32 remainingPasses = 0;
+		uint32 createdPass = 0;
 	};
 	Common::Array<ScheduledLoop> _scheduledLoops;
 	bool _loopsPaused = false;
+	bool _processingScheduledLoops = false;
+	uint32 _scheduledLoopPass = 0;
 	static ScheduledLoop::Kind scheduledLoopKind(const Common::String &kind);
 	void processScheduledLoops();
 	int _frameRate = 3;       ///< DAT_00461126, scaled 60 Hz units between compositor passes.

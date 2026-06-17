@@ -4180,6 +4180,7 @@ void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String 
 	loop.target = target;
 	loop.message = message;
 	loop.remainingPasses = delay;
+	loop.createdPass = _scheduledLoopPass;
 	_scheduledLoops.push_back(loop);
 	debug(2, "Cyberflix: makeloop('%s', '%s', '%s', %d)",
 			kind.c_str(), target.c_str(), message.c_str(), delay);
@@ -4249,14 +4250,21 @@ void CyberflixEngine::pauseCricket(const Common::String &kind, bool paused) {
 }
 
 void CyberflixEngine::processScheduledLoops() {
-	if (_loopsPaused || _scheduledLoops.empty())
+	if (_loopsPaused || _scheduledLoops.empty() || _processingScheduledLoops)
 		return;
 
 	// Scheduled callbacks are commonly zero-argument "scene"/"flat" loops that
 	// fire from forceupdate(). Keep the hot path allocation-free except for the
 	// actual script dispatch work measured under this routine.
+	_processingScheduledLoops = true;
+	const uint32 currentPass = ++_scheduledLoopPass;
 	Common::Array<Value> noArgs;
 	for (uint32 i = 0; i < _scheduledLoops.size();) {
+		if (_scheduledLoops[i].createdPass >= currentPass) {
+			++i;
+			continue;
+		}
+
 		--_scheduledLoops[i].remainingPasses;
 		if (_scheduledLoops[i].remainingPasses > 0) {
 			++i;
@@ -4289,6 +4297,7 @@ void CyberflixEngine::processScheduledLoops() {
 		}
 		refreshPropsIfDirty();
 	}
+	_processingScheduledLoops = false;
 }
 
 // sendtoscene(name, message): dispatch the message against [scene script, set
