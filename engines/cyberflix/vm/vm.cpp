@@ -39,7 +39,10 @@ Common::String Value::toString() const {
 	}
 }
 
-ScriptVM::ScriptVM() : _pc(0), _executed(0), _trace(false), _host(nullptr), _callDepth(0) {
+ScriptVM::ScriptVM() : _pc(0), _executed(0), _trace(false), _host(nullptr),
+		_movieHost(nullptr), _navigationHost(nullptr), _systemHost(nullptr),
+		_audioHost(nullptr), _inputHost(nullptr), _actorHost(nullptr),
+		_interactionHost(nullptr), _saveHost(nullptr), _callDepth(0) {
 }
 
 static bool shouldLogTransitionDispatch(const Common::String &name) {
@@ -444,99 +447,99 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	switch (opcode) {
 	case Script::kMethodSendToStage: // sendtostage(message(...)) -> TI.EXE FUN_0040ad80
 		if (_host)
-			_host->sendToStage(*message, msgArgs);
+			_navigationHost->sendToStage(*message, msgArgs);
 		break;
 	case Script::kMethodSendToStageFx:
 		if (_host)
-			return _host->sendToStageFx(*message, msgArgs);
+			return _navigationHost->sendToStageFx(*message, msgArgs);
 		break;
 	case Script::kMethodSendToBoot: // sendtoboot(message(...)) -> TI.EXE FUN_00439080/FUN_004390a0
 		if (_host)
-			_host->sendToBoot(*message, msgArgs);
+			_navigationHost->sendToBoot(*message, msgArgs);
 		break;
 	case Script::kMethodSendToBootFx:
 		if (_host)
-			return _host->sendToBootFx(*message, msgArgs);
+			return _navigationHost->sendToBootFx(*message, msgArgs);
 		break;
 	case Script::kMethodSendToShop: // sendtoshop('file.shp', message) -> TI.EXE FUN_0042b2b0:
 	             // dispatch against [shop script, BOOTFILE res2].
 		if (_host)
-			_host->sendToShop(target0, *message, msgArgs);
+			_interactionHost->sendToShop(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToShopFx: // sendtoshopfx('file.shp', message) -> return dispatch result.
 		if (_host)
-			return _host->sendToShopFx(target0, *message, msgArgs);
+			return _interactionHost->sendToShopFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToProp: // sendtoprop('propname', message) -> TI.EXE FUN_0042ae80:
 	             // dispatch against [prop script, shop script, BOOTFILE res2].
 		if (_host)
-			_host->sendToProp(target0, *message, msgArgs);
+			_interactionHost->sendToProp(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPropFx:
 		if (_host)
-			return _host->sendToPropFx(target0, *message, msgArgs);
+			return _interactionHost->sendToPropFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToActor: // sendtoactor(actor, message) -> actor script, then cast script.
 		if (_host)
-			_host->sendToActor(target0, *message, msgArgs);
+			_actorHost->sendToActor(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToActorFx:
 		if (_host)
-			return _host->sendToActorFx(target0, *message, msgArgs);
+			return _actorHost->sendToActorFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToCast: // sendtocast('file.cst', message) -> per-cast script dispatch.
 		if (_host)
-			_host->sendToCast(target0, *message, msgArgs);
+			_actorHost->sendToCast(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToCastFx:
 		if (_host)
-			return _host->sendToCastFx(target0, *message, msgArgs);
+			return _actorHost->sendToCastFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPuppet: // sendtopuppet(target, message) -> [PUP script, BOOTFILE res2].
 		if (_host)
-			_host->sendToPuppet(target0, *message, msgArgs);
+			_navigationHost->sendToPuppet(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPuppetFx:
 		if (_host)
-			return _host->sendToPuppetFx(target0, *message, msgArgs);
+			return _navigationHost->sendToPuppetFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToScene: // sendtoscene(scene, message) -> TI.EXE FUN_004311e0/
 	             // FUN_00431200: dispatch against the scene's script chain.
 		if (_host)
-			_host->sendToScene(target0, *message, msgArgs);
+			_navigationHost->sendToScene(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToSceneFx:
 		if (_host)
-			return _host->sendToSceneFx(target0, *message, msgArgs);
+			return _navigationHost->sendToSceneFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPainting: // sendtopainting(scene, view, painting, message) -> FUN_00432550/FUN_00432570
 		if (_host)
-			_host->sendToPainting(target0, target1, target2, *message, msgArgs);
+			_navigationHost->sendToPainting(target0, target1, target2, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPaintingFx:
 		if (_host)
-			return _host->sendToPaintingFx(target0, target1, target2, *message, msgArgs);
+			return _navigationHost->sendToPaintingFx(target0, target1, target2, *message, msgArgs);
 		break;
 	case Script::kMethodSendToSetFx:
 		if (_host)
-			return _host->sendToSetFx(*message, msgArgs);
+			return _navigationHost->sendToSetFx(*message, msgArgs);
 		break;
 	case Script::kMethodSendToButton: // sendtobutton(flat, button, message) -> FUN_0040a410/FUN_0040a430:
 	             // chain [button script, node script, stage script, res2].
 		if (_host)
-			_host->sendToButton(target0, target1, *message, msgArgs);
+			_navigationHost->sendToButton(target0, target1, *message, msgArgs);
 		break;
 	case Script::kMethodSendToButtonFx:
 		if (_host)
-			return _host->sendToButtonFx(target0, target1, *message, msgArgs);
+			return _navigationHost->sendToButtonFx(target0, target1, *message, msgArgs);
 		break;
 	case Script::kMethodSendToFlat: // sendtoflat(flat, message) -> FUN_0040a940/FUN_0040a960
 		if (_host)
-			_host->sendToFlat(target0, *message, msgArgs);
+			_navigationHost->sendToFlat(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToFlatFx:
 		if (_host)
-			return _host->sendToFlatFx(target0, *message, msgArgs);
+			return _navigationHost->sendToFlatFx(target0, *message, msgArgs);
 		break;
 	default:
 		break;
@@ -580,7 +583,7 @@ void ScriptVM::parseCallArgs(const Script &script, uint32 &pc, Common::Array<Val
 bool ScriptVM::callCoreMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
 	switch (opcode) {
 	case Script::kMethodRandom: // random(n) -> FUN_004366c0/FUN_0041b060
-		result = Value::makeInt(_host ? _host->randomNumber(args.empty() ? 0 : args[0].intValue) : 0);
+		result = Value::makeInt(_systemHost ? _systemHost->randomNumber(args.empty() ? 0 : args[0].intValue) : 0);
 		return true;
 	case Script::kMethodStringToNum: // stringtonum(str) -> FUN_00436ee0
 		result = Value::makeInt(stringToNum(args.empty() ? Common::String() : args[0].strValue));

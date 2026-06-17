@@ -418,9 +418,9 @@ public:
 	virtual int starXYZ(const Common::String &name, int selector) { return 0; }
 };
 
-class VMPropHost {
+class VMInteractionHost {
 public:
-	virtual ~VMPropHost() {}
+	virtual ~VMInteractionHost() {}
 
 	/** openshopfile('name.shp'): load a .SHP prop container and dispatch its
 	 *  openshop()/openprop() messages (TI.EXE 0x2f18 FUN_00428450). */
@@ -586,7 +586,7 @@ public:
 
 class VMHost : public VMMovieHost, public VMNavigationHost, public VMSystemHost,
 		public VMAudioHost, public VMInputHost, public VMActorHost,
-		public VMPropHost, public VMSaveHost {
+		public VMInteractionHost, public VMSaveHost {
 public:
 	~VMHost() override {}
 };
@@ -608,7 +608,17 @@ public:
 	 * Attach the engine host that realises effectful builtins (playMovie, ...).
 	 * Without a host, those builtins are logged no-ops. Not owned.
 	 */
-	void setHost(VMHost *host) { _host = host; }
+	void setHost(VMHost *host) {
+		_host = host;
+		_movieHost = host;
+		_navigationHost = host;
+		_systemHost = host;
+		_audioHost = host;
+		_inputHost = host;
+		_actorHost = host;
+		_interactionHost = host;
+		_saveHost = host;
+	}
 
 	/** Run @p script from the top until the terminator or a step budget. */
 	void run(const Script &script, uint32 maxSteps = 100000);
@@ -834,6 +844,14 @@ private:
 	uint32 _executed; ///< Statements executed by the last runProgram (for the console).
 	bool _trace;
 	VMHost *_host; ///< Engine host for effectful builtins; null = no-op. Not owned.
+	VMMovieHost *_movieHost;
+	VMNavigationHost *_navigationHost;
+	VMSystemHost *_systemHost;
+	VMAudioHost *_audioHost;
+	VMInputHost *_inputHost;
+	VMActorHost *_actorHost;
+	VMInteractionHost *_interactionHost;
+	VMSaveHost *_saveHost;
 
 	/// Dispatch context for the atoms 0xfba/0xfbb (see setDispatchContext).
 	Common::String _ctxSelf;
