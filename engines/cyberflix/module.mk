@@ -10,6 +10,7 @@ MODULE_OBJS = \
 	image.o \
 	metaengine.o \
 	movie.o \
+	props.o \
 	puppet.o \
 	saveload.o \
 	script.o \

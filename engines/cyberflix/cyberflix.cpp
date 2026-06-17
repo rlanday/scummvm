@@ -1656,49 +1656,6 @@ Common::String CyberflixEngine::indexToPuppet(int index) {
 // array (DAT_0046112c/DAT_00461130) across all open casts; lookups and
 // countactors/indextoactor therefore span _casts in open order.
 
-// ---- Shop/prop subsystem (TI.EXE FUN_00428450 and friends) ----------------
-// RE notes: files/renderer-notes.md "Shop/prop subsystem". The original keeps
-// one global prop array across all open shops; here the by-name lookups and
-// countprops/indextoprop span _shops in open order, which preserves the
-// global-index semantics (shops are only ever appended).
-
-Shop *CyberflixEngine::findShop(const Common::String &name) {
-	Common::SharedPtr<Shop> shop = findShopShared(name);
-	return shop.get();
-}
-
-Common::SharedPtr<Shop> CyberflixEngine::findShopShared(const Common::String &name) {
-	Common::String key = name;
-	key.toLowercase();
-	for (uint32 i = 0; i < _shops.size(); ++i)
-		if (_shops[i]->name() == key)
-			return _shops[i];
-	return Common::SharedPtr<Shop>();
-}
-
-Shop::Prop *CyberflixEngine::findProp(const Common::String &name, Shop **shopOut) {
-	Shop::Prop *prop = nullptr;
-	Common::SharedPtr<Shop> shop = findPropOwnerShared(name, &prop);
-	if (shopOut)
-		*shopOut = shop.get();
-	return prop;
-}
-
-Common::SharedPtr<Shop> CyberflixEngine::findPropOwnerShared(const Common::String &name,
-		Shop::Prop **propOut) {
-	for (uint32 i = 0; i < _shops.size(); ++i) {
-		Shop::Prop *prop = _shops[i]->findProp(name);
-		if (prop) {
-			if (propOut)
-				*propOut = prop;
-			return _shops[i];
-		}
-	}
-	if (propOut)
-		*propOut = nullptr;
-	return Common::SharedPtr<Shop>();
-}
-
 void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw,
 		Common::Array<const Shop *> &drawShop) {
 	for (uint32 s = 0; s < _shops.size(); ++s) {
