@@ -36,6 +36,7 @@
 #include "cyberflix/image.h"
 #include "cyberflix/puppet.h"
 #include "cyberflix/runtime/cursor.h"
+#include "cyberflix/runtime/paths.h"
 #include "cyberflix/shop.h"
 #include "cyberflix/vm.h"
 
@@ -591,10 +592,7 @@ private:
 	Common::Array<CricketState> _crickets;
 	bool _cricketsPaused = false;
 
-	Common::String _pathSlots[9];        ///< Native path slots 0..8 (FUN_00438450).
-	Common::String _pathSlotArchives[9]; ///< SearchMan archive names for slots 1..8.
-	Common::String _currentCD;           ///< Native current CD Pascal string (DAT_00460d60).
-	void registerPathSlotDirectory(int slot);
+	PathRuntime _pathRuntime;
 
 	/**
 	 * Resolve the named CLUT to 256 RGB triplets, mirroring TI.EXE's clut

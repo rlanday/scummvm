@@ -246,21 +246,19 @@ bool validateTitanicDiscLayout() {
 	return false;
 }
 
-Common::String CyberflixEngine::pathSlot(int slot, const Common::String *newPath) {
+Common::String PathRuntime::pathSlot(int slot, const Common::String *newPath) {
 	if (slot < 0 || slot > 8) {
 		warning("Cyberflix: path(%d): invalid slot", slot);
 		return Common::String();
 	}
 
-	if (newPath) {
-		_pathSlots[slot] = *newPath;
-		registerPathSlotDirectory(slot);
-	}
+	if (newPath)
+		setPathSlot(slot, *newPath);
 
 	return _pathSlots[slot];
 }
 
-Common::String CyberflixEngine::currentCD(const Common::String *requested) {
+Common::String PathRuntime::currentCD(const Common::String *requested) {
 	if (requested) {
 		if (requested->empty()) {
 			_currentCD.clear();
@@ -281,7 +279,19 @@ Common::String CyberflixEngine::currentCD(const Common::String *requested) {
 	return _currentCD;
 }
 
-void CyberflixEngine::registerPathSlotDirectory(int slot) {
+void PathRuntime::setPathSlot(int slot, const Common::String &path) {
+	if (slot < 0 || slot >= kPathSlotCount)
+		return;
+	_pathSlots[slot] = path;
+	registerPathSlotDirectory(slot);
+}
+
+void PathRuntime::setCurrentDiscRootName(const Common::String &name) {
+	_pathSlots[0] = canonicalCDLabel(name) + ":";
+	_currentCD = canonicalCDLabel(name);
+}
+
+void PathRuntime::registerPathSlotDirectory(int slot) {
 	if (slot < 1 || slot > 8)
 		return;
 
@@ -304,6 +314,14 @@ void CyberflixEngine::registerPathSlotDirectory(int slot) {
 	SearchMan.addDirectory(_pathSlotArchives[slot], dir, 10, 1, false);
 	debug(1, "Cyberflix: path slot %d '%s' -> '%s'", slot, _pathSlots[slot].c_str(),
 			dir.getPath().toString(Common::Path::kNativeSeparator).c_str());
+}
+
+Common::String CyberflixEngine::pathSlot(int slot, const Common::String *newPath) {
+	return _pathRuntime.pathSlot(slot, newPath);
+}
+
+Common::String CyberflixEngine::currentCD(const Common::String *requested) {
+	return _pathRuntime.currentCD(requested);
 }
 
 } // End of namespace Cyberflix

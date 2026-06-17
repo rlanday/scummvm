@@ -685,8 +685,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	_propsDirty = false;
 
 	for (uint i = 0; i < ARRAYSIZE(pathSlots); ++i) {
-		_pathSlots[i] = pathSlots[i];
-		registerPathSlotDirectory(i);
+		_pathRuntime.setPathSlot(i, pathSlots[i]);
 	}
 
 	memcpy(_screenClut, savedClut, sizeof(_screenClut));
@@ -932,8 +931,8 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		for (uint i = 0; i < ARRAYSIZE(_pathSlots); ++i)
-			writeSaveString(payload, _pathSlots[i]);
+		for (uint i = 0; i < PathRuntime::kPathSlotCount; ++i)
+			writeSaveString(payload, _pathRuntime.pathSlotValue(i));
 		writeChunk(*saveFile, "PATH", payload);
 	}
 

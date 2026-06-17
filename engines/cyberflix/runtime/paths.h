@@ -31,6 +31,27 @@ Common::String canonicalCDLabel(const Common::String &label);
 bool findExtractedCDRoot(const Common::String &label, Common::FSNode &out);
 bool validateTitanicDiscLayout();
 
+class PathRuntime {
+public:
+	enum {
+		kPathSlotCount = 9
+	};
+
+	Common::String pathSlot(int slot, const Common::String *newPath);
+	Common::String currentCD(const Common::String *requested);
+
+	void setPathSlot(int slot, const Common::String &path);
+	const Common::String &pathSlotValue(int slot) const { return _pathSlots[slot]; }
+	void setCurrentDiscRootName(const Common::String &name);
+
+private:
+	void registerPathSlotDirectory(int slot);
+
+	Common::String _pathSlots[kPathSlotCount];        ///< Native path slots 0..8 (FUN_00438450).
+	Common::String _pathSlotArchives[kPathSlotCount]; ///< SearchMan archive names for slots 1..8.
+	Common::String _currentCD;                        ///< Native current CD Pascal string (DAT_00460d60).
+};
+
 } // End of namespace Cyberflix
 
 #endif

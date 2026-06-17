@@ -898,16 +898,14 @@ Common::Error CyberflixEngine::run() {
 		if (findExtractedCDRoot("Titanic1", cd1Root)) {
 			SearchMan.addSubDirectoryMatching(cd1Root, "data");
 			SearchMan.addSubDirectoryMatching(cd1Root, "movies");
-			_pathSlots[0] = canonicalCDLabel(cd1Root.getName()) + ":";
-			_currentCD = canonicalCDLabel(cd1Root.getName());
+			_pathRuntime.setCurrentDiscRootName(cd1Root.getName());
 		}
 	} else {
 		SearchMan.addSubDirectoryMatching(gameDataDir, "data");
 		SearchMan.addSubDirectoryMatching(gameDataDir, "movies");
 		if (gameDataDir.getName().equalsIgnoreCase("titanic1") ||
 				gameDataDir.getName().equalsIgnoreCase("titanic2")) {
-			_pathSlots[0] = gameDataDir.getName() + ":";
-			_currentCD = canonicalCDLabel(gameDataDir.getName());
+			_pathRuntime.setCurrentDiscRootName(gameDataDir.getName());
 		}
 	}
 
