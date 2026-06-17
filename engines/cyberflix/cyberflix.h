@@ -38,6 +38,7 @@
 #include "cyberflix/runtime/cursor.h"
 #include "cyberflix/runtime/loops.h"
 #include "cyberflix/runtime/paths.h"
+#include "cyberflix/runtime/timing.h"
 #include "cyberflix/shop.h"
 #include "cyberflix/vm.h"
 
@@ -563,9 +564,7 @@ private:
 
 	LoopRuntime _loopRuntime;
 	void processScheduledLoops();
-	int _frameRate = 3;       ///< DAT_00461126, scaled 60 Hz units between compositor passes.
-	int _lastFrameTick = 0;   ///< DAT_00486788, last completed compositor tick.
-	bool _idleForceUpdatePresented = false; ///< Current idle() already presented via forceupdate().
+	FramePacingRuntime _framePacingRuntime;
 
 	PathRuntime _pathRuntime;
 

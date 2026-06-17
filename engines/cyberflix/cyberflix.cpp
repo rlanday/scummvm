@@ -789,9 +789,7 @@ int CyberflixEngine::randomNumber(int n) {
 }
 
 int CyberflixEngine::frameRate(const int *newRate) {
-	if (newRate)
-		_frameRate = CLIP(*newRate, 0, 60);
-	return _frameRate;
+	return _framePacingRuntime.frameRate(newRate);
 }
 
 bool CyberflixEngine::keyAborts(const Common::String *resource, const Common::String *key,
@@ -873,7 +871,7 @@ void CyberflixEngine::forceUpdate() {
 	if (_puppet && _puppet->isOpen() && _puppetVisible) {
 		renderCurrentPuppetFrame(true);
 		_screenUpdatePending = false;
-		_idleForceUpdatePresented = true;
+		_framePacingRuntime.noteForceUpdatePresented(true);
 		presented = true;
 	} else {
 		advanceSetTransition();
@@ -883,10 +881,10 @@ void CyberflixEngine::forceUpdate() {
 		// to the OpenGL backend if displaySetFramePixels() actually wrote new
 		// pixels; this avoids redundant texture updates without changing the
 		// script-visible timing of forceupdate(). If no pixels changed, leave
-		// _idleForceUpdatePresented false so the main loop still does its cheap
+		// the idle-presented flag false so the main loop still does its cheap
 		// cursor-only updateScreen() and mouse movement stays responsive.
 		presented = presentPendingScreenUpdate();
-		_idleForceUpdatePresented = presented;
+		_framePacingRuntime.noteForceUpdatePresented(presented);
 	}
 	if (cursorMoved && !presented) {
 		// Native uses the Win32 cursor, which moves independently while script
@@ -894,21 +892,15 @@ void CyberflixEngine::forceUpdate() {
 		// after pumping mouse-motion events above we need a cursor-only present
 		// if the compositor did not upload any pixels this pass.
 		_system->updateScreen();
-		_idleForceUpdatePresented = true;
+		_framePacingRuntime.noteForceUpdatePresented(true);
 	}
-	if (_frameRate > 0) {
-		const int deadline = _lastFrameTick + _frameRate;
-		while (!shouldQuit()) {
-			const int remainingTicks = deadline - tick();
-			if (remainingTicks <= 0)
-				break;
-			uint32 delay = (uint32)((remainingTicks * 1000 + 59) / 60);
-			if (delay > 17)
-				delay = 17;
-			_system->delayMillis(delay);
-		}
+	while (!shouldQuit()) {
+		const uint32 delay = _framePacingRuntime.delayMillisUntilDeadline(tick());
+		if (delay == 0)
+			break;
+		_system->delayMillis(delay);
 	}
-	_lastFrameTick = tick();
+	_framePacingRuntime.noteFrameTick(tick());
 	debug(2, "Cyberflix: forceupdate()");
 }
 
@@ -1064,13 +1056,13 @@ Common::Error CyberflixEngine::run() {
 		if (processPendingLoad())
 			continue;
 		bool handled = false;
-		_idleForceUpdatePresented = false;
+		_framePacingRuntime.beginIdle();
 		_vm.callFunction("idle", Common::Array<Value>(), &handled);
 		const bool propsDirtyAfterIdle = _propsDirty;
 		refreshPropsIfDirty();
-		if (!_idleForceUpdatePresented || propsDirtyAfterIdle)
+		if (!_framePacingRuntime.forceUpdatePresentedDuringIdle() || propsDirtyAfterIdle)
 			_system->updateScreen();
-		if (_frameRate == 0 && _setTransitionType == kSetTransitionNone)
+		if (_framePacingRuntime.frameRate() == 0 && _setTransitionType == kSetTransitionNone)
 			_system->delayMillis(10);
 	}
 

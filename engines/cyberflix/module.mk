@@ -24,6 +24,7 @@ MODULE_OBJS = \
 	runtime/set_runtime.o \
 	runtime/set_state.o \
 	runtime/system.o \
+	runtime/timing.o \
 	saveload.o \
 	ui/console.o \
 	vm/builtins.o \
