@@ -15,6 +15,7 @@ MODULE_OBJS = \
 	runtime/actors.o \
 	runtime/movie.o \
 	runtime/paths.o \
+	runtime/presentation.o \
 	runtime/props.o \
 	saveload.o \
 	ui/console.o \
