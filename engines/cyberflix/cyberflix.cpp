@@ -36,9 +36,7 @@
 
 #include "gui/message.h"
 
-#include "audio/audiostream.h"
 #include "audio/mixer.h"
-#include "audio/decoders/raw.h"
 
 #include "common/formats/winexe_pe.h"
 
@@ -54,6 +52,7 @@
 #include "graphics/wincursor.h"
 
 #include "cyberflix/cast.h"
+#include "cyberflix/audio_helpers.h"
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/archive.h"
 #include "cyberflix/console.h"
@@ -1533,18 +1532,10 @@ void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
 	Common::Array<byte> pcm;
 	_puppet->decodeActionAudio(action, pcm);
 	if (!pcm.empty()) {
-		byte *buf = (byte *)malloc(pcm.size());
-		if (buf) {
-			memcpy(buf, pcm.begin(), pcm.size());
-			Audio::SeekableAudioStream *stream = Audio::makeRawStream(
-					buf, pcm.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED,
-					DisposeAfterUse::YES);
-			if (stream) {
-				_mixer->playStream(Audio::Mixer::kSpeechSoundType, &_puppetSpeechHandle, stream);
-				_mixer->setChannelVolume(_puppetSpeechHandle, effectiveAudioVolume(255));
-			} else {
-				free(buf);
-			}
+		Audio::SeekableAudioStream *stream = makeOwnedRawPcmStream(pcm);
+		if (stream) {
+			_mixer->playStream(Audio::Mixer::kSpeechSoundType, &_puppetSpeechHandle, stream);
+			_mixer->setChannelVolume(_puppetSpeechHandle, effectiveAudioVolume(255));
 		}
 	}
 

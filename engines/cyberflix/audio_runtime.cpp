@@ -28,10 +28,10 @@
 #include "common/util.h"
 
 #include "audio/audiostream.h"
-#include "audio/decoders/raw.h"
 #include "audio/mixer.h"
 
 #include "cyberflix/archive.h"
+#include "cyberflix/audio_helpers.h"
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/resource_helpers.h"
 #include "cyberflix/cbx_audio.h"
@@ -525,10 +525,9 @@ bool CyberflixEngine::playSoundCue(const Common::String &name, Audio::SoundHandl
 	if (pcm.empty())
 		return false;
 
-	byte *buf = (byte *)malloc(pcm.size());
-	memcpy(buf, pcm.begin(), pcm.size());
-	Audio::SeekableAudioStream *stream = Audio::makeRawStream(
-			buf, pcm.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED, DisposeAfterUse::YES);
+	Audio::SeekableAudioStream *stream = makeOwnedRawPcmStream(pcm);
+	if (!stream)
+		return false;
 	_mixer->stopHandle(handle);
 	_mixer->playStream(Audio::Mixer::kSFXSoundType, &handle, stream);
 	_mixer->setChannelVolume(handle, effectiveAudioVolume(cue->volume));

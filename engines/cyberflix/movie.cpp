@@ -31,13 +31,13 @@
 #include "common/util.h"
 
 #include "audio/audiostream.h"
-#include "audio/decoders/raw.h"
 #include "audio/mixer.h"
 
 #include "graphics/cursorman.h"
 #include "graphics/surface.h"
 
 #include "cyberflix/archive.h"
+#include "cyberflix/audio_helpers.h"
 #include "cyberflix/console.h"
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/image.h"
@@ -100,18 +100,10 @@ static void playMovieFrameSfx(Audio::Mixer *mixer, Common::Array<Audio::SoundHan
 	if (!mixer || pcm.empty())
 		return;
 
-	byte *buf = (byte *)malloc(pcm.size());
-	if (!buf)
-		return;
-	memcpy(buf, pcm.begin(), pcm.size());
-
 	Audio::SoundHandle handle;
-	Audio::SeekableAudioStream *stream = Audio::makeRawStream(
-			buf, pcm.size(), kAudioSampleRate, Audio::FLAG_UNSIGNED, DisposeAfterUse::YES);
-	if (!stream) {
-		free(buf);
+	Audio::SeekableAudioStream *stream = makeOwnedRawPcmStream(pcm);
+	if (!stream)
 		return;
-	}
 	mixer->playStream(Audio::Mixer::kSFXSoundType, &handle, stream);
 	mixer->setChannelVolume(handle, volume);
 	handles.push_back(handle);
@@ -459,16 +451,6 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		}
 	}
 
-	byte *pcm = nullptr;
-	uint32 pcmLen = pcmBuf.size();
-	if (pcmLen) {
-		pcm = (byte *)malloc(pcmLen);
-		if (pcm)
-			memcpy(pcm, pcmBuf.begin(), pcmLen);
-		else
-			pcmLen = 0;
-	}
-
 	// The movie palette is NOT programmed up front: the original keeps a
 	// palette-dirty flag (DAT_0045ee90) and the per-frame draw command decides
 	// — op 0x12 fades it in from black, op 0x11 fades out to black, any other
@@ -512,25 +494,24 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 
 	Audio::SoundHandle audioHandle;
 	Common::Array<Audio::SoundHandle> frameSfxHandles;
-	if (pcm && pcmLen) {
-		Audio::SeekableAudioStream *stream = Audio::makeRawStream(
-				pcm, pcmLen, kAudioSampleRate, Audio::FLAG_UNSIGNED,
-				DisposeAfterUse::YES);
-		if (hasInteractive) {
-			Audio::AudioStream *loop = new Audio::LoopingAudioStream(stream, 0);
-			_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, loop);
-		} else {
-			_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, stream);
+	bool hasMovieAudio = false;
+	if (!pcmBuf.empty()) {
+		Audio::SeekableAudioStream *stream = makeOwnedRawPcmStream(pcmBuf);
+		if (stream) {
+			if (hasInteractive) {
+				Audio::AudioStream *loop = new Audio::LoopingAudioStream(stream, 0);
+				_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, loop);
+			} else {
+				_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, stream);
+			}
+			_mixer->setChannelVolume(audioHandle, effectiveAudioVolume(255));
+			hasMovieAudio = true;
 		}
-		_mixer->setChannelVolume(audioHandle, effectiveAudioVolume(255));
-	} else {
-		free(pcm);
-		pcm = nullptr;
 	}
 
 	debug(0, "Cyberflix: movie '%s' frames=%u audioBytes=%u frameSfxBytes=%u audioMs=%u",
-			name.c_str(), pfVideoRes.empty() ? frames.size() : pfVideoRes.size(), pcmLen, frameSfxBytes,
-			pcm ? (uint32)((uint64)pcmLen * 1000 / kAudioSampleRate) : 0);
+			name.c_str(), pfVideoRes.empty() ? frames.size() : pfVideoRes.size(), pcmBuf.size(), frameSfxBytes,
+			(uint32)((uint64)pcmBuf.size() * 1000 / kAudioSampleRate));
 
 	// Composite frames in order into a persistent surface (frames are
 	// inter-coded) and present them. Esc skips a skippable movie; quit stops.
@@ -583,7 +564,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 
 		// Current playback clock: real audio position while the track plays,
 		// else elapsed wall time (covers the post-music fade and silent movies).
-		uint32 nowMs = (pcm && _mixer->isSoundHandleActive(audioHandle))
+		uint32 nowMs = (hasMovieAudio && _mixer->isSoundHandleActive(audioHandle))
 				? _mixer->getSoundElapsedTime(audioHandle)
 				: (_system->getMillis() - wallStartMs);
 		uint32 frameEndMs = (fi + 1 < frameStartMs.size())
@@ -788,7 +769,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				wallStartMs += handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
 			if (shouldQuit() || skip)
 				break;
-			uint32 t = (pcm && _mixer->isSoundHandleActive(audioHandle))
+			uint32 t = (hasMovieAudio && _mixer->isSoundHandleActive(audioHandle))
 					? _mixer->getSoundElapsedTime(audioHandle)
 					: (_system->getMillis() - wallStartMs);
 			if (t >= frameEndMs)
