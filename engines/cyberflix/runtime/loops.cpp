@@ -22,10 +22,11 @@
 #include "common/debug.h"
 
 #include "cyberflix/cyberflix.h"
+#include "cyberflix/runtime/loops.h"
 
 namespace Cyberflix {
 
-CyberflixEngine::ScheduledLoop::Kind CyberflixEngine::scheduledLoopKind(
+LoopRuntime::ScheduledLoop::Kind LoopRuntime::scheduledLoopKind(
 		const Common::String &kind) {
 	if (kind.equalsIgnoreCase("scene"))
 		return ScheduledLoop::kScene;
@@ -42,7 +43,7 @@ CyberflixEngine::ScheduledLoop::Kind CyberflixEngine::scheduledLoopKind(
 	return ScheduledLoop::kUnknown;
 }
 
-void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String &target,
+void LoopRuntime::makeLoop(const Common::String &kind, const Common::String &target,
 		const Common::String &message, int delay) {
 	if (kind.empty() || message.empty()) {
 		warning("Cyberflix: makeloop('%s', '%s', '%s', %d): invalid arguments",
@@ -65,7 +66,7 @@ void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String 
 			kind.c_str(), target.c_str(), message.c_str(), delay);
 }
 
-void CyberflixEngine::stopLoop(const Common::String &kind, const Common::String &target) {
+void LoopRuntime::stopLoop(const Common::String &kind, const Common::String &target) {
 	if (kind.empty())
 		return;
 	const bool all = kind.equalsIgnoreCase("all");
@@ -81,18 +82,18 @@ void CyberflixEngine::stopLoop(const Common::String &kind, const Common::String 
 	}
 }
 
-void CyberflixEngine::pauseLoop(const Common::String &kind, bool paused) {
+void LoopRuntime::pauseLoop(const Common::String &kind, bool paused) {
 	if (kind.equalsIgnoreCase("all"))
 		_loopsPaused = paused;
 }
 
-void CyberflixEngine::makeCricket(const Common::String &name) {
+void LoopRuntime::makeCricket(CyberflixEngine &engine, const Common::String &name) {
 	if (name.empty())
 		return;
 	for (uint i = 0; i < _crickets.size(); ++i) {
 		if (_crickets[i].name.equalsIgnoreCase(name)) {
 			_crickets[i].paused = _cricketsPaused;
-			playSound(name, 1);
+			engine.playSound(name, 1);
 			return;
 		}
 	}
@@ -100,10 +101,10 @@ void CyberflixEngine::makeCricket(const Common::String &name) {
 	cricket.name = name;
 	cricket.paused = _cricketsPaused;
 	_crickets.push_back(cricket);
-	playSound(name, 1);
+	engine.playSound(name, 1);
 }
 
-void CyberflixEngine::stopCricket(const Common::String &name) {
+void LoopRuntime::stopCricket(const Common::String &name) {
 	if (name.equalsIgnoreCase("all")) {
 		_crickets.clear();
 		return;
@@ -115,7 +116,7 @@ void CyberflixEngine::stopCricket(const Common::String &name) {
 	debug(2, "Cyberflix: stopcricket('%s')", name.c_str());
 }
 
-void CyberflixEngine::pauseCricket(const Common::String &kind, bool paused) {
+void LoopRuntime::pauseCricket(const Common::String &kind, bool paused) {
 	if (kind.equalsIgnoreCase("all")) {
 		_cricketsPaused = paused;
 		for (uint i = 0; i < _crickets.size(); ++i)
@@ -128,7 +129,7 @@ void CyberflixEngine::pauseCricket(const Common::String &kind, bool paused) {
 	debug(2, "Cyberflix: pausecricket('%s', %d)", kind.c_str(), paused ? 1 : 0);
 }
 
-void CyberflixEngine::processScheduledLoops() {
+void LoopRuntime::processScheduledLoops(CyberflixEngine &engine) {
 	if (_loopsPaused || _scheduledLoops.empty() || _processingScheduledLoops)
 		return;
 
@@ -154,27 +155,27 @@ void CyberflixEngine::processScheduledLoops() {
 		_scheduledLoops.remove_at(i);
 		switch (loop.kindId) {
 		case ScheduledLoop::kScene:
-			sendToScene(loop.target, loop.message, noArgs);
+			engine.sendToScene(loop.target, loop.message, noArgs);
 			break;
 		case ScheduledLoop::kFlat:
-			sendToFlat(loop.target, loop.message, noArgs);
+			engine.sendToFlat(loop.target, loop.message, noArgs);
 			break;
 		case ScheduledLoop::kStage:
-			sendToStage(loop.message, noArgs);
+			engine.sendToStage(loop.message, noArgs);
 			break;
 		case ScheduledLoop::kProp:
-			sendToProp(loop.target, loop.message, noArgs);
+			engine.sendToProp(loop.target, loop.message, noArgs);
 			break;
 		case ScheduledLoop::kShop:
-			sendToShop(loop.target, loop.message, noArgs);
+			engine.sendToShop(loop.target, loop.message, noArgs);
 			break;
 		case ScheduledLoop::kActor:
-			sendToActor(loop.target, loop.message, noArgs);
+			engine.sendToActor(loop.target, loop.message, noArgs);
 			break;
 		default:
 			debug(1, "Cyberflix: makeloop kind '%s' unhandled", loop.kind.c_str());
 		}
-		refreshPropsIfDirty();
+		engine.refreshPropsIfDirty();
 	}
 	_processingScheduledLoops = false;
 }

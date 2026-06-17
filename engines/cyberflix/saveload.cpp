@@ -242,18 +242,6 @@ struct CueVolumeState {
 	int32 volume = 255;
 };
 
-struct LoopState {
-	Common::String kind;
-	Common::String target;
-	Common::String message;
-	int32 remainingPasses = 0;
-};
-
-struct CricketStateSave {
-	Common::String name;
-	bool paused = false;
-};
-
 static bool parseHeaderChunk(Common::SeekableReadStream &in, int64 end, HeaderState &header) {
 	header.seen = true;
 	if (!readSaveString(in, end, header.signature) ||
@@ -486,19 +474,20 @@ static bool parseVarsChunk(Common::SeekableReadStream &in, int64 end,
 }
 
 static bool parseLoopChunk(Common::SeekableReadStream &in, int64 end,
-		bool &loopsPaused, Common::Array<LoopState> &loops) {
+		bool &loopsPaused, Common::Array<LoopRuntime::ScheduledLoop> &loops) {
 	if (in.pos() + 5 > end)
 		return false;
 	loopsPaused = in.readByte() != 0;
 	uint32 count = in.readUint32LE();
 	loops.clear();
 	for (uint32 i = 0; i < count; ++i) {
-		LoopState loop;
+		LoopRuntime::ScheduledLoop loop;
 		if (!readSaveString(in, end, loop.kind) ||
 				!readSaveString(in, end, loop.target) ||
 				!readSaveString(in, end, loop.message) ||
 				in.pos() + 4 > end)
 			return false;
+		loop.kindId = LoopRuntime::scheduledLoopKind(loop.kind);
 		loop.remainingPasses = (int32)in.readUint32LE();
 		loops.push_back(loop);
 	}
@@ -506,14 +495,14 @@ static bool parseLoopChunk(Common::SeekableReadStream &in, int64 end,
 }
 
 static bool parseCricketChunk(Common::SeekableReadStream &in, int64 end,
-		bool &cricketsPaused, Common::Array<CricketStateSave> &crickets) {
+		bool &cricketsPaused, Common::Array<LoopRuntime::CricketState> &crickets) {
 	if (in.pos() + 5 > end)
 		return false;
 	cricketsPaused = in.readByte() != 0;
 	uint32 count = in.readUint32LE();
 	crickets.clear();
 	for (uint32 i = 0; i < count; ++i) {
-		CricketStateSave cricket;
+		LoopRuntime::CricketState cricket;
 		if (!readSaveString(in, end, cricket.name) || in.pos() + 1 > end)
 			return false;
 		cricket.paused = in.readByte() != 0;
@@ -605,9 +594,9 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	Common::HashMap<Common::String, Value> vars;
 	bool varsSeen = false;
 	bool loopsPaused = false;
-	Common::Array<LoopState> loopStates;
+	Common::Array<LoopRuntime::ScheduledLoop> loopStates;
 	bool cricketsPaused = false;
-	Common::Array<CricketStateSave> cricketStates;
+	Common::Array<LoopRuntime::CricketState> cricketStates;
 	bool sawEnd = false;
 
 	while (!saveFile->eos() && !saveFile->err()) {
@@ -666,8 +655,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	haltVoice();
 	_tracks.clear();
 	_shops.clear();
-	_scheduledLoops.clear();
-	_crickets.clear();
+	_loopRuntime.clear();
 	_stage.reset();
 	clearStageShellFrame();
 	_stageVisible = false;
@@ -799,23 +787,14 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		// transient one-shot SFX or voice playback buffers.
 	}
 
-	_loopsPaused = loopsPaused;
+	_loopRuntime.setLoopsPaused(loopsPaused);
 	for (uint i = 0; i < loopStates.size(); ++i) {
-		ScheduledLoop loop;
-		loop.kind = loopStates[i].kind;
-		loop.kindId = scheduledLoopKind(loop.kind);
-		loop.target = loopStates[i].target;
-		loop.message = loopStates[i].message;
-		loop.remainingPasses = loopStates[i].remainingPasses;
-		_scheduledLoops.push_back(loop);
+		_loopRuntime.restoreLoop(loopStates[i]);
 	}
 
-	_cricketsPaused = cricketsPaused;
+	_loopRuntime.setCricketsPaused(cricketsPaused);
 	for (uint i = 0; i < cricketStates.size(); ++i) {
-		CricketState cricket;
-		cricket.name = cricketStates[i].name;
-		cricket.paused = cricketStates[i].paused;
-		_crickets.push_back(cricket);
+		_loopRuntime.restoreCricket(cricketStates[i]);
 	}
 
 	if (!header.stageName.empty()) {
@@ -1084,10 +1063,11 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		payload.writeByte(_loopsPaused ? 1 : 0);
-		payload.writeUint32LE((uint32)_scheduledLoops.size());
-		for (uint i = 0; i < _scheduledLoops.size(); ++i) {
-			const ScheduledLoop &loop = _scheduledLoops[i];
+		const Common::Array<LoopRuntime::ScheduledLoop> &loops = _loopRuntime.scheduledLoops();
+		payload.writeByte(_loopRuntime.loopsPaused() ? 1 : 0);
+		payload.writeUint32LE((uint32)loops.size());
+		for (uint i = 0; i < loops.size(); ++i) {
+			const LoopRuntime::ScheduledLoop &loop = loops[i];
 			writeSaveString(payload, loop.kind);
 			writeSaveString(payload, loop.target);
 			writeSaveString(payload, loop.message);
@@ -1098,11 +1078,12 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		payload.writeByte(_cricketsPaused ? 1 : 0);
-		payload.writeUint32LE((uint32)_crickets.size());
-		for (uint i = 0; i < _crickets.size(); ++i) {
-			writeSaveString(payload, _crickets[i].name);
-			payload.writeByte(_crickets[i].paused ? 1 : 0);
+		const Common::Array<LoopRuntime::CricketState> &crickets = _loopRuntime.crickets();
+		payload.writeByte(_loopRuntime.cricketsPaused() ? 1 : 0);
+		payload.writeUint32LE((uint32)crickets.size());
+		for (uint i = 0; i < crickets.size(); ++i) {
+			writeSaveString(payload, crickets[i].name);
+			payload.writeByte(crickets[i].paused ? 1 : 0);
 		}
 		writeChunk(*saveFile, "CRIK", payload);
 	}

@@ -831,6 +831,35 @@ bool CyberflixEngine::pumpCursorMotionEvents() {
 	return oldMouse.x != newMouse.x || oldMouse.y != newMouse.y;
 }
 
+void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String &target,
+		const Common::String &message, int delay) {
+	_loopRuntime.makeLoop(kind, target, message, delay);
+}
+
+void CyberflixEngine::stopLoop(const Common::String &kind, const Common::String &target) {
+	_loopRuntime.stopLoop(kind, target);
+}
+
+void CyberflixEngine::pauseLoop(const Common::String &kind, bool paused) {
+	_loopRuntime.pauseLoop(kind, paused);
+}
+
+void CyberflixEngine::makeCricket(const Common::String &name) {
+	_loopRuntime.makeCricket(*this, name);
+}
+
+void CyberflixEngine::stopCricket(const Common::String &name) {
+	_loopRuntime.stopCricket(name);
+}
+
+void CyberflixEngine::pauseCricket(const Common::String &kind, bool paused) {
+	_loopRuntime.pauseCricket(kind, paused);
+}
+
+void CyberflixEngine::processScheduledLoops() {
+	_loopRuntime.processScheduledLoops(*this);
+}
+
 void CyberflixEngine::forceUpdate() {
 	// forceupdate() (TI.EXE 0x2f14 -> FUN_00446910 -> FUN_00423a60): rebuild the
 	// display list from LIVE prop visibility, step active SET transitions through

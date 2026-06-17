@@ -36,6 +36,7 @@
 #include "cyberflix/image.h"
 #include "cyberflix/puppet.h"
 #include "cyberflix/runtime/cursor.h"
+#include "cyberflix/runtime/loops.h"
 #include "cyberflix/runtime/paths.h"
 #include "cyberflix/shop.h"
 #include "cyberflix/vm.h"
@@ -259,6 +260,8 @@ public:
 	void requestQuit() override;
 
 private:
+	friend class LoopRuntime;
+
 	/**
 	 * Special-case the boot script: excise its CD presence check so the game
 	 * can be run from an installed directory. The check is the if-block guarded
@@ -558,39 +561,11 @@ private:
 	int _waveVolumeLevel = 9; ///< Global wave volume level, native scale 0..9.
 	bool _keyAborts = false;  ///< Global keyaborts() getter state.
 
-	struct ScheduledLoop {
-		enum Kind {
-			kUnknown,
-			kScene,
-			kFlat,
-			kStage,
-			kProp,
-			kShop,
-			kActor
-		};
-		Kind kindId = kUnknown;
-		Common::String kind;
-		Common::String target;
-		Common::String message;
-		int32 remainingPasses = 0;
-		uint32 createdPass = 0;
-	};
-	Common::Array<ScheduledLoop> _scheduledLoops;
-	bool _loopsPaused = false;
-	bool _processingScheduledLoops = false;
-	uint32 _scheduledLoopPass = 0;
-	static ScheduledLoop::Kind scheduledLoopKind(const Common::String &kind);
+	LoopRuntime _loopRuntime;
 	void processScheduledLoops();
 	int _frameRate = 3;       ///< DAT_00461126, scaled 60 Hz units between compositor passes.
 	int _lastFrameTick = 0;   ///< DAT_00486788, last completed compositor tick.
 	bool _idleForceUpdatePresented = false; ///< Current idle() already presented via forceupdate().
-
-	struct CricketState {
-		Common::String name;
-		bool paused = false;
-	};
-	Common::Array<CricketState> _crickets;
-	bool _cricketsPaused = false;
 
 	PathRuntime _pathRuntime;
 
