@@ -900,11 +900,11 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 		return draw[i]->name;
 	}
 
-	if (_setVisible && _set && _set->isOpen() && _setScene >= 0 &&
-			_setTransitionType == kSetTransitionNone) {
+	if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0 &&
+			_setRuntime.transitionType() == kSetTransitionNone) {
 		Set::CameraData cameraData;
-		if (_set->cameraData((uint32)_setScene, (uint32)_setTable,
-				(uint32)_setAngle, cameraData)) {
+		if (_setRuntime.set()->cameraData((uint32)_setRuntime.scene(), (uint32)_setRuntime.table(),
+				(uint32)_setRuntime.angle(), cameraData)) {
 			Shop::WorldCamera camera = makeWorldCamera(cameraData);
 			Common::Array<const Shop::Prop *> worldDraw;
 			Common::Array<const Shop *> worldShop;
@@ -933,14 +933,14 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 				if (itemType[(uint)i]) {
 					uint32 idx = itemIndex[(uint)i];
 					if (!actorCast[idx]->renderWorldActor(*actorDraw[idx], camera,
-							_set->setName(), actorCel, r, depth))
+							_setRuntime.set()->setName(), actorCel, r, depth))
 						continue;
 					cel = &actorCel;
 					name = actorDraw[idx]->name;
 				} else {
 					uint32 idx = itemIndex[(uint)i];
 					if (!worldShop[idx]->renderWorldProp(*worldDraw[idx], camera,
-							_set->setName(), propCel, r, depth))
+							_setRuntime.set()->setName(), propCel, r, depth))
 						continue;
 					cel = propCel.get();
 					name = worldDraw[idx]->name;
@@ -967,18 +967,18 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 		return _stageRuntime.stage()->nodeName((uint32)_stageRuntime.node());
 	}
 
-	if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
-		const int16 vl = _set->viewLeft(), vt = _set->viewTop();
-		if (x >= vl && x < vl + (int)_set->width() && y >= vt && y < vt + (int)_set->height()) {
-			if (_setTransitionType == kSetTransitionNone) {
-				Common::String painting = _set->hitTestPainting((uint32)_setScene, _setView, x, y);
+	if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0) {
+		const int16 vl = _setRuntime.set()->viewLeft(), vt = _setRuntime.set()->viewTop();
+		if (x >= vl && x < vl + (int)_setRuntime.set()->width() && y >= vt && y < vt + (int)_setRuntime.set()->height()) {
+			if (_setRuntime.transitionType() == kSetTransitionNone) {
+				Common::String painting = _setRuntime.set()->hitTestPainting((uint32)_setRuntime.scene(), _setRuntime.view(), x, y);
 				if (!painting.empty()) {
 					_hitKind = "painting";
 					return painting;
 				}
 			}
 			_hitKind = "scene";
-			return _set->sceneName((uint32)_setScene);
+			return _setRuntime.set()->sceneName((uint32)_setRuntime.scene());
 		}
 	}
 
@@ -1014,14 +1014,14 @@ bool CyberflixEngine::pointInButton(const Common::String &flat,
 
 bool CyberflixEngine::pointInPainting(const Common::String &scene,
 		const Common::String &view, const Common::String &painting, int32 packedPoint) {
-	if (!_set || !_set->isOpen())
+	if (!_setRuntime.set() || !_setRuntime.set()->isOpen())
 		return false;
-	int sceneIdx = _set->findScene(scene);
+	int sceneIdx = _setRuntime.set()->findScene(scene);
 	if (sceneIdx < 0)
 		return false;
 	const int16 x = (int16)(packedPoint >> 16);
 	const int16 y = (int16)(packedPoint & 0xffff);
-	bool hit = _set->pointInPainting((uint32)sceneIdx, view, painting, x, y);
+	bool hit = _setRuntime.set()->pointInPainting((uint32)sceneIdx, view, painting, x, y);
 	debug(1, "Cyberflix: pointinpainting('%s', '%s', '%s', %d,%d) -> %s",
 			scene.c_str(), view.c_str(), painting.c_str(), x, y,
 			hit ? "true" : "false");
@@ -1211,7 +1211,7 @@ void CyberflixEngine::forceUpdate() {
 	refreshPropsIfDirty();
 	if (_puppetRuntime.isVisible()) {
 		renderCurrentPuppetFrame(true);
-		_screenUpdatePending = false;
+		_setRuntime.screenUpdatePending() = false;
 		_framePacingRuntime.noteForceUpdatePresented(true);
 		presented = true;
 	} else {
@@ -1403,7 +1403,7 @@ Common::Error CyberflixEngine::run() {
 		refreshPropsIfDirty();
 		if (!_framePacingRuntime.forceUpdatePresentedDuringIdle() || propsDirtyAfterIdle)
 			_system->updateScreen();
-		if (_framePacingRuntime.frameRate() == 0 && _setTransitionType == kSetTransitionNone)
+		if (_framePacingRuntime.frameRate() == 0 && _setRuntime.transitionType() == kSetTransitionNone)
 			_system->delayMillis(10);
 	}
 

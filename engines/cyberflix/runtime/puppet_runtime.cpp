@@ -323,9 +323,10 @@ bool PuppetRuntime::captureGrabBackdrop(CyberflixEngine &engine, Common::Array<b
 	backdrop.resize(kScreenWidth * kScreenHeight);
 	memset(backdrop.begin(), 0, backdrop.size());
 
-	if (engine._setVisible && engine._set && engine._set->isOpen() && engine._setScene >= 0) {
+	SetRuntime &setRuntime = engine._setRuntime;
+	if (setRuntime.visible() && setRuntime.set() && setRuntime.set()->isOpen() && setRuntime.scene() >= 0) {
 		// TI.EXE FUN_00449150 copies from the retained SET backing surface
-		// (0x486770). ScummVM keeps that same surface in _setFrameSequence, so
+		// (0x486770). ScummVM keeps that same surface in SetRuntime, so
 		// reuse it for puppetgrab instead of replaying the compressed panorama
 		// once per puppet action. Fall back to rendering only if a save/load or
 		// startup edge case reaches here before the retained surface exists.
@@ -333,12 +334,12 @@ bool PuppetRuntime::captureGrabBackdrop(CyberflixEngine &engine, Common::Array<b
 		const byte *pixels = nullptr;
 		uint16 frameWidth = 0;
 		uint16 frameHeight = 0;
-		if (!engine._setFrameSequence.empty()) {
-			pixels = engine._setFrameSequence.pixels();
-			frameWidth = engine._setFrameSequence.width();
-			frameHeight = engine._setFrameSequence.height();
-		} else if (engine._set->renderScene((uint32)engine._setScene, (uint32)engine._setTable,
-				(uint32)engine._setAngle, engine._setFrameSequence, frame)) {
+		if (!setRuntime.frameSequence().empty()) {
+			pixels = setRuntime.frameSequence().pixels();
+			frameWidth = setRuntime.frameSequence().width();
+			frameHeight = setRuntime.frameSequence().height();
+		} else if (setRuntime.set()->renderScene((uint32)setRuntime.scene(), (uint32)setRuntime.table(),
+				(uint32)setRuntime.angle(), setRuntime.frameSequence(), frame)) {
 			pixels = frame.pixels.begin();
 			frameWidth = frame.width;
 			frameHeight = frame.height;
@@ -346,8 +347,8 @@ bool PuppetRuntime::captureGrabBackdrop(CyberflixEngine &engine, Common::Array<b
 		if (pixels) {
 			// The native grab does not include stage/inventory-bar composite
 			// pixels or SHOP props; it copies just the current SET backing rect.
-			const int x0 = engine._set->viewLeft();
-			const int y0 = engine._set->viewTop();
+			const int x0 = setRuntime.set()->viewLeft();
+			const int y0 = setRuntime.set()->viewTop();
 			int left = x0;
 			int srcX = 0;
 			int width = frameWidth;

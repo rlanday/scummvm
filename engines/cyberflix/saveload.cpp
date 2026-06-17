@@ -514,7 +514,7 @@ static bool parseCricketChunk(Common::SeekableReadStream &in, int64 end,
 }
 
 bool CyberflixEngine::canSaveGameStateCurrently(Common::U32String *msg) {
-	return (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) || (_set && _set->isOpen());
+	return (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) || (_setRuntime.set() && _setRuntime.set()->isOpen());
 }
 
 bool CyberflixEngine::canLoadGameStateCurrently(Common::U32String *msg) {
@@ -662,16 +662,16 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	clearStageShellFrame();
 	_stageRuntime.visible() = false;
 	_stageRuntime.node() = 0;
-	_set.reset();
-	_setScene = -1;
-	_setTable = 0;
-	_setAngle = 0;
-	_setView.clear();
-	_setTransitionType = kSetTransitionNone;
-	_setTransitionResource = 0;
-	_setTransitionFrame = 0;
-	_setFrameSequence.clear();
-	_setVisible = false;
+	_setRuntime.set().reset();
+	_setRuntime.scene() = -1;
+	_setRuntime.table() = 0;
+	_setRuntime.angle() = 0;
+	_setRuntime.view().clear();
+	_setRuntime.transitionType() = kSetTransitionNone;
+	_setRuntime.transitionResource() = 0;
+	_setRuntime.transitionFrame() = 0;
+	_setRuntime.frameSequence().clear();
+	_setRuntime.visible() = false;
 	_propRuntime.setDirty(false);
 
 	for (uint i = 0; i < ARRAYSIZE(pathSlots); ++i) {
@@ -822,32 +822,32 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	if (!header.setFileName.empty()) {
 		Common::ScopedPtr<Set> set(new Set());
 		if (set->open(header.setFileName)) {
-			_set.reset(set.release());
-			_setScene = header.setScene;
-			if (_setScene < 0 || (uint32)_setScene >= _set->sceneCount())
-				_setScene = _set->findScene(header.sceneName);
-			_setTable = header.setTable;
-			if (_setTable < 0 || _setTable > 1)
-				_setTable = 0;
-			_setAngle = header.setAngle;
-			if (_setScene >= 0) {
-				uint32 angleCount = _set->angleCount((uint32)_setScene, (uint32)_setTable);
-				if (angleCount && ((uint32)_setAngle >= angleCount))
-					_setAngle = 0;
+			_setRuntime.set().reset(set.release());
+			_setRuntime.scene() = header.setScene;
+			if (_setRuntime.scene() < 0 || (uint32)_setRuntime.scene() >= _setRuntime.set()->sceneCount())
+				_setRuntime.scene() = _setRuntime.set()->findScene(header.sceneName);
+			_setRuntime.table() = header.setTable;
+			if (_setRuntime.table() < 0 || _setRuntime.table() > 1)
+				_setRuntime.table() = 0;
+			_setRuntime.angle() = header.setAngle;
+			if (_setRuntime.scene() >= 0) {
+				uint32 angleCount = _setRuntime.set()->angleCount((uint32)_setRuntime.scene(), (uint32)_setRuntime.table());
+				if (angleCount && ((uint32)_setRuntime.angle() >= angleCount))
+					_setRuntime.angle() = 0;
 			}
-			_setView = header.setView;
-			_setVisible = header.setVisible;
-			_setTransitionType = header.setTransitionType <= kSetTransitionForward ?
+			_setRuntime.view() = header.setView;
+			_setRuntime.visible() = header.setVisible;
+			_setRuntime.transitionType() = header.setTransitionType <= kSetTransitionForward ?
 					(SetTransitionType)header.setTransitionType : kSetTransitionNone;
-			_setTransitionResource = header.setTransitionResource;
-			_setTransitionFrame = header.setTransitionFrame;
+			_setRuntime.transitionResource() = header.setTransitionResource;
+			_setRuntime.transitionFrame() = header.setTransitionFrame;
 		} else {
 			warning("Cyberflix: load could not reopen set '%s'", header.setFileName.c_str());
 		}
 	}
 
-	if (_setVisible && _set && _set->isOpen() && _setScene >= 0 && !isLoadedReplacementStage(_stageRuntime.stage())) {
-		renderSetScene(_setScene, _setTable, _setAngle, _setView);
+	if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0 && !isLoadedReplacementStage(_stageRuntime.stage())) {
+		renderSetScene(_setRuntime.scene(), _setRuntime.table(), _setRuntime.angle(), _setRuntime.view());
 	} else if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) {
 		renderStageNode(_stageRuntime.node());
 	} else {
@@ -894,18 +894,18 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		writeSaveString(payload, _stageRuntime.stage() && _stageRuntime.stage()->isOpen()
 				? _stageRuntime.stage()->nodeName((uint32)_stageRuntime.node()) : Common::String());
 
-		writeSaveString(payload, _set && _set->isOpen() ? _set->name() : Common::String());
-		writeSaveString(payload, _set && _set->isOpen() ? _set->setName() : Common::String());
-		payload.writeSint32LE(_setScene);
-		writeSaveString(payload, (_set && _set->isOpen() && _setScene >= 0)
-				? _set->sceneName((uint32)_setScene) : Common::String());
-		payload.writeSint32LE(_setTable);
-		payload.writeSint32LE(_setAngle);
-		writeSaveString(payload, _setView);
-		payload.writeByte(_setVisible ? 1 : 0);
-		payload.writeUint32LE((uint32)_setTransitionType);
-		payload.writeUint32LE(_setTransitionResource);
-		payload.writeUint32LE(_setTransitionFrame);
+		writeSaveString(payload, _setRuntime.set() && _setRuntime.set()->isOpen() ? _setRuntime.set()->name() : Common::String());
+		writeSaveString(payload, _setRuntime.set() && _setRuntime.set()->isOpen() ? _setRuntime.set()->setName() : Common::String());
+		payload.writeSint32LE(_setRuntime.scene());
+		writeSaveString(payload, (_setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0)
+				? _setRuntime.set()->sceneName((uint32)_setRuntime.scene()) : Common::String());
+		payload.writeSint32LE(_setRuntime.table());
+		payload.writeSint32LE(_setRuntime.angle());
+		writeSaveString(payload, _setRuntime.view());
+		payload.writeByte(_setRuntime.visible() ? 1 : 0);
+		payload.writeUint32LE((uint32)_setRuntime.transitionType());
+		payload.writeUint32LE(_setRuntime.transitionResource());
+		payload.writeUint32LE(_setRuntime.transitionFrame());
 
 		writeChunk(*saveFile, "HEAD", payload);
 	}

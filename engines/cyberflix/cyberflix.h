@@ -43,6 +43,7 @@
 #include "cyberflix/runtime/paths.h"
 #include "cyberflix/runtime/props.h"
 #include "cyberflix/runtime/puppet_runtime.h"
+#include "cyberflix/runtime/set_runtime.h"
 #include "cyberflix/runtime/stage_runtime.h"
 #include "cyberflix/runtime/timing.h"
 #include "cyberflix/shop.h"
@@ -311,7 +312,7 @@ private:
 	 */
 	void renderSetScene(int scene, int table, int angle,
 			const Common::String &view = Common::String());
-	void renderSetScene(int scene, int angle) { renderSetScene(scene, _setTable, angle); }
+	void renderSetScene(int scene, int angle) { renderSetScene(scene, _setRuntime.table(), angle); }
 	/** Composite a decoded SET background frame with the stage shell and props. */
 	void displaySetFrame(const FrameImage &frame);
 	/** Present retained SET pixels directly, avoiding a full-frame copy per transition frame. */
@@ -349,22 +350,7 @@ private:
 	CursorRuntime _cursorRuntime;
 
 	StageRuntime _stageRuntime;
-	Common::ScopedPtr<Set> _set;     ///< Currently open set (DATA/*.SET), or null.
-	enum SetTransitionType {
-		kSetTransitionNone,
-		kSetTransitionTurn,
-		kSetTransitionForward
-	};
-	int _setScene = -1;              ///< Active scene index within _set, or -1.
-	int _setTable = 0;               ///< Active panorama table: 0 = +0x0a/right, 1 = +0x0e/left.
-	int _setAngle = 0;               ///< Active panorama angle within _setScene.
-	Common::String _setView;         ///< Active view name in _setScene (DAT_004611dc).
-	SetTransitionType _setTransitionType = kSetTransitionNone;
-	uint32 _setTransitionResource = 0; ///< Active forward transition resource id.
-	uint32 _setTransitionFrame = 0;    ///< Active forward transition frame index.
-	FrameSequence _setFrameSequence; ///< Retained SET background buffer (TI.EXE 0x486770).
-	bool _setVisible = false;        ///< TI.EXE DAT_00461182, read by setvisible().
-	bool _screenUpdatePending = false; ///< Avoid redundant OpenGL uploads when forceupdate() did not draw.
+	SetRuntime _setRuntime;
 
 	/** Kind recorded by the last hittest, read back by result() — mirrors the
 	 *  TI.EXE global DAT_00461298. */

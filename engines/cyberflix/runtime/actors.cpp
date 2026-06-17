@@ -52,12 +52,12 @@ ActorRuntime::ActorRef ActorRuntime::findActorRef(const Common::String &name) co
 }
 
 bool ActorRuntime::resolveActorStar(CyberflixEngine &engine, Cast::Actor &actor) {
-	if (!engine._set || !engine._set->isOpen() ||
-			!actor.setName.equalsIgnoreCase(engine._set->setName()))
+	if (!engine._setRuntime.set() || !engine._setRuntime.set()->isOpen() ||
+			!actor.setName.equalsIgnoreCase(engine._setRuntime.set()->setName()))
 		return false;
 
 	int16 x = 0, y = 0, z = 0;
-	if (!engine._set->starXYZ(actor.sceneName, x, y, z))
+	if (!engine._setRuntime.set()->starXYZ(actor.sceneName, x, y, z))
 		return false;
 
 	if (actor.x != x || actor.y != y || actor.z != z) {
@@ -70,7 +70,7 @@ bool ActorRuntime::resolveActorStar(CyberflixEngine &engine, Cast::Actor &actor)
 }
 
 void ActorRuntime::refreshActorStarPositions(CyberflixEngine &engine) {
-	if (!engine._set || !engine._set->isOpen())
+	if (!engine._setRuntime.set() || !engine._setRuntime.set()->isOpen())
 		return;
 
 	for (uint32 c = 0; c < _casts.size(); ++c) {
@@ -82,9 +82,9 @@ void ActorRuntime::refreshActorStarPositions(CyberflixEngine &engine) {
 void ActorRuntime::collectWorldActors(CyberflixEngine &engine, Common::Array<const Cast::Actor *> &draw,
 		Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
 		const Shop::WorldCamera &camera) const {
-	if (!engine._set || !engine._set->isOpen())
+	if (!engine._setRuntime.set() || !engine._setRuntime.set()->isOpen())
 		return;
-	const Common::String &setName = engine._set->setName();
+	const Common::String &setName = engine._setRuntime.set()->setName();
 	for (uint32 c = 0; c < _casts.size(); ++c) {
 		for (uint32 i = 0; i < _casts[c]->actorCount(); ++i) {
 			const Cast::Actor &actor = _casts[c]->actor(i);
@@ -404,11 +404,11 @@ void ActorRuntime::actorTurn(const Common::String &name, int turn) {
 }
 
 int ActorRuntime::starXYZ(CyberflixEngine &engine, const Common::String &name, int selector) const {
-	if (!engine._set || !engine._set->isOpen())
+	if (!engine._setRuntime.set() || !engine._setRuntime.set()->isOpen())
 		return 0;
 
 	int16 x = 0, y = 0, z = 0;
-	if (!engine._set->starXYZ(name, x, y, z))
+	if (!engine._setRuntime.set()->starXYZ(name, x, y, z))
 		return 0;
 
 	switch (selector) {

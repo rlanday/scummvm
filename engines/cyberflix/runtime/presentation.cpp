@@ -52,7 +52,7 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 		return true;
 	}
 	if (key == "set")
-		return _set && _set->isOpen() && _set->loadSetPalette(rgb);
+		return _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.set()->loadSetPalette(rgb);
 	if (key == "stage")
 		return _stageRuntime.stage() && _stageRuntime.stage()->isOpen() && _stageRuntime.stage()->loadStagePalette(rgb);
 	if (key == "puppet") {
@@ -62,8 +62,8 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 			byte backdrop[256 * 3];
 			memset(backdrop, 0, sizeof(backdrop));
 			bool haveBackdrop = false;
-			if (_set && _set->isOpen())
-				haveBackdrop = _set->loadSetPalette(backdrop);
+			if (_setRuntime.set() && _setRuntime.set()->isOpen())
+				haveBackdrop = _setRuntime.set()->loadSetPalette(backdrop);
 			else if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen())
 				haveBackdrop = _stageRuntime.stage()->loadStagePalette(backdrop);
 			if (haveBackdrop) {
@@ -237,11 +237,11 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 	refreshPropsIfDirty();
 	if (_puppetRuntime.isVisible()) {
 		renderCurrentPuppetFrame(false);
-	} else if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
-		if (_setTransitionType != kSetTransitionNone)
+	} else if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0) {
+		if (_setRuntime.transitionType() != kSetTransitionNone)
 			advanceSetTransition();
 		else
-			renderSetScene(_setScene, _setTable, _setAngle, _setView);
+			renderSetScene(_setRuntime.scene(), _setRuntime.table(), _setRuntime.angle(), _setRuntime.view());
 	} else if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) {
 		// visualeffect() reaches the same update/compositor path as forceupdate();
 		// it repaints pixels but native cursor state remains script-controlled.

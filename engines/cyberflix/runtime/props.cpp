@@ -121,9 +121,9 @@ bool PropRuntime::hasAnimatedScreenProps() const {
 void PropRuntime::collectWorldProps(CyberflixEngine &engine, Common::Array<const Shop::Prop *> &draw,
 		Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
 		const Shop::WorldCamera &camera) const {
-	if (!engine._set || !engine._set->isOpen())
+	if (!engine._setRuntime.set() || !engine._setRuntime.set()->isOpen())
 		return;
-	const Common::String &setName = engine._set->setName();
+	const Common::String &setName = engine._setRuntime.set()->setName();
 	for (uint32 s = 0; s < _shops.size(); ++s) {
 		for (uint32 i = 0; i < _shops[s]->propCount(); ++i) {
 			const Shop::Prop &p = _shops[s]->prop(i);
@@ -598,7 +598,7 @@ void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine) {
 		// SET prop dirtiness queued until the puppet is hidden or closed.
 		return;
 	}
-	if (!engine._setVisible || isReplacementStageForProps(engine._stageRuntime.stage())) {
+	if (!engine._setRuntime.visible() || isReplacementStageForProps(engine._stageRuntime.stage())) {
 		if (engine._stageRuntime.stage() && engine._stageRuntime.stage()->isOpen()) {
 			if (!_dirtyRects.empty())
 				engine.repaintDirtyStageRects();
@@ -612,16 +612,16 @@ void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine) {
 		_propsDirty = false;
 		return;
 	}
-	if (engine._set && engine._set->isOpen() && engine._setScene >= 0) {
+	if (engine._setRuntime.set() && engine._setRuntime.set()->isOpen() && engine._setRuntime.scene() >= 0) {
 		// ScummVM-only optimization matching the native backing-surface model:
 		// prop mutations do not change the SET background, and the current
-		// decoded/transitioned background is already retained in _setFrameSequence.
+		// decoded/transitioned background is already retained in _setRuntime.frameSequence().
 		// Recompose that surface with live props instead of re-decoding the same
 		// compressed panorama/transition frame for every sendtoprop() refresh.
-		if (!engine._setFrameSequence.empty())
-			engine.displaySetFrame(engine._setFrameSequence);
+		if (!engine._setRuntime.frameSequence().empty())
+			engine.displaySetFrame(engine._setRuntime.frameSequence());
 		else
-			engine.renderSetScene(engine._setScene, engine._setAngle);
+			engine.renderSetScene(engine._setRuntime.scene(), engine._setRuntime.angle());
 	}
 	_dirtyRects.clear();
 }

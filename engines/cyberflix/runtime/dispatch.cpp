@@ -111,18 +111,18 @@ Value CyberflixEngine::dispatchWithScopeChainValue(const Common::Array<const Scr
 }
 
 void CyberflixEngine::dispatchSetMessage(const Common::String &message, const Common::Array<Value> &args) {
-	if (!_set || !_set->isOpen() || message.empty())
+	if (!_setRuntime.set() || !_setRuntime.set()->isOpen() || message.empty())
 		return;
-	Common::SharedPtr<Script> setScript = _set->setScriptShared();
-	dispatchWithScopes(setScript.get(), nullptr, _set->setName(), Common::String(),
+	Common::SharedPtr<Script> setScript = _setRuntime.set()->setScriptShared();
+	dispatchWithScopes(setScript.get(), nullptr, _setRuntime.set()->setName(), Common::String(),
 			message, args, "set");
 }
 
 Value CyberflixEngine::dispatchSetMessageValue(const Common::String &message, const Common::Array<Value> &args) {
-	if (!_set || !_set->isOpen() || message.empty())
+	if (!_setRuntime.set() || !_setRuntime.set()->isOpen() || message.empty())
 		return Value();
-	Common::SharedPtr<Script> setScript = _set->setScriptShared();
-	return dispatchWithScopesValue(setScript.get(), nullptr, _set->setName(),
+	Common::SharedPtr<Script> setScript = _setRuntime.set()->setScriptShared();
+	return dispatchWithScopesValue(setScript.get(), nullptr, _setRuntime.set()->setName(),
 			Common::String(), message, args, "setfx");
 }
 
@@ -132,26 +132,26 @@ Value CyberflixEngine::sendToSetFx(const Common::String &message, const Common::
 
 void CyberflixEngine::dispatchSceneMessage(uint32 scene, const Common::String &message,
 		const Common::Array<Value> &args) {
-	if (!_set || !_set->isOpen() || message.empty())
+	if (!_setRuntime.set() || !_setRuntime.set()->isOpen() || message.empty())
 		return;
-	Common::SharedPtr<Script> sceneScript = _set->sceneScriptShared(scene);
-	Common::SharedPtr<Script> setScript = _set->setScriptShared();
-	dispatchWithScopes(sceneScript.get(), setScript.get(), _set->sceneName(scene),
+	Common::SharedPtr<Script> sceneScript = _setRuntime.set()->sceneScriptShared(scene);
+	Common::SharedPtr<Script> setScript = _setRuntime.set()->setScriptShared();
+	dispatchWithScopes(sceneScript.get(), setScript.get(), _setRuntime.set()->sceneName(scene),
 			Common::String(), message, args, "scene");
 }
 
 bool CyberflixEngine::closeCurrentSceneForNavigation() {
-	if (!_set || !_set->isOpen() || _setScene < 0)
+	if (!_setRuntime.set() || !_setRuntime.set()->isOpen() || _setRuntime.scene() < 0)
 		return false;
 
 	// FUN_00430c70 calls FUN_00430f30 before FUN_00442140 starts movement, and
 	// aborts if the set archive changed while the current scene handled close.
-	Common::String openedName = _set->setName();
-	uint32 openedCount = _set->sceneCount();
+	Common::String openedName = _setRuntime.set()->setName();
+	uint32 openedCount = _setRuntime.set()->sceneCount();
 	Common::Array<Value> noArgs;
-	dispatchSceneMessage((uint32)_setScene, "closescene", noArgs);
-	return _set && _set->isOpen() && _set->setName() == openedName &&
-			_set->sceneCount() == openedCount;
+	dispatchSceneMessage((uint32)_setRuntime.scene(), "closescene", noArgs);
+	return _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.set()->setName() == openedName &&
+			_setRuntime.set()->sceneCount() == openedCount;
 }
 
 // actionframe(n): did the last movie display its n'th action-cue frame?
