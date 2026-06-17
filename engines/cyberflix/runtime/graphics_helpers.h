@@ -28,6 +28,49 @@
 
 namespace Cyberflix {
 
+inline void drawScaledCel(Graphics::Surface *screen, const CelImage &cel,
+		const Common::Rect &dest, const Common::Rect &clip) {
+	const int destW = dest.width();
+	const int destH = dest.height();
+	if (destW <= 0 || destH <= 0 || cel.width <= 0 || cel.height <= 0)
+		return;
+	Common::Rect paint = dest;
+	paint.clip(clip);
+	if (paint.isEmpty())
+		return;
+	for (int y = paint.top; y < paint.bottom; ++y) {
+		int srcY = (int)((int64)(y - dest.top) * cel.height / destH);
+		for (int x = paint.left; x < paint.right; ++x) {
+			int srcX = (int)((int64)(x - dest.left) * cel.width / destW);
+			if (cel.isOpaque(srcX, srcY))
+				*((byte *)screen->getBasePtr(x, y)) =
+						cel.pixels[(uint)srcY * cel.width + srcX];
+		}
+	}
+}
+
+inline void drawCel(Graphics::Surface *screen, const CelImage &cel,
+		const Common::Rect &dest, const Common::Rect &clip) {
+	Common::Rect paint = dest;
+	paint.clip(clip);
+	paint.clip(Common::Rect(dest.left, dest.top, dest.left + cel.width, dest.top + cel.height));
+	if (paint.isEmpty() || cel.width == 0 || cel.height == 0)
+		return;
+
+	const int copyWidth = paint.width();
+	for (int y = paint.top; y < paint.bottom; ++y) {
+		const int srcY = y - dest.top;
+		const int srcX = paint.left - dest.left;
+		const byte *src = cel.pixels.begin() + (uint)srcY * cel.width + srcX;
+		const byte *opaque = cel.opaque.begin() + (uint)srcY * cel.width + srcX;
+		byte *dst = (byte *)screen->getBasePtr(paint.left, y);
+		for (int x = 0; x < copyWidth; ++x) {
+			if (opaque[x])
+				dst[x] = src[x];
+		}
+	}
+}
+
 inline void copyFramePixelsToScreen(Graphics::Surface &screen, const byte *pixels,
 		int width, int height, int dstX, int dstY) {
 	if (!pixels || width <= 0 || height <= 0)

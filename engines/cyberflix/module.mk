@@ -21,6 +21,7 @@ MODULE_OBJS = \
 	runtime/presentation.o \
 	runtime/props.o \
 	runtime/puppet_runtime.o \
+	runtime/set_runtime.o \
 	runtime/set_state.o \
 	runtime/system.o \
 	saveload.o \
