@@ -2,6 +2,7 @@ MODULE := engines/cyberflix
 
 MODULE_OBJS = \
 	archive.o \
+	audio.o \
 	cast.o \
 	console.o \
 	cyberflix.o \
