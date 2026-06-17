@@ -891,6 +891,8 @@ void CyberflixEngine::renderStageNode(int node, bool resetCursor) {
 void CyberflixEngine::repaintDirtyStageRects() {
 	if (!_stage || !_stage->isOpen() || _dirtyRects.empty())
 		return;
+	if (shouldTraceBridgeCursor())
+		debug(1, "Cyberflix: bridge repaintDirtyStageRects(%u)", _dirtyRects.size());
 
 	FrameImage frame;
 	if (!_stage->renderNode((uint32)_stageNode, frame)) {
@@ -940,8 +942,9 @@ void CyberflixEngine::repaintDirtyStageRects() {
 	}
 	_system->unlockScreen();
 
-	if (setGameCursor("CURS.ARROW"))
-		CursorMan.showMouse(true);
+	// Dirty stage rects are compositor work (native FUN_00442d90/FUN_00407000),
+	// not direct flat navigation, so they must not overwrite the cursor selected
+	// by BOOTFILE idle hittest and the prop/flat setcursor scripts.
 	_dirtyRects.clear();
 	_propsDirty = false;
 	_system->updateScreen();
