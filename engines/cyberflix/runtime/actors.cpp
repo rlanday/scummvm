@@ -79,6 +79,44 @@ void ActorRuntime::refreshActorStarPositions(CyberflixEngine &engine) {
 	}
 }
 
+void ActorRuntime::collectWorldActors(CyberflixEngine &engine, Common::Array<const Cast::Actor *> &draw,
+		Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
+		const Shop::WorldCamera &camera) const {
+	if (!engine._set || !engine._set->isOpen())
+		return;
+	const Common::String &setName = engine._set->setName();
+	for (uint32 c = 0; c < _casts.size(); ++c) {
+		for (uint32 i = 0; i < _casts[c]->actorCount(); ++i) {
+			const Cast::Actor &actor = _casts[c]->actor(i);
+			if (!actor.visible || !actor.setName.equalsIgnoreCase(setName))
+				continue;
+			CelImage cel;
+			Common::Rect rect;
+			int16 depth = 0;
+			if (!_casts[c]->renderWorldActor(actor, camera, setName, cel, rect, depth))
+				continue;
+			draw.push_back(&actor);
+			drawCast.push_back(_casts[c].get());
+			depths.push_back(depth);
+		}
+	}
+
+	for (uint32 i = 1; i < draw.size(); ++i) {
+		const Cast::Actor *actor = draw[i];
+		const Cast *cast = drawCast[i];
+		int16 depth = depths[i];
+		uint32 j = i;
+		for (; j > 0 && depths[j - 1] < depth; --j) {
+			draw[j] = draw[j - 1];
+			drawCast[j] = drawCast[j - 1];
+			depths[j] = depths[j - 1];
+		}
+		draw[j] = actor;
+		drawCast[j] = cast;
+		depths[j] = depth;
+	}
+}
+
 void ActorRuntime::openCastFile(CyberflixEngine &engine, const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();

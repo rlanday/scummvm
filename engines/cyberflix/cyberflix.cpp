@@ -654,40 +654,7 @@ void CyberflixEngine::repaintDirtyStageRects() {
 void CyberflixEngine::collectWorldActors(Common::Array<const Cast::Actor *> &draw,
 		Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
 		const Shop::WorldCamera &camera) {
-	if (!_set || !_set->isOpen())
-		return;
-	const Common::String &setName = _set->setName();
-	const Common::Array<Common::SharedPtr<Cast> > &casts = _actorRuntime.casts();
-	for (uint32 c = 0; c < casts.size(); ++c) {
-		for (uint32 i = 0; i < casts[c]->actorCount(); ++i) {
-			const Cast::Actor &actor = casts[c]->actor(i);
-			if (!actor.visible || !actor.setName.equalsIgnoreCase(setName))
-				continue;
-			CelImage cel;
-			Common::Rect rect;
-			int16 depth = 0;
-			if (!casts[c]->renderWorldActor(actor, camera, setName, cel, rect, depth))
-				continue;
-			draw.push_back(&actor);
-			drawCast.push_back(casts[c].get());
-			depths.push_back(depth);
-		}
-	}
-
-	for (uint32 i = 1; i < draw.size(); ++i) {
-		const Cast::Actor *actor = draw[i];
-		const Cast *cast = drawCast[i];
-		int16 depth = depths[i];
-		uint32 j = i;
-		for (; j > 0 && depths[j - 1] < depth; --j) {
-			draw[j] = draw[j - 1];
-			drawCast[j] = drawCast[j - 1];
-			depths[j] = depths[j - 1];
-		}
-		draw[j] = actor;
-		drawCast[j] = cast;
-		depths[j] = depth;
-	}
+	_actorRuntime.collectWorldActors(*this, draw, drawCast, depths, camera);
 }
 
 static bool isReplacementStage(const Common::SharedPtr<Stage> &stage) {

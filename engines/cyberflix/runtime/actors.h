@@ -27,6 +27,7 @@
 #include "common/str.h"
 
 #include "cyberflix/cast.h"
+#include "cyberflix/shop.h"
 
 namespace Cyberflix {
 
@@ -44,6 +45,9 @@ public:
 	ActorRef findActorRef(const Common::String &name) const;
 	bool resolveActorStar(CyberflixEngine &engine, Cast::Actor &actor);
 	void refreshActorStarPositions(CyberflixEngine &engine);
+	void collectWorldActors(CyberflixEngine &engine, Common::Array<const Cast::Actor *> &draw,
+			Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
+			const Shop::WorldCamera &camera) const;
 	void openCastFile(CyberflixEngine &engine, const Common::String &name);
 	void closeCastFile(CyberflixEngine &engine, const Common::String &name);
 	void sendToCast(CyberflixEngine &engine, const Common::String &castName,
