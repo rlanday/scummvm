@@ -667,6 +667,113 @@ bool ScriptVM::callAudioMethod(uint16 opcode, const Common::Array<Value> &args, 
 	}
 }
 
+bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
+	switch (opcode) {
+	case Script::kMethodOpenCastFile: // opencastfile('name.cst') -> FUN_0041f1c0
+		_host->openCastFile(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodCloseCastFile: // closecastfile('name.cst') -> FUN_004211b0
+		_host->closeCastFile(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodCountActors: // countactors() -> FUN_00420a70
+		result = Value::makeInt(_host->countActors());
+		return true;
+	case Script::kMethodIndexToActor: // indextoactor(i) -> native 1-based actor lookup
+		result = Value::makeString(_host->indexToActor(args.empty() ? 0 : args[0].intValue));
+		return true;
+	case Script::kMethodActorVisible: { // actorvisible(name[, flag]) -> FUN_00420f10/FUN_00420d30
+		bool visible = args.size() > 1 && args[1].intValue != 0;
+		const bool *newVisible = args.size() > 1 ? &visible : nullptr;
+		result = !args.empty() ?
+				Value::makeBool(_host->actorVisible(args[0].strValue, newVisible)) :
+				Value::makeBool(false);
+		return true;
+	}
+	case Script::kMethodActorDeg: { // actordeg(name[, deg]) -> FUN_0041fef0 / getter
+		if (args.size() >= 2) {
+			int deg = args[1].intValue;
+			result = Value::makeInt(_host->actorDeg(args[0].strValue, &deg));
+		} else if (args.size() == 1) {
+			result = Value::makeInt(_host->actorDeg(args[0].strValue, nullptr));
+		} else {
+			result = Value::makeInt(0);
+		}
+		return true;
+	}
+	case Script::kMethodActorXYZ: // actorxyz(name, x, y, z) or actorxyz(name, selector)
+		if (args.size() >= 4) {
+			_host->actorXYZ(args[0].strValue, args[1].intValue,
+					args[2].intValue, args[3].intValue);
+		} else if (args.size() == 2) {
+			result = Value::makeInt(_host->actorXYZ(args[0].strValue, args[1].intValue));
+		} else {
+			result = Value::makeInt(0);
+		}
+		return true;
+	case Script::kMethodActorStar: // actorstar(name[, scene]) -> FUN_0041fbb0
+		if (args.size() >= 2)
+			result = Value::makeString(_host->actorStar(args[0].strValue, &args[1].strValue));
+		else if (args.size() == 1)
+			result = Value::makeString(_host->actorStar(args[0].strValue, nullptr));
+		else
+			result = Value::makeString(Common::String());
+		return true;
+	case Script::kMethodActorPose: // actorpose(name[, pose]) -> FUN_0041fd70
+		if (args.size() >= 2)
+			result = Value::makeString(_host->actorPose(args[0].strValue, &args[1].strValue));
+		else if (args.size() == 1)
+			result = Value::makeString(_host->actorPose(args[0].strValue, nullptr));
+		else
+			result = Value::makeString(Common::String());
+		return true;
+	case Script::kMethodActorSet: // actorset(name[, set]) -> FUN_0041f970
+		if (args.size() >= 2)
+			result = Value::makeString(_host->actorSet(args[0].strValue, &args[1].strValue));
+		else if (args.size() == 1)
+			result = Value::makeString(_host->actorSet(args[0].strValue, nullptr));
+		else
+			result = Value::makeString(Common::String());
+		return true;
+	case Script::kMethodActorSpeed: // actorspeed(name, speed)
+		if (args.size() >= 2)
+			_host->actorSpeed(args[0].strValue, args[1].intValue);
+		return true;
+	case Script::kMethodActorScale: // actorscale(name, scale)
+		if (args.size() >= 2)
+			_host->actorScale(args[0].strValue, args[1].intValue);
+		return true;
+	case Script::kMethodActorTurn: // actorturn(name, turn)
+		if (args.size() >= 2)
+			_host->actorTurn(args[0].strValue, args[1].intValue);
+		return true;
+	case Script::kMethodActorOwner: // actorowner(name[, owner]) -> FUN_00422210
+		if (args.size() >= 2)
+			result = Value::makeString(_host->actorOwner(args[0].strValue, &args[1].strValue));
+		else if (args.size() == 1)
+			result = Value::makeString(_host->actorOwner(args[0].strValue, nullptr));
+		else
+			result = Value::makeString(Common::String());
+		return true;
+	case Script::kMethodActorValue: { // actorvalue(name[, value]) -> FUN_004222d0
+		if (args.size() >= 2) {
+			int value = args[1].intValue;
+			result = Value::makeInt(_host->actorValue(args[0].strValue, &value));
+		} else if (args.size() == 1) {
+			result = Value::makeInt(_host->actorValue(args[0].strValue, nullptr));
+		} else {
+			result = Value::makeInt(0);
+		}
+		return true;
+	}
+	case Script::kMethodActorZClip: // actorzclip(name, zclip)
+		if (args.size() >= 2)
+			_host->actorZClip(args[0].strValue, args[1].intValue);
+		return true;
+	default:
+		return false;
+	}
+}
+
 Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args) {
 	// Dispatch a builtin method by opcode. The interpreter routes 0x2Exx/0x2Fxx
 	// through dispatch B and 0x3Exx/0x4Exx through dispatch A (files/opcode-map.md
@@ -698,16 +805,12 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 	if (_host) {
 		if (callAudioMethod(opcode, args, result))
 			return result;
+		if (callActorMethod(opcode, args, result))
+			return result;
 
 		switch (opcode) {
 		case Script::kMethodMessage: // message(text) -> FUN_00446240
 			_host->message(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodOpenCastFile: // opencastfile('name.cst') -> FUN_0041f1c0
-			_host->openCastFile(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodCloseCastFile: // closecastfile('name.cst') -> FUN_004211b0
-			_host->closeCastFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
 		case Script::kMethodPlayMovie: // playmovie('name.mov')
 			_host->playMovie(args.empty() ? Common::String() : args[0].strValue);
@@ -913,84 +1016,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() >= 2)
 				return Value::makeBool(_host->roadAhead(args[0].strValue, args[1].strValue));
 			return Value::makeBool(false);
-		case Script::kMethodCountActors: // countactors() -> FUN_00420a70
-			return Value::makeInt(_host->countActors());
-		case Script::kMethodIndexToActor: // indextoactor(i) -> native 1-based actor lookup
-			return Value::makeString(_host->indexToActor(args.empty() ? 0 : args[0].intValue));
-		case Script::kMethodActorVisible: { // actorvisible(name[, flag]) -> FUN_00420f10/FUN_00420d30
-			bool visible = args.size() > 1 && args[1].intValue != 0;
-			const bool *newVisible = args.size() > 1 ? &visible : nullptr;
-			if (!args.empty())
-				return Value::makeBool(_host->actorVisible(args[0].strValue, newVisible));
-			return Value::makeBool(false);
-		}
-		case Script::kMethodActorDeg: { // actordeg(name[, deg]) -> FUN_0041fef0 / getter
-			if (args.size() >= 2) {
-				int deg = args[1].intValue;
-				return Value::makeInt(_host->actorDeg(args[0].strValue, &deg));
-			}
-			if (args.size() == 1)
-				return Value::makeInt(_host->actorDeg(args[0].strValue, nullptr));
-			return Value::makeInt(0);
-		}
-		case Script::kMethodActorXYZ: // actorxyz(name, x, y, z) or actorxyz(name, selector)
-			if (args.size() >= 4) {
-				_host->actorXYZ(args[0].strValue, args[1].intValue,
-						args[2].intValue, args[3].intValue);
-				break;
-			}
-			if (args.size() == 2)
-				return Value::makeInt(_host->actorXYZ(args[0].strValue, args[1].intValue));
-			return Value::makeInt(0);
-		case Script::kMethodActorStar: // actorstar(name[, scene]) -> FUN_0041fbb0
-			if (args.size() >= 2)
-				return Value::makeString(_host->actorStar(args[0].strValue, &args[1].strValue));
-			if (args.size() == 1)
-				return Value::makeString(_host->actorStar(args[0].strValue, nullptr));
-			return Value::makeString(Common::String());
-		case Script::kMethodActorPose: // actorpose(name[, pose]) -> FUN_0041fd70
-			if (args.size() >= 2)
-				return Value::makeString(_host->actorPose(args[0].strValue, &args[1].strValue));
-			if (args.size() == 1)
-				return Value::makeString(_host->actorPose(args[0].strValue, nullptr));
-			return Value::makeString(Common::String());
-		case Script::kMethodActorSet: // actorset(name[, set]) -> FUN_0041f970
-			if (args.size() >= 2)
-				return Value::makeString(_host->actorSet(args[0].strValue, &args[1].strValue));
-			if (args.size() == 1)
-				return Value::makeString(_host->actorSet(args[0].strValue, nullptr));
-			return Value::makeString(Common::String());
-		case Script::kMethodActorSpeed: // actorspeed(name, speed)
-			if (args.size() >= 2)
-				_host->actorSpeed(args[0].strValue, args[1].intValue);
-			break;
-		case Script::kMethodActorScale: // actorscale(name, scale)
-			if (args.size() >= 2)
-				_host->actorScale(args[0].strValue, args[1].intValue);
-			break;
-		case Script::kMethodActorTurn: // actorturn(name, turn)
-			if (args.size() >= 2)
-				_host->actorTurn(args[0].strValue, args[1].intValue);
-			break;
-		case Script::kMethodActorOwner: // actorowner(name[, owner]) -> FUN_00422210
-			if (args.size() >= 2)
-				return Value::makeString(_host->actorOwner(args[0].strValue, &args[1].strValue));
-			if (args.size() == 1)
-				return Value::makeString(_host->actorOwner(args[0].strValue, nullptr));
-			return Value::makeString(Common::String());
-		case Script::kMethodActorValue: { // actorvalue(name[, value]) -> FUN_004222d0
-			if (args.size() >= 2) {
-				int value = args[1].intValue;
-				return Value::makeInt(_host->actorValue(args[0].strValue, &value));
-			}
-			if (args.size() == 1)
-				return Value::makeInt(_host->actorValue(args[0].strValue, nullptr));
-			return Value::makeInt(0);
-		}
-		case Script::kMethodActorZClip: // actorzclip(name, zclip)
-			if (args.size() >= 2)
-				_host->actorZClip(args[0].strValue, args[1].intValue);
-			break;
 		case Script::kMethodCountPuppets: // countpuppets() -> FUN_00448380: PUP resource-2 script count
 			return Value::makeInt(_host->countPuppets());
 		case Script::kMethodIndexToPuppet: // indextopuppet(i) -> FUN_004483f0, 1-based
