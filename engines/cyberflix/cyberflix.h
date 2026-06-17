@@ -39,6 +39,7 @@
 #include "cyberflix/runtime/actors.h"
 #include "cyberflix/runtime/cursor.h"
 #include "cyberflix/runtime/loops.h"
+#include "cyberflix/runtime/movie.h"
 #include "cyberflix/runtime/palette.h"
 #include "cyberflix/runtime/paths.h"
 #include "cyberflix/runtime/props.h"
@@ -94,6 +95,8 @@ public:
 	const CursorRuntime &cursorRuntime() const { return _cursorRuntime; }
 	LoopRuntime &loopRuntime() { return _loopRuntime; }
 	const LoopRuntime &loopRuntime() const { return _loopRuntime; }
+	MovieRuntime &movieRuntime() { return _movieRuntime; }
+	const MovieRuntime &movieRuntime() const { return _movieRuntime; }
 	PathRuntime &pathRuntime() { return _pathRuntime; }
 	const PathRuntime &pathRuntime() const { return _pathRuntime; }
 	PropRuntime &propRuntime() { return _propRuntime; }
@@ -290,6 +293,7 @@ private:
 	friend class AudioRuntime;
 	friend class ActorRuntime;
 	friend class LoopRuntime;
+	friend class MovieRuntime;
 	friend class PropRuntime;
 	friend class PuppetRuntime;
 	friend class SetRuntime;
@@ -438,6 +442,7 @@ private:
 	bool _keyAborts = false;  ///< Global keyaborts() getter state.
 
 	LoopRuntime _loopRuntime;
+	MovieRuntime _movieRuntime;
 	void processScheduledLoops();
 	FramePacingRuntime _framePacingRuntime;
 

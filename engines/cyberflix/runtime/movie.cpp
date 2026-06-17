@@ -140,7 +140,7 @@ static int resolveFrameName(const Common::Array<Common::String> &names, const Co
 	return -1;
 }
 
-void CyberflixEngine::playMovie(const Common::String &name) {
+void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name) {
 	if (name.empty())
 		return;
 
@@ -242,7 +242,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// before the frame loop). Reaching cue N during playback sets bit N of the
 	// action-frame mask that the script builtin actionframe(N) tests.
 	int actionCue1 = -1, actionCue2 = -1;
-	_actionFrameMask = 0; // playmovie clears the mask (TI.EXE FUN_00446f80)
+	engine._actionFrameMask = 0; // playmovie clears the mask (TI.EXE FUN_00446f80)
 
 	// Screen position of the movie. The original never centers: each draw op
 	// blits at the master header's QuickDraw rect {top,left,bottom,right}
@@ -487,7 +487,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	// interactive frame (the menu) is up and hides it during linear playback
 	// (FUN_004051b0/FUN_00405210, gated by movie flag bit 0x10). Mirror that:
 	// the arrow is decoded on demand from the user's TI.EXE.
-	if (hasInteractive && setGameCursor("CURS.ARROW"))
+	if (hasInteractive && engine.setGameCursor("CURS.ARROW"))
 		CursorMan.showMouse(true);
 	else
 		CursorMan.showMouse(false);
@@ -500,11 +500,11 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		if (stream) {
 			if (hasInteractive) {
 				Audio::AudioStream *loop = new Audio::LoopingAudioStream(stream, 0);
-				_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, loop);
+				engine._mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, loop);
 			} else {
-				_mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, stream);
+				engine._mixer->playStream(Audio::Mixer::kSFXSoundType, &audioHandle, stream);
 			}
-			_mixer->setChannelVolume(audioHandle, _audioRuntime.effectiveAudioVolume(255));
+			engine._mixer->setChannelVolume(audioHandle, engine.audioRuntime().effectiveAudioVolume(255));
 			hasMovieAudio = true;
 		}
 	}
@@ -537,9 +537,9 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	if (frameCount == 0)
 		warning("Cyberflix: movie '%s' has no frames to show", name.c_str());
 
-	uint32 wallStartMs = _system->getMillis();
+	uint32 wallStartMs = engine._system->getMillis();
 	uint32 fi = 0;
-	while (fi < frameCount && !shouldQuit() && !skip) {
+	while (fi < frameCount && !engine.shouldQuit() && !skip) {
 		uint32 resIdx = usePF ? pfVideoRes[fi] : frames[fi];
 		if (resIdx >= archive.getResourceCount())
 			break;
@@ -556,17 +556,17 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		// ORs the bits after decoding every frame it iterates (FUN_0043b800
 		// call sites 0x0040d19a/0x0040d1af), clicked-to frames included.
 		if ((int)fi == actionCue1)
-			_actionFrameMask |= 1;
+			engine._actionFrameMask |= 1;
 		if ((int)fi == actionCue2)
-			_actionFrameMask |= 2;
+			engine._actionFrameMask |= 2;
 		if (playFrameSfxLive && fi < pfFrameSfx.size() && pfFrameSfx[fi])
-			playMovieFrameSfx(_mixer, frameSfxHandles, *pfFrameSfx[fi], _audioRuntime.effectiveAudioVolume(255));
+			playMovieFrameSfx(engine._mixer, frameSfxHandles, *pfFrameSfx[fi], engine.audioRuntime().effectiveAudioVolume(255));
 
 		// Current playback clock: real audio position while the track plays,
 		// else elapsed wall time (covers the post-music fade and silent movies).
-		uint32 nowMs = (hasMovieAudio && _mixer->isSoundHandleActive(audioHandle))
-				? _mixer->getSoundElapsedTime(audioHandle)
-				: (_system->getMillis() - wallStartMs);
+		uint32 nowMs = (hasMovieAudio && engine._mixer->isSoundHandleActive(audioHandle))
+				? engine._mixer->getSoundElapsedTime(audioHandle)
+				: (engine._system->getMillis() - wallStartMs);
 		uint32 frameEndMs = (fi + 1 < frameStartMs.size())
 				? frameStartMs[fi + 1] : (fi + 1) * kFallbackFrameDelayMs;
 
@@ -593,15 +593,15 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		bool fadedThisFrame = false;
 		if (present) {
 			if (haveMoviePal && !moviePalApplied && drawOp != 0x11 && drawOp != 0x12) {
-				programPalette(moviePal);
+				engine.programPalette(moviePal);
 				moviePalApplied = true;
 			}
-			Graphics::Surface *screen = _system->lockScreen();
+			Graphics::Surface *screen = engine._system->lockScreen();
 			// Movie frames are opaque. Clip once and copy full rows instead of
 			// doing a per-pixel getBasePtr() loop for every presented frame.
 			copyFramePixelsToScreen(*screen, pixels, w, h, x0, y0);
-			_system->unlockScreen();
-			_system->updateScreen();
+			engine._system->unlockScreen();
+			engine._system->updateScreen();
 
 			// Palette fade across this frame's authored hold time, one step per
 			// 60 Hz tick (FUN_00410120 / FUN_004101a0): 0x12 = reveal the frame
@@ -614,10 +614,10 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				byte black[256 * 3];
 				memset(black, 0, sizeof(black));
 				if (drawOp == 0x12) {
-					fadePaletteSteps(black, moviePal, steps);
+					engine.fadePaletteSteps(black, moviePal, steps);
 					moviePalApplied = true;
 				} else {
-					fadePaletteSteps(moviePal, black, steps);
+					engine.fadePaletteSteps(moviePal, black, steps);
 					moviePalApplied = false;
 				}
 				fadedThisFrame = true;
@@ -634,15 +634,15 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			int32 nextFi = -1;
 			// Hover cursor state: -1 unknown, 0 arrow, 1 hand ("CURS131").
 			int hoverState = -1;
-			while (nextFi < 0 && !shouldQuit() && !skip) {
+			while (nextFi < 0 && !engine.shouldQuit() && !skip) {
 				bool cursorDirty = false;
-				const Common::Point oldMouse = _eventMan->getMousePos();
+				const Common::Point oldMouse = engine._eventMan->getMousePos();
 				// FUN_0040e5b0: every poll, point-in-rect the mouse against the
 				// frame's hover-eligible buttons (flag bit 0x2; plain rect test,
 				// no pixel mask) and show "CURS131" over one, "CURS.ARROW"
 				// otherwise.
 				if (movieHoverCursor) {
-					Common::Point m = _eventMan->getMousePos();
+					Common::Point m = engine._eventMan->getMousePos();
 					int hover = 0;
 					for (uint b = 0; b < pfButtons[fi].size(); ++b) {
 						const MovieButton &mb = pfButtons[fi][b];
@@ -652,22 +652,22 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 						}
 					}
 					if (hover != hoverState) {
-						setGameCursor(hover ? "CURS131" : "CURS.ARROW");
+						engine.setGameCursor(hover ? "CURS131" : "CURS.ARROW");
 						cursorDirty = true;
 						hoverState = hover;
 					}
 				}
-				while (_eventMan->pollEvent(event)) {
+				while (engine._eventMan->pollEvent(event)) {
 					if (event.type == Common::EVENT_MOUSEMOVE)
 						cursorDirty = true;
-					handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
+					engine.handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
 					if (event.type == Common::EVENT_LBUTTONDOWN) {
 						// TI.EXE FUN_0040e230 waits for event code 1
 						// (WM_LBUTTONDOWN), then reads the current mouse point
 						// from the movie port instead of using the queued event
 						// payload. Keep click hit-testing consistent with the
 						// hover helper above, which also polls the current point.
-						Common::Point m = _eventMan->getMousePos();
+						Common::Point m = engine._eventMan->getMousePos();
 						int fx = m.x - x0;
 						int fy = m.y - y0;
 						for (uint b = 0; b < pfButtons[fi].size(); ++b) {
@@ -692,7 +692,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 						}
 					}
 				}
-				const Common::Point newMouse = _eventMan->getMousePos();
+				const Common::Point newMouse = engine._eventMan->getMousePos();
 				if (oldMouse.x != newMouse.x || oldMouse.y != newMouse.y)
 					cursorDirty = true;
 				if (nextFi < 0 && !skip) {
@@ -702,10 +702,10 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 					// state actually changed; unconditional swaps dominate
 					// blocking interactive movie waits.
 					if (cursorDirty) {
-						_console->onFrame();
-						_system->updateScreen();
+						engine._console->onFrame();
+						engine._system->updateScreen();
 					}
-					_system->delayMillis(10);
+					engine._system->delayMillis(10);
 				}
 			}
 			if (nextFi >= 0)
@@ -726,21 +726,21 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			// ramp (the original spreads the fade across the frame duration).
 			uint32 holdMs = fadedThisFrame ? 0
 					: ((fi < pfHoldMs.size()) ? pfHoldMs[fi] : kFallbackFrameDelayMs);
-			uint32 holdStart = _system->getMillis();
-			while (!shouldQuit() && !skip) {
+			uint32 holdStart = engine._system->getMillis();
+			while (!engine.shouldQuit() && !skip) {
 				bool cursorDirty = false;
-				const Common::Point oldMouse = _eventMan->getMousePos();
-				while (_eventMan->pollEvent(event)) {
+				const Common::Point oldMouse = engine._eventMan->getMousePos();
+				while (engine._eventMan->pollEvent(event)) {
 					if (event.type == Common::EVENT_MOUSEMOVE)
 						cursorDirty = true;
-					holdStart += handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
+					holdStart += engine.handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
 				}
-				if (_system->getMillis() - holdStart >= holdMs)
+				if (engine._system->getMillis() - holdStart >= holdMs)
 					break;
-				const Common::Point newMouse = _eventMan->getMousePos();
+				const Common::Point newMouse = engine._eventMan->getMousePos();
 				if (cursorDirty || oldMouse.x != newMouse.x || oldMouse.y != newMouse.y)
-					_system->updateScreen();
-				_system->delayMillis(5);
+					engine._system->updateScreen();
+				engine._system->delayMillis(5);
 			}
 			if (nav == 1)
 				break; // END: leave this (pressed) frame on screen and return
@@ -765,13 +765,13 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		// Wait until this frame's authored end time on the playback clock, then
 		// run the same nav command interpreter path as FUN_0040d710.
 		for (;;) {
-			while (_eventMan->pollEvent(event))
-				wallStartMs += handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
-			if (shouldQuit() || skip)
+			while (engine._eventMan->pollEvent(event))
+				wallStartMs += engine.handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
+			if (engine.shouldQuit() || skip)
 				break;
-			uint32 t = (hasMovieAudio && _mixer->isSoundHandleActive(audioHandle))
-					? _mixer->getSoundElapsedTime(audioHandle)
-					: (_system->getMillis() - wallStartMs);
+			uint32 t = (hasMovieAudio && engine._mixer->isSoundHandleActive(audioHandle))
+					? engine._mixer->getSoundElapsedTime(audioHandle)
+					: (engine._system->getMillis() - wallStartMs);
 			if (t >= frameEndMs)
 				break;
 			// Linear movies hide the cursor, so there is no software-cursor
@@ -781,7 +781,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			// ~30 Hz avoids waking SDL/Cocoa's event pump twice as often in the
 			// sampled scripted movie path without affecting cursor responsiveness.
 			const uint32 pollCapMs = movieSkippable ? 16 : 33;
-			_system->delayMillis(MIN<uint32>(frameEndMs - t, pollCapMs));
+			engine._system->delayMillis(MIN<uint32>(frameEndMs - t, pollCapMs));
 		}
 		if (nav == 2 && fi < pfNavTarget.size()) {
 			int idx = resolveFrameName(pfName, pfNavTarget[fi]);
@@ -793,10 +793,10 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 		}
 	}
 
-	_mixer->stopHandle(audioHandle);
+	engine._mixer->stopHandle(audioHandle);
 	for (uint i = 0; i < frameSfxHandles.size(); ++i)
-		_mixer->stopHandle(frameSfxHandles[i]);
-	_eventMan->purgeKeyboardEvents();
+		engine._mixer->stopHandle(frameSfxHandles[i]);
+	engine._eventMan->purgeKeyboardEvents();
 
 	// Leave the cursor hidden when we hand control back; the next interactive
 	// movie/node re-shows it.

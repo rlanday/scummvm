@@ -79,6 +79,10 @@ CyberflixEngine::~CyberflixEngine() {
 	// SharedPtr values free themselves.
 }
 
+void CyberflixEngine::playMovie(const Common::String &name) {
+	_movieRuntime.playMovie(*this, name);
+}
+
 Common::String CyberflixEngine::currentPuppet() {
 	return _puppetRuntime.currentPuppet();
 }
