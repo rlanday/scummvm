@@ -3079,10 +3079,9 @@ Common::Error CyberflixEngine::run() {
 		const Archive::Resource &res = boot.getResource(i);
 		if (res.empty || res.info != Script::kScriptInfoTag)
 			continue;
-		Common::SeekableReadStream *scriptStream = boot.createReadStreamForResource(i);
+		Common::ScopedPtr<Common::SeekableReadStream> scriptStream(boot.createReadStreamForResource(i));
 		Common::ScopedPtr<Script> script(new Script());
-		bool parsed = scriptStream && script->parse(scriptStream);
-		delete scriptStream;
+		bool parsed = scriptStream && script->parse(scriptStream.get());
 		if (!parsed) {
 			warning("Cyberflix: failed to parse BOOTFILE script resource %u", i);
 			continue;

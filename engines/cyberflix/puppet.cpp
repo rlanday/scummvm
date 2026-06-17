@@ -24,6 +24,7 @@
 #include "common/file.h"
 #include "common/memstream.h"
 #include "common/path.h"
+#include "common/ptr.h"
 #include "graphics/surface.h"
 
 #include "cyberflix/image.h"
@@ -70,13 +71,10 @@ Common::SharedPtr<Script> Puppet::parseScriptResource(uint32 resId) const {
 	int idx = resourceIndexById(resId);
 	if (idx < 0)
 		return Common::SharedPtr<Script>();
-	Common::SeekableReadStream *s = _archive.createReadStreamForResource((uint32)idx);
+	Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)idx));
 	Common::SharedPtr<Script> script(new Script());
-	if (s && script->parse(s)) {
-		delete s;
+	if (s && script->parse(s.get()))
 		return script;
-	}
-	delete s;
 	return Common::SharedPtr<Script>();
 }
 
@@ -244,12 +242,11 @@ Common::SharedPtr<CelImage> Puppet::celResource(uint32 resId) const {
 	if (!width || !height)
 		return Common::SharedPtr<CelImage>();
 
-	Common::SeekableReadStream *s = _archive.createReadStreamForResource((uint32)idx);
+	Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)idx));
 	if (!s)
 		return Common::SharedPtr<CelImage>();
 	Common::SharedPtr<CelImage> cel(new CelImage());
 	bool ok = decodeCel(*s, width, height, *cel);
-	delete s;
 	if (!ok) {
 		warning("Cyberflix: puppet '%s' could not decode cel resource %u",
 				_sourceName.c_str(), resId);

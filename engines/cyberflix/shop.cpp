@@ -24,6 +24,7 @@
 #include "common/file.h"
 #include "common/memstream.h"
 #include "common/path.h"
+#include "common/ptr.h"
 
 #include "cyberflix/shop.h"
 #include "cyberflix/cbx_audio.h" // kMasterHeaderInfoTag
@@ -108,11 +109,10 @@ bool Shop::open(const Common::String &name) {
 	uint32 scriptRes = READ_LE_UINT32(hdr + kMasterScriptOffset);
 	int scriptIdx = resourceIndexById(scriptRes);
 	if (scriptIdx >= 0) {
-		Common::SeekableReadStream *s = _archive.createReadStreamForResource((uint32)scriptIdx);
+		Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)scriptIdx));
 		Common::ScopedPtr<Script> script(new Script());
-		if (s && script->parse(s))
+		if (s && script->parse(s.get()))
 			_script.reset(script.release());
-		delete s;
 	}
 	if (!_script)
 		warning("Cyberflix: shop '%s' script res %u missing", name.c_str(), scriptRes);
@@ -155,11 +155,10 @@ bool Shop::open(const Common::String &name) {
 
 		int sIdx = prop.scriptResId ? resourceIndexById(prop.scriptResId) : -1;
 		if (sIdx >= 0) {
-			Common::SeekableReadStream *s = _archive.createReadStreamForResource((uint32)sIdx);
+			Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)sIdx));
 			Common::SharedPtr<Script> script(new Script());
-			if (s && script->parse(s))
+			if (s && script->parse(s.get()))
 				prop.script = script;
-			delete s;
 		}
 
 		_props.push_back(prop);
@@ -230,12 +229,11 @@ Common::SharedPtr<CelImage> Shop::celResource(uint32 resId) const {
 	if (!width || !height)
 		return Common::SharedPtr<CelImage>();
 
-	Common::SeekableReadStream *s = _archive.createReadStreamForResource((uint32)idx);
+	Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)idx));
 	if (!s)
 		return Common::SharedPtr<CelImage>();
 	Common::SharedPtr<CelImage> cel(new CelImage());
 	bool ok = decodeCel(*s, width, height, *cel);
-	delete s;
 	if (!ok)
 		return Common::SharedPtr<CelImage>();
 

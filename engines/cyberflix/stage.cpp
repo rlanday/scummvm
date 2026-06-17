@@ -24,6 +24,7 @@
 #include "common/file.h"
 #include "common/memstream.h"
 #include "common/path.h"
+#include "common/ptr.h"
 
 #include "cyberflix/stage.h"
 #include "cyberflix/cbx_audio.h" // kMasterHeaderInfoTag
@@ -253,13 +254,12 @@ bool Stage::open(const Common::String &name) {
 		const Archive::Resource &res = _archive.getResource(i);
 		if (res.empty || res.info != Script::kScriptInfoTag)
 			continue;
-		Common::SeekableReadStream *stream = _archive.createReadStreamForResource(i);
+		Common::ScopedPtr<Common::SeekableReadStream> stream(_archive.createReadStreamForResource(i));
 		Common::SharedPtr<Script> script(new Script());
-		if (stream && script->parse(stream))
+		if (stream && script->parse(stream.get()))
 			_scripts[i] = script;
 		else
 			warning("Cyberflix: failed to parse stage '%s' script resource %u", name.c_str(), res.id);
-		delete stream;
 	}
 
 	debug(1, "Cyberflix: opened stage '%s': %ux%u, %u node(s)",

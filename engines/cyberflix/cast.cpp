@@ -24,6 +24,7 @@
 #include "common/file.h"
 #include "common/memstream.h"
 #include "common/path.h"
+#include "common/ptr.h"
 
 #include "cyberflix/cast.h"
 #include "cyberflix/image.h"
@@ -104,11 +105,10 @@ bool Cast::open(const Common::String &name) {
 	uint32 scriptRes = READ_LE_UINT32(hdr + kMasterScriptOffset);
 	int scriptIdx = resourceIndexById(scriptRes);
 	if (scriptIdx >= 0) {
-		Common::SeekableReadStream *s = _archive.createReadStreamForResource((uint32)scriptIdx);
+		Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)scriptIdx));
 		Common::ScopedPtr<Script> script(new Script());
-		if (s && script->parse(s))
+		if (s && script->parse(s.get()))
 			_script.reset(script.release());
-		delete s;
 	}
 	if (!_script)
 		warning("Cyberflix: cast '%s' script res %u missing", name.c_str(), scriptRes);
@@ -157,11 +157,10 @@ bool Cast::open(const Common::String &name) {
 
 		int sIdx = actor->scriptResId ? resourceIndexById(actor->scriptResId) : -1;
 		if (sIdx >= 0) {
-			Common::SeekableReadStream *s = _archive.createReadStreamForResource((uint32)sIdx);
+			Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)sIdx));
 			Common::SharedPtr<Script> script(new Script());
-			if (s && script->parse(s))
+			if (s && script->parse(s.get()))
 				actor->script = script;
-			delete s;
 		}
 
 		if (!actor->name.empty()) {
@@ -269,11 +268,10 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 	const Archive::Resource &fres = _archive.getResource((uint32)fIdx);
 	uint16 w = (uint16)(fres.info >> 16);
 	uint16 h = (uint16)(fres.info & 0xffff);
-	Common::SeekableReadStream *fs = _archive.createReadStreamForResource((uint32)fIdx);
+	Common::ScopedPtr<Common::SeekableReadStream> fs(_archive.createReadStreamForResource((uint32)fIdx));
 	if (!fs)
 		return false;
 	bool ok = decodeCel(*fs, w, h, cel);
-	delete fs;
 	if (!ok) {
 		debug(1, "Cyberflix: renderActor('%s'): cel res %u decode failed",
 				actor.name.c_str(), frameRes);

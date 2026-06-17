@@ -27,6 +27,7 @@
 
 #include "common/system.h"
 #include "common/memstream.h"
+#include "common/ptr.h"
 
 #include "cyberflix/console.h"
 #include "cyberflix/cyberflix.h"
@@ -121,15 +122,14 @@ bool Console::cmdDisasm(int argc, const char **argv) {
 	if (res.info != 0x0FA1)
 		debugPrintf("Note: resource %u has info %#x, not a script (0x0FA1)\n", idx, res.info);
 
-	Common::SeekableReadStream *stream = archive.createReadStreamForResource(idx);
+	Common::ScopedPtr<Common::SeekableReadStream> stream(archive.createReadStreamForResource(idx));
 	if (!stream) {
 		debugPrintf("Resource %u is empty\n", idx);
 		return true;
 	}
 
 	Script script;
-	bool ok = script.parse(stream);
-	delete stream;
+	bool ok = script.parse(stream.get());
 	if (!ok) {
 		debugPrintf("Failed to parse resource %u as a script\n", idx);
 		return true;
@@ -179,15 +179,14 @@ bool Console::cmdVmTrace(int argc, const char **argv) {
 		return true;
 	}
 
-	Common::SeekableReadStream *stream = archive.createReadStreamForResource(idx);
+	Common::ScopedPtr<Common::SeekableReadStream> stream(archive.createReadStreamForResource(idx));
 	if (!stream) {
 		debugPrintf("Resource %u is empty\n", idx);
 		return true;
 	}
 
 	Script script;
-	bool ok = script.parse(stream);
-	delete stream;
+	bool ok = script.parse(stream.get());
 	if (!ok) {
 		debugPrintf("Failed to parse resource %u as a script\n", idx);
 		return true;
@@ -230,15 +229,14 @@ bool Console::cmdVmRun(int argc, const char **argv) {
 		return true;
 	}
 
-	Common::SeekableReadStream *stream = archive.createReadStreamForResource(idx);
+	Common::ScopedPtr<Common::SeekableReadStream> stream(archive.createReadStreamForResource(idx));
 	if (!stream) {
 		debugPrintf("Resource %u is empty\n", idx);
 		return true;
 	}
 
 	Script script;
-	bool ok = script.parse(stream);
-	delete stream;
+	bool ok = script.parse(stream.get());
 	if (!ok) {
 		debugPrintf("Failed to parse resource %u as a script\n", idx);
 		return true;
@@ -293,7 +291,7 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 	uint16 width = (uint16)(res.info >> 16);
 	uint16 height = (uint16)(res.info & 0xffff);
 
-	Common::SeekableReadStream *stream = archive.createReadStreamForResource(idx);
+	Common::ScopedPtr<Common::SeekableReadStream> stream(archive.createReadStreamForResource(idx));
 	if (!stream) {
 		debugPrintf("Resource %u is empty\n", idx);
 		return true;
@@ -301,7 +299,6 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 
 	CelImage cel;
 	bool ok = decodeCel(*stream, width, height, cel);
-	delete stream;
 	if (!ok) {
 		debugPrintf("Resource %u (%ux%u) did not decode as a cel\n", idx, width, height);
 		return true;
