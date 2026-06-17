@@ -99,6 +99,7 @@ public:
 		kMasterViewTopOffset = 0x082,
 		kMasterWidthOffset = 0x084,
 		kMasterHeightOffset = 0x086,
+		kStarTableIdOffset = 0x058,
 		kSetScriptIdOffset = 0x05c,
 		kSceneTableIdOffset = 0x060,
 		kMasterDefaultSceneOffset = 0xa0e,
@@ -124,7 +125,22 @@ public:
 		kViewRecordStride = 0x2e,
 		kViewHeadingOffset = 0x08,
 		kViewPaintingTableOffset = 0x1a,
-		kViewNameOffset = 0x1e
+		kViewNameOffset = 0x1e,
+
+		// SET star table (master +0x58, TI.EXE FUN_00432fc0). The resource is
+		// addressed through the engine-base frame: count @+0, records @+8.
+		kStarTableCountOffset = 0x00,
+		kStarTableRecordsOffset = 0x08,
+		kStarRecordStride = 0x36,
+		kStarPrimaryXOffset = 0x06,
+		kStarPrimaryYOffset = 0x08,
+		kStarPrimaryZOffset = 0x0a,
+		kStarPrimaryNameOffset = 0x0c,
+		kStarSecondaryFlagOffset = 0x1c,
+		kStarSecondaryXOffset = 0x20,
+		kStarSecondaryYOffset = 0x22,
+		kStarSecondaryZOffset = 0x24,
+		kStarSecondaryNameOffset = 0x26
 	};
 
 	/**
@@ -226,6 +242,9 @@ public:
 
 	/** Forward transition resource id for @p viewIdx in @p scene, or 0. */
 	uint32 forwardTransitionForView(uint32 scene, int viewIdx) const;
+
+	/** Resolve a SET star by name to its native world coordinates. */
+	bool starXYZ(const Common::String &name, int16 &x, int16 &y, int16 &z) const;
 
 	/** The set-wide behavior script resource, or null if this set has none. */
 	const Script *setScript() const;
@@ -336,6 +355,7 @@ private:
 	Archive _archive;
 	int _master = -1;       ///< Archive index of the master-header resource.
 	int _sceneTable = -1;   ///< Archive index of the scene-table resource.
+	int _starTable = -1;    ///< Archive index of the SET star-table resource.
 	uint32 _setScriptId = 0;
 	Common::Array<Common::SharedPtr<Script> > _scripts;
 	// Single-entry cache for repeated idle/mouse messages to the same painting.

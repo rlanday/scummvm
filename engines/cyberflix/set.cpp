@@ -253,9 +253,43 @@ int Set::nearestViewForHeading(uint32 scene, int heading) const {
 	return best;
 }
 
+bool Set::starXYZ(const Common::String &name, int16 &x, int16 &y, int16 &z) const {
+	if (_starTable < 0)
+		return false;
+	const byte *table = engineBase((uint32)_starTable);
+	if (!table || table + kStarTableRecordsOffset > _fileData.end())
+		return false;
+	const Archive::Resource &res = _archive.getResource((uint32)_starTable);
+	const uint32 length = res.length + 4;
+	const uint32 count = READ_LE_UINT32(table + kStarTableCountOffset);
+	if ((uint64)count * kStarRecordStride + kStarTableRecordsOffset > length)
+		return false;
+
+	const byte *record = table + kStarTableRecordsOffset;
+	for (uint32 i = 0; i < count; ++i, record += kStarRecordStride) {
+		if (record + kStarRecordStride > _fileData.end())
+			break;
+		if (pascalEqualsIgnoreCase(record + kStarPrimaryNameOffset, _fileData.end(), name)) {
+			x = READ_LE_INT16(record + kStarPrimaryXOffset);
+			y = READ_LE_INT16(record + kStarPrimaryYOffset);
+			z = READ_LE_INT16(record + kStarPrimaryZOffset);
+			return true;
+		}
+		if (READ_LE_UINT32(record + kStarSecondaryFlagOffset) != 0 &&
+				pascalEqualsIgnoreCase(record + kStarSecondaryNameOffset, _fileData.end(), name)) {
+			x = READ_LE_INT16(record + kStarSecondaryXOffset);
+			y = READ_LE_INT16(record + kStarSecondaryYOffset);
+			z = READ_LE_INT16(record + kStarSecondaryZOffset);
+			return true;
+		}
+	}
+	return false;
+}
+
 bool Set::open(const Common::String &name) {
 	_master = -1;
 	_sceneTable = -1;
+	_starTable = -1;
 	_sceneCount = 0;
 	_setScriptId = 0;
 	_scripts.clear();
@@ -321,6 +355,7 @@ bool Set::open(const Common::String &name) {
 	_defaultScene = readPascal(hdr + kMasterDefaultSceneOffset);
 	_defaultView = readPascal(hdr + kMasterDefaultViewOffset);
 	_setScriptId = READ_LE_UINT32(hdr + kSetScriptIdOffset);
+	_starTable = resourceIndexById(READ_LE_UINT32(hdr + kStarTableIdOffset));
 
 	uint32 sceneTableId = READ_LE_UINT32(hdr + kSceneTableIdOffset);
 	_sceneTable = resourceIndexById(sceneTableId);

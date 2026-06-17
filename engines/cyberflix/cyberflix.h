@@ -213,6 +213,7 @@ public:
 	void actorSpeed(const Common::String &name, int speed) override;
 	void actorScale(const Common::String &name, int scale) override;
 	void actorTurn(const Common::String &name, int turn) override;
+	int starXYZ(const Common::String &name, int selector) override;
 	void openShopFile(const Common::String &name) override;
 	void closeShopFile(const Common::String &name) override;
 	void propInstance(const Common::String &source, const Common::String &newName) override;
@@ -386,6 +387,8 @@ private:
 		Common::SharedPtr<Cast::Actor> actor;
 	};
 	ActorRef findActorRef(const Common::String &name);
+	bool resolveActorStar(Cast::Actor &actor);
+	void refreshActorStarPositions();
 
 	/** Currently open puppet archive (TI.EXE DAT_00461200 cluster). */
 	Common::SharedPtr<Puppet> _puppet;

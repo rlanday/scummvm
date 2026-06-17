@@ -1063,6 +1063,10 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() >= 2)
 				return Value::makeInt(_host->calcDeg(args[0].intValue, args[1].intValue));
 			return Value::makeInt(0);
+		case Script::kMethodStarXYZ: // starxyz(name, selector) -> FUN_00435a60/FUN_00432fc0
+			if (args.size() >= 2)
+				return Value::makeInt(_host->starXYZ(args[0].strValue, args[1].intValue));
+			return Value::makeInt(0);
 		case Script::kMethodCalcMod: // calcmod(a, b) -> FUN_004358f0
 			if (args.size() >= 2)
 				return Value::makeInt(_host->calcMod(args[0].intValue, args[1].intValue));

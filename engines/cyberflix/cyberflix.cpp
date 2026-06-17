@@ -982,6 +982,7 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 	debug(1, "Cyberflix: set '%s' open (%u scenes, name '%s', default scene '%s' view '%s')",
 			name.c_str(), _set->sceneCount(), _set->setName().c_str(),
 			_set->defaultScene().c_str(), _set->defaultView().c_str());
+	refreshActorStarPositions();
 
 	// FUN_004307f0: when no scene/view argument is given, the defaults come
 	// from the set's master header (+0xa0e / +0xa1e).
@@ -1768,6 +1769,33 @@ CyberflixEngine::ActorRef CyberflixEngine::findActorRef(const Common::String &na
 	return ref;
 }
 
+bool CyberflixEngine::resolveActorStar(Cast::Actor &actor) {
+	if (!_set || !_set->isOpen() || !actor.setName.equalsIgnoreCase(_set->setName()))
+		return false;
+
+	int16 x = 0, y = 0, z = 0;
+	if (!_set->starXYZ(actor.sceneName, x, y, z))
+		return false;
+
+	if (actor.x != x || actor.y != y || actor.z != z) {
+		actor.x = x;
+		actor.y = y;
+		actor.z = z;
+		_propsDirty = true;
+	}
+	return true;
+}
+
+void CyberflixEngine::refreshActorStarPositions() {
+	if (!_set || !_set->isOpen())
+		return;
+
+	for (uint32 c = 0; c < _casts.size(); ++c) {
+		for (uint32 i = 0; i < _casts[c]->actorCount(); ++i)
+			resolveActorStar(_casts[c]->actor(i));
+	}
+}
+
 void CyberflixEngine::openCastFile(const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
@@ -1780,6 +1808,7 @@ void CyberflixEngine::openCastFile(const Common::String &name) {
 	if (!cast->open(key))
 		return;
 	_casts.push_back(cast);
+	refreshActorStarPositions();
 	_propsDirty = true;
 }
 
@@ -1915,6 +1944,7 @@ Common::String CyberflixEngine::actorStar(const Common::String &name, const Comm
 			ref.actor->sceneName = key;
 			_propsDirty = true;
 		}
+		resolveActorStar(*ref.actor);
 	}
 	return ref.actor->sceneName;
 }
@@ -2050,6 +2080,28 @@ void CyberflixEngine::actorTurn(const Common::String &name, int turn) {
 		return;
 	}
 	ref.actor->turn = turn;
+}
+
+int CyberflixEngine::starXYZ(const Common::String &name, int selector) {
+	if (!_set || !_set->isOpen())
+		return 0;
+
+	int16 x = 0, y = 0, z = 0;
+	if (!_set->starXYZ(name, x, y, z))
+		return 0;
+
+	switch (selector) {
+	case 1:
+		return x;
+	case 2:
+		return y;
+	case 3:
+		return z;
+	case 4:
+		return makePoint(x, y);
+	default:
+		return 0;
+	}
 }
 
 // ---- Shop/prop subsystem (TI.EXE FUN_00428450 and friends) ----------------

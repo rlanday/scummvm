@@ -245,6 +245,7 @@ public:
 		kMethodQuestionDialog   = 0x4E64,
 		kMethodHitTest          = 0x4E66,
 		kMethodCalcDeg          = 0x4E67,
+		kMethodStarXYZ          = 0x4E69,
 		kMethodCurrentSound     = 0x4E6D,
 		kMethodCurrentVoice     = 0x4E6E,
 		kMethodCurrentTheme     = 0x4E6F,

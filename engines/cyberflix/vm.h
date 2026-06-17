@@ -390,6 +390,7 @@ public:
 	virtual void actorSpeed(const Common::String &name, int speed) {}
 	virtual void actorScale(const Common::String &name, int scale) {}
 	virtual void actorTurn(const Common::String &name, int turn) {}
+	virtual int starXYZ(const Common::String &name, int selector) { return 0; }
 
 	/** openshopfile('name.shp'): load a .SHP prop container and dispatch its
 	 *  openshop()/openprop() messages (TI.EXE 0x2f18 FUN_00428450). */
