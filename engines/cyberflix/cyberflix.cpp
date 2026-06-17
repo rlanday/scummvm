@@ -153,6 +153,103 @@ Common::String CyberflixEngine::indexToPuppet(int index) {
 	return _puppetRuntime.indexToPuppet(index);
 }
 
+void CyberflixEngine::refreshActorStarPositions() {
+	_actorRuntime.refreshActorStarPositions(*this);
+}
+
+void CyberflixEngine::openCastFile(const Common::String &name) {
+	_actorRuntime.openCastFile(*this, name);
+}
+
+void CyberflixEngine::closeCastFile(const Common::String &name) {
+	_actorRuntime.closeCastFile(*this, name);
+}
+
+void CyberflixEngine::sendToCast(const Common::String &castName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	_actorRuntime.sendToCast(*this, castName, message, args);
+}
+
+Value CyberflixEngine::sendToCastFx(const Common::String &castName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	return _actorRuntime.sendToCastFx(*this, castName, message, args);
+}
+
+void CyberflixEngine::sendToActor(const Common::String &actorName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	_actorRuntime.sendToActor(*this, actorName, message, args);
+}
+
+Value CyberflixEngine::sendToActorFx(const Common::String &actorName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	return _actorRuntime.sendToActorFx(*this, actorName, message, args);
+}
+
+int CyberflixEngine::countActors() {
+	return _actorRuntime.countActors();
+}
+
+Common::String CyberflixEngine::indexToActor(int index) {
+	return _actorRuntime.indexToActor(index);
+}
+
+bool CyberflixEngine::actorVisible(const Common::String &name, const bool *newVisible) {
+	return _actorRuntime.actorVisible(*this, name, newVisible);
+}
+
+Common::String CyberflixEngine::actorSet(const Common::String &name, const Common::String *newSet) {
+	return _actorRuntime.actorSet(*this, name, newSet);
+}
+
+Common::String CyberflixEngine::actorStar(const Common::String &name, const Common::String *newStar) {
+	return _actorRuntime.actorStar(*this, name, newStar);
+}
+
+Common::String CyberflixEngine::actorPose(const Common::String &name, const Common::String *newPose) {
+	return _actorRuntime.actorPose(*this, name, newPose);
+}
+
+void CyberflixEngine::actorXYZ(const Common::String &name, int x, int y, int z) {
+	_actorRuntime.actorXYZ(*this, name, x, y, z);
+}
+
+int CyberflixEngine::actorXYZ(const Common::String &name, int selector) {
+	return _actorRuntime.actorXYZ(*this, name, selector);
+}
+
+int CyberflixEngine::actorDeg(const Common::String &name, const int *newDeg) {
+	return _actorRuntime.actorDeg(*this, name, newDeg);
+}
+
+int CyberflixEngine::actorValue(const Common::String &name, const int *newValue) {
+	return _actorRuntime.actorValue(name, newValue);
+}
+
+Common::String CyberflixEngine::actorOwner(const Common::String &name,
+		const Common::String *newOwner) {
+	return _actorRuntime.actorOwner(name, newOwner);
+}
+
+void CyberflixEngine::actorZClip(const Common::String &name, int zClip) {
+	_actorRuntime.actorZClip(*this, name, zClip);
+}
+
+void CyberflixEngine::actorSpeed(const Common::String &name, int speed) {
+	_actorRuntime.actorSpeed(name, speed);
+}
+
+void CyberflixEngine::actorScale(const Common::String &name, int scale) {
+	_actorRuntime.actorScale(*this, name, scale);
+}
+
+void CyberflixEngine::actorTurn(const Common::String &name, int turn) {
+	_actorRuntime.actorTurn(name, turn);
+}
+
+int CyberflixEngine::starXYZ(const Common::String &name, int selector) {
+	return _actorRuntime.starXYZ(*this, name, selector);
+}
+
 int CyberflixEngine::getGameType() const {
 	return _gameDescription->gameType;
 }
