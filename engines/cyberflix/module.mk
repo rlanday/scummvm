@@ -7,6 +7,7 @@ MODULE_OBJS = \
 	cyberflix.o \
 	image.o \
 	metaengine.o \
+	movie.o \
 	puppet.o \
 	saveload.o \
 	script.o \
