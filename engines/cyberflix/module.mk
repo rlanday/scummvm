@@ -13,6 +13,7 @@ MODULE_OBJS = \
 	resources/shop.o \
 	resources/stage.o \
 	runtime/actors.o \
+	runtime/loops.o \
 	runtime/movie.o \
 	runtime/paths.o \
 	runtime/presentation.o \
