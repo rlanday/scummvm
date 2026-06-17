@@ -215,6 +215,7 @@ public:
 	void actorTurn(const Common::String &name, int turn) override;
 	void openShopFile(const Common::String &name) override;
 	void closeShopFile(const Common::String &name) override;
+	void propInstance(const Common::String &source, const Common::String &newName) override;
 	void sendToShop(const Common::String &shop, const Common::String &message,
 			const Common::Array<Value> &args) override;
 	Value sendToShopFx(const Common::String &shop, const Common::String &message,
@@ -427,6 +428,8 @@ private:
 	 */
 	void collectScreenProps(Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop);
+	void advancePropPoses();
+	bool hasAnimatedScreenProps() const;
 	void collectWorldProps(Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
 			const Shop::WorldCamera &camera);

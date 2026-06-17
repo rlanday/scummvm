@@ -149,6 +149,8 @@ bool Shop::open(const Common::String &name) {
 		}
 		// Initial view = the first shape's name (record +0x7e <- master +0x6e).
 		prop.shapeName = prop.shapes.empty() ? "none" : prop.shapes[0].name;
+		if (!prop.shapes.empty() && shapePoseCount(prop, prop.shapeName, prop.poseCount))
+			prop.poseIndex = prop.poseCount ? prop.poseCount - 1 : 0;
 
 		int sIdx = prop.scriptResId ? resourceIndexById(prop.scriptResId) : -1;
 		if (sIdx >= 0) {
@@ -173,6 +175,27 @@ Shop::Prop *Shop::findProp(const Common::String &name) {
 		if (_props[i].name == key)
 			return &_props[i];
 	return nullptr;
+}
+
+bool Shop::addPropInstance(const Prop &source, const Common::String &newName) {
+	if (newName.empty())
+		return false;
+	Prop clone = source;
+	clone.name = newName;
+	clone.name.toLowercase();
+	_props.push_back(clone);
+	return true;
+}
+
+void Shop::advancePropPoses() {
+	for (uint32 i = 0; i < _props.size(); ++i) {
+		Prop &prop = _props[i];
+		if (prop.poseCount == 0)
+			continue;
+		prop.poseIndex++;
+		if (prop.poseIndex >= prop.poseCount)
+			prop.poseIndex = 0;
+	}
 }
 
 bool Shop::shapePoseCount(const Prop &prop, const Common::String &shape, uint16 &poseCount) const {
@@ -248,9 +271,7 @@ bool Shop::resolvePropCel(const Prop &prop, int angle, CelImage &cel,
 	if (!poseCount || !cellCount)
 		return false;
 	// Pose id from the pose table; cells store poseId-1 in their id field.
-	uint16 poseIdx = 0; // propview leaves the prop on its shape's last pose
-	if (poseCount > 0)
-		poseIdx = poseCount - 1;
+	uint16 poseIdx = prop.poseIndex < poseCount ? prop.poseIndex : poseCount - 1;
 	uint16 poseId = READ_LE_UINT16(sh + kShapePoseTableOffset + poseIdx * 2);
 
 	const byte *best = nullptr;

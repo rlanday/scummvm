@@ -90,6 +90,8 @@ public:
 		int16 x = 0;                ///< +0x16 anchor H
 		int16 z = 0;                ///< propxyz world Z (world props pending)
 		int16 angle = 0;            ///< +0x18 (propdeg)
+		uint16 poseIndex = 0;       ///< +0x20 current pose-table index
+		uint16 poseCount = 0;       ///< +0x22 pose count for current shape
 		int16 depth = 0;            ///< +0x26 (negative = screen-clipped item)
 		int32 scale = 1000;         ///< +0x28
 		int32 zClip = 0;            ///< propzclip distance (world props pending)
@@ -165,9 +167,11 @@ public:
 	uint32 propCount() const { return _props.size(); }
 	Prop &prop(uint32 i) { return _props[i]; }
 	const Prop &prop(uint32 i) const { return _props[i]; }
+	void advancePropPoses();
 
 	/** Find a prop by case-insensitive name, or nullptr. */
 	Prop *findProp(const Common::String &name);
+	bool addPropInstance(const Prop &source, const Common::String &newName);
 
 	/** True if @p prop's master lists a shape named @p shape (propview's
 	 *  validation, FUN_0042c0c0). Returns its pose count via the shape res. */

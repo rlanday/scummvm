@@ -397,6 +397,7 @@ public:
 
 	/** closeshopfile('name.shp'): remove the shop and its props (0x2f19). */
 	virtual void closeShopFile(const Common::String &name) {}
+	virtual void propInstance(const Common::String &source, const Common::String &newName) {}
 
 	/**
 	 * sendtoshop('file.shp', message(args)): dispatch @p message against the

@@ -975,6 +975,10 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case Script::kMethodCloseShopFile: // closeshopfile('name.shp') -> FUN_0042a7e0
 			_host->closeShopFile(args.empty() ? Common::String() : args[0].strValue);
 			break;
+		case Script::kMethodPropInstance: // propinstance(source, newName) -> FUN_00428940
+			if (args.size() >= 2)
+				_host->propInstance(args[0].strValue, args[1].strValue);
+			break;
 		case Script::kMethodPropVisible: // propvisible(name, flag) -> FUN_00429d00
 			if (args.size() >= 2)
 				_host->propVisible(args[0].strValue, args[1].intValue != 0);

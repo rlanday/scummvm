@@ -218,6 +218,9 @@ public:
 	/** View tag stored on panorama @p angle, or -1 for an in-between frame. */
 	int viewTagAtAngle(uint32 scene, uint32 table, uint32 angle) const;
 
+	/** View index in @p scene closest to @p heading on the 256-unit circle. */
+	int nearestViewForHeading(uint32 scene, int heading) const;
+
 	/** First later panorama angle with a view tag, wrapping cyclically. */
 	int nextTaggedAngle(uint32 scene, uint32 table, int startAngle) const;
 
@@ -317,8 +320,6 @@ private:
 	bool applyFrameResource(uint32 frameId, FrameSequence &seq, FrameImage &out) const;
 	/** Index of the scene whose view-directory resource id is @p viewDirId. */
 	int findSceneByViewDirId(uint32 viewDirId) const;
-	/** View index in @p scene closest to @p heading on the 256-unit circle. */
-	int nearestViewForHeading(uint32 scene, int heading) const;
 	/** Read the Pascal string at @p p (bounded by the file buffer). */
 	Common::String pascalString(const byte *p) const;
 	/** Parsed script resource @p id, or null if missing/not a script. */

@@ -169,6 +169,7 @@ public:
 		kMethodQuit             = 0x2F27,
 		kMethodFlushEvents      = 0x2F29,
 		kMethodPuppetGrab       = 0x2F2A,
+		kMethodPropInstance     = 0x2F2C,
 		kMethodSaveGame         = 0x2F2D,
 		kMethodOpenGame         = 0x2F2E,
 		kMethodDrawString       = 0x2F30,

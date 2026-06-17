@@ -828,6 +828,7 @@ void CyberflixEngine::renderStageNode(int node) {
 	if (_stage->loadStagePalette(rgb) && !paletteIsBlack())
 		programPalette(rgb);
 
+	advancePropPoses();
 	Graphics::Surface *screen = _system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
 	// Stage nodes are full-screen items: the compositor FUN_004436d0 clips
@@ -882,6 +883,7 @@ void CyberflixEngine::repaintDirtyStageRects() {
 		return;
 	}
 
+	advancePropPoses();
 	Common::Array<const Shop::Prop *> draw;
 	Common::Array<const Shop *> drawShop;
 	collectScreenProps(draw, drawShop);
@@ -937,6 +939,19 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 		const Common::String &scene, const Common::String &view) {
 	if (name.empty())
 		return;
+
+	int previousHeading = 0;
+	if (_set && _set->isOpen() && _setScene >= 0) {
+		Set::CameraData cameraData;
+		if (_setTransitionType == kSetTransitionForward && _setTransitionResource != 0) {
+			if (_set->transitionCameraData(_setTransitionResource, _setTransitionFrame, cameraData))
+				previousHeading = cameraData.heading;
+		} else if (_set->cameraData((uint32)_setScene, (uint32)_setTable,
+				(uint32)_setAngle, cameraData)) {
+			previousHeading = cameraData.heading;
+		}
+	}
+
 	Common::ScopedPtr<Set> set(new Set());
 	if (!set->open(name)) {
 		warning("Cyberflix: opensetfile('%s') failed", name.c_str());
@@ -988,6 +1003,17 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 		Common::String activeView;
 		if (!useView.empty()) {
 			int viewIdx = _set->findView((uint32)sceneIdx, useView);
+			if (viewIdx < 0) {
+				// FUN_00433960 preserves the requested view name, but if the
+				// selected scene lacks it, it chooses the view whose authored
+				// heading is closest to the previous camera heading before
+				// calling FUN_004425e0.
+				viewIdx = _set->nearestViewForHeading((uint32)sceneIdx, previousHeading);
+				if (viewIdx >= 0)
+					debug(1, "Cyberflix: opensetfile view '%s' not found in scene '%s', using nearest view '%s'",
+							useView.c_str(), actualScene.c_str(),
+							_set->viewName((uint32)sceneIdx, (uint32)viewIdx).c_str());
+			}
 			int viewAngle = _set->angleForView((uint32)sceneIdx, 0, viewIdx);
 			if (viewAngle >= 0) {
 				angle = viewAngle;
@@ -2085,6 +2111,22 @@ void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw
 	}
 }
 
+void CyberflixEngine::advancePropPoses() {
+	for (uint32 i = 0; i < _shops.size(); ++i)
+		_shops[i]->advancePropPoses();
+}
+
+bool CyberflixEngine::hasAnimatedScreenProps() const {
+	for (uint32 s = 0; s < _shops.size(); ++s) {
+		for (uint32 i = 0; i < _shops[s]->propCount(); ++i) {
+			const Shop::Prop &p = _shops[s]->prop(i);
+			if (p.visible && p.mode == 0 && p.poseCount > 1)
+				return true;
+		}
+	}
+	return false;
+}
+
 void CyberflixEngine::collectWorldProps(Common::Array<const Shop::Prop *> &draw,
 		Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
 		const Shop::WorldCamera &camera) {
@@ -2616,6 +2658,28 @@ void CyberflixEngine::closeShopFile(const Common::String &name) {
 	debug(1, "Cyberflix: closeshopfile('%s'): shop not open", key.c_str());
 }
 
+void CyberflixEngine::propInstance(const Common::String &source, const Common::String &newName) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(source, &shop);
+	if (!prop || !shop) {
+		warning("Cyberflix: propinstance('%s', '%s'): source prop not found",
+				source.c_str(), newName.c_str());
+		return;
+	}
+	if (newName.size() > 15) {
+		warning("Cyberflix: propinstance('%s', '%s'): name too long",
+				source.c_str(), newName.c_str());
+		return;
+	}
+	if (findProp(newName))
+		return;
+
+	if (shop->addPropInstance(*prop, newName)) {
+		debug(1, "Cyberflix: propinstance('%s', '%s')", source.c_str(), newName.c_str());
+		_propsDirty = true;
+	}
+}
+
 void CyberflixEngine::sendToShop(const Common::String &shopName, const Common::String &message,
 		const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtoshop('%s') -> %s(%u args)", shopName.c_str(),
@@ -2746,10 +2810,13 @@ void CyberflixEngine::propView(const Common::String &name, const Common::String 
 	if (shouldLogInterfaceProp(name))
 		debug(1, "Cyberflix: propview('%s', '%s') old='%s'", name.c_str(),
 				key.c_str(), prop->shapeName.c_str());
-	if (prop->shapeName != key) {
+	uint16 newPoseIndex = poseCount ? poseCount - 1 : 0;
+	if (prop->shapeName != key || prop->poseCount != poseCount || prop->poseIndex != newPoseIndex) {
 		Common::Rect oldRect;
 		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 		prop->shapeName = key;
+		prop->poseCount = poseCount;
+		prop->poseIndex = newPoseIndex;
 		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 	}
 }
@@ -3915,6 +3982,8 @@ void CyberflixEngine::forceUpdate() {
 	const bool cursorMoved = pumpCursorMotionEvents();
 	bool presented = false;
 	processScheduledLoops();
+	if (!_propsDirty && isReplacementStage(_stage) && hasAnimatedScreenProps())
+		_propsDirty = true;
 	refreshPropsIfDirty();
 	if (_puppet && _puppet->isOpen() && _puppetVisible) {
 		renderCurrentPuppetFrame(true);
@@ -4501,6 +4570,7 @@ void CyberflixEngine::displaySetFramePixels(const byte *pixels, uint16 width, ui
 	if (!_setVisible || !_set || !_set->isOpen())
 		return;
 
+	advancePropPoses();
 	const FrameImage *stageBg = stageShellFrame();
 	Graphics::Surface *screen = _system->lockScreen();
 	// Base layer: the stage's UI shell (MAIN.STG node 0 — art-deco frame +
