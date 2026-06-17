@@ -53,6 +53,7 @@
 namespace Cyberflix {
 
 class Console;
+class CyberflixVMHost;
 class Script;
 class Stage;
 class Set;
@@ -80,7 +81,7 @@ enum {
 	kScreenHeight = 384
 };
 
-class CyberflixEngine : public Engine, public VMHost {
+class CyberflixEngine : public Engine {
 public:
 	CyberflixEngine(OSystem *syst, const CyberflixGameDescription *gameDesc);
 	~CyberflixEngine() override;
@@ -119,175 +120,175 @@ public:
 	Common::Language getLanguage() const;
 	Common::Platform getPlatform() const;
 
-	// VMHost
-	void playMovie(const Common::String &name) override;
-	void openStageFile(const Common::String &name) override;
-	void closeStageFile() override;
-	void gotoFlat(const Value &flat) override;
-	Common::String currentStage() override;
-	bool stageVisible(const bool *newVisible) override;
-	Common::String currentFlat() override;
-	void sendToStage(const Common::String &message, const Common::Array<Value> &args) override;
-	Value sendToStageFx(const Common::String &message, const Common::Array<Value> &args) override;
-	void sendToBoot(const Common::String &message, const Common::Array<Value> &args) override;
-	Value sendToBootFx(const Common::String &message, const Common::Array<Value> &args) override;
+	// VM adapter delegates
+	void playMovie(const Common::String &name);
+	void openStageFile(const Common::String &name);
+	void closeStageFile();
+	void gotoFlat(const Value &flat);
+	Common::String currentStage();
+	bool stageVisible(const bool *newVisible);
+	Common::String currentFlat();
+	void sendToStage(const Common::String &message, const Common::Array<Value> &args);
+	Value sendToStageFx(const Common::String &message, const Common::Array<Value> &args);
+	void sendToBoot(const Common::String &message, const Common::Array<Value> &args);
+	Value sendToBootFx(const Common::String &message, const Common::Array<Value> &args);
 	void sendToFlat(const Common::String &flat, const Common::String &message,
-			const Common::Array<Value> &args) override;
+			const Common::Array<Value> &args);
 	Value sendToFlatFx(const Common::String &flat, const Common::String &message,
-			const Common::Array<Value> &args) override;
+			const Common::Array<Value> &args);
 	void sendToButton(const Common::String &flat, const Common::String &button,
-			const Common::String &message, const Common::Array<Value> &args) override;
+			const Common::String &message, const Common::Array<Value> &args);
 	Value sendToButtonFx(const Common::String &flat, const Common::String &button,
-			const Common::String &message, const Common::Array<Value> &args) override;
+			const Common::String &message, const Common::Array<Value> &args);
 	void openSetFile(const Common::String &name,
 			const Common::String &scene = Common::String(),
-			const Common::String &view = Common::String()) override;
-	void closeSetFile() override;
-	Common::String currentSet() override;
-	Value sendToSetFx(const Common::String &message, const Common::Array<Value> &args) override;
-	Common::String currentView() override;
-	Common::String currentScene(const Common::String *target) override;
-	bool setVisible(const bool *newVisible) override;
-	Common::String currentPuppet() override;
-	void openPuppetFile(const Common::String &name) override;
-	void closePuppetFile() override;
+			const Common::String &view = Common::String());
+	void closeSetFile();
+	Common::String currentSet();
+	Value sendToSetFx(const Common::String &message, const Common::Array<Value> &args);
+	Common::String currentView();
+	Common::String currentScene(const Common::String *target);
+	bool setVisible(const bool *newVisible);
+	Common::String currentPuppet();
+	void openPuppetFile(const Common::String &name);
+	void closePuppetFile();
 	void sendToPuppet(const Common::String &puppet, const Common::String &message,
-			const Common::Array<Value> &args) override;
+			const Common::Array<Value> &args);
 	Value sendToPuppetFx(const Common::String &puppet, const Common::String &message,
-			const Common::Array<Value> &args) override;
-	void puppetScript(const Common::String &name) override;
-	void puppetClear() override;
-	void puppetSpeak(const Common::String &name, int mode) override;
-	void puppetBevel(const Common::String &name, int mode) override;
-	void puppetGrab(bool enabled) override;
-	int puppetEvent(int timeout) override;
-	Common::String puppetBase(const Common::String *newBase) override;
-	bool puppetVisible(const bool *newVisible) override;
-	int puppetParam(int selector, const int *newValue) override;
-	int countPuppets() override;
-	Common::String indexToPuppet(int index) override;
+			const Common::Array<Value> &args);
+	void puppetScript(const Common::String &name);
+	void puppetClear();
+	void puppetSpeak(const Common::String &name, int mode);
+	void puppetBevel(const Common::String &name, int mode);
+	void puppetGrab(bool enabled);
+	int puppetEvent(int timeout);
+	Common::String puppetBase(const Common::String *newBase);
+	bool puppetVisible(const bool *newVisible);
+	int puppetParam(int selector, const int *newValue);
+	int countPuppets();
+	Common::String indexToPuppet(int index);
 	void sendToScene(const Common::String &scene, const Common::String &message = Common::String(),
-			const Common::Array<Value> &args = Common::Array<Value>()) override;
+			const Common::Array<Value> &args = Common::Array<Value>());
 	Value sendToSceneFx(const Common::String &scene, const Common::String &message,
-			const Common::Array<Value> &args) override;
+			const Common::Array<Value> &args);
 	void sendToPainting(const Common::String &scene, const Common::String &view,
 			const Common::String &painting, const Common::String &message,
-			const Common::Array<Value> &args) override;
+			const Common::Array<Value> &args);
 	Value sendToPaintingFx(const Common::String &scene, const Common::String &view,
 			const Common::String &painting, const Common::String &message,
-			const Common::Array<Value> &args) override;
-	int countPaintings(const Common::String &scene, const Common::String &view) override;
+			const Common::Array<Value> &args);
+	int countPaintings(const Common::String &scene, const Common::String &view);
 	Common::String indexToPainting(const Common::String &scene,
-			const Common::String &view, int index) override;
-	bool roadAhead(const Common::String &scene, const Common::String &view) override;
-	bool actionFrame(int n) override;
-	int randomNumber(int n) override;
-	int frameRate(const int *newRate) override;
-	void setClut(const Common::String &name) override;
-	void blackScreen() override;
-	void forceUpdate() override;
-	void message(const Common::String &text) override;
-	void flushEvents() override;
-	void drawString(const Common::String &text, int32 packedPoint, int color, int size) override;
-	void fadePalette(const Common::String &target, int steps, bool toBlack) override;
-	void setVisualEffect(uint16 effect, int duration) override;
+			const Common::String &view, int index);
+	bool roadAhead(const Common::String &scene, const Common::String &view);
+	bool actionFrame(int n);
+	int randomNumber(int n);
+	int frameRate(const int *newRate);
+	void setClut(const Common::String &name);
+	void blackScreen();
+	void forceUpdate();
+	void message(const Common::String &text);
+	void flushEvents();
+	void drawString(const Common::String &text, int32 packedPoint, int color, int size);
+	void fadePalette(const Common::String &target, int steps, bool toBlack);
+	void setVisualEffect(uint16 effect, int duration);
 	void makeLoop(const Common::String &kind, const Common::String &target,
-			const Common::String &message, int delay) override;
-	void stopLoop(const Common::String &kind, const Common::String &target) override;
-	void pauseLoop(const Common::String &kind, bool paused) override;
-	void makeCricket(const Common::String &name) override;
-	void stopCricket(const Common::String &name) override;
-	void pauseCricket(const Common::String &kind, bool paused) override;
-	void openTrackFile(const Common::String &name) override;
-	void closeTrackFile(const Common::String &name) override;
-	void playTheme(const Common::String &name) override;
-	void haltTheme() override;
-	void playSound(const Common::String &name, int mode) override;
-	void playVoice(const Common::String &name) override;
-	void haltSound(int which) override;
-	void haltVoice() override;
-	void themeVolume(const Common::String &name, int volume) override;
-	int waveVolume(const int *newLevel) override;
-	int soundVolume(const Common::String &name, const int *newVolume) override;
-	Common::String currentTheme(int which) override;
-	Common::String currentSound(int which) override;
-	Common::String currentVoice() override;
+			const Common::String &message, int delay);
+	void stopLoop(const Common::String &kind, const Common::String &target);
+	void pauseLoop(const Common::String &kind, bool paused);
+	void makeCricket(const Common::String &name);
+	void stopCricket(const Common::String &name);
+	void pauseCricket(const Common::String &kind, bool paused);
+	void openTrackFile(const Common::String &name);
+	void closeTrackFile(const Common::String &name);
+	void playTheme(const Common::String &name);
+	void haltTheme();
+	void playSound(const Common::String &name, int mode);
+	void playVoice(const Common::String &name);
+	void haltSound(int which);
+	void haltVoice();
+	void themeVolume(const Common::String &name, int volume);
+	int waveVolume(const int *newLevel);
+	int soundVolume(const Common::String &name, const int *newVolume);
+	Common::String currentTheme(int which);
+	Common::String currentSound(int which);
+	Common::String currentVoice();
 	bool keyAborts(const Common::String *resource, const Common::String *key,
-			const bool *enabled) override;
-	bool optionKey() override;
-	Common::String pathSlot(int slot, const Common::String *newPath) override;
-	Common::String currentCD(const Common::String *requested) override;
-	void openCastFile(const Common::String &name) override;
-	void closeCastFile(const Common::String &name) override;
+			const bool *enabled);
+	bool optionKey();
+	Common::String pathSlot(int slot, const Common::String *newPath);
+	Common::String currentCD(const Common::String *requested);
+	void openCastFile(const Common::String &name);
+	void closeCastFile(const Common::String &name);
 	void sendToCast(const Common::String &cast, const Common::String &message,
-			const Common::Array<Value> &args) override;
+			const Common::Array<Value> &args);
 	Value sendToCastFx(const Common::String &cast, const Common::String &message,
-			const Common::Array<Value> &args) override;
+			const Common::Array<Value> &args);
 	void sendToActor(const Common::String &actor, const Common::String &message,
-			const Common::Array<Value> &args) override;
+			const Common::Array<Value> &args);
 	Value sendToActorFx(const Common::String &actor, const Common::String &message,
-			const Common::Array<Value> &args) override;
-	int countActors() override;
-	Common::String indexToActor(int index) override;
-	bool actorVisible(const Common::String &name, const bool *newVisible) override;
-	Common::String actorSet(const Common::String &name, const Common::String *newSet) override;
-	Common::String actorStar(const Common::String &name, const Common::String *newStar) override;
-	Common::String actorPose(const Common::String &name, const Common::String *newPose) override;
-	void actorXYZ(const Common::String &name, int x, int y, int z) override;
-	int actorXYZ(const Common::String &name, int selector) override;
-	int actorDeg(const Common::String &name, const int *newDeg) override;
-	int actorValue(const Common::String &name, const int *newValue) override;
-	Common::String actorOwner(const Common::String &name, const Common::String *newOwner) override;
-	void actorZClip(const Common::String &name, int zClip) override;
-	void actorSpeed(const Common::String &name, int speed) override;
-	void actorScale(const Common::String &name, int scale) override;
-	void actorTurn(const Common::String &name, int turn) override;
-	int starXYZ(const Common::String &name, int selector) override;
-	void openShopFile(const Common::String &name) override;
-	void closeShopFile(const Common::String &name) override;
-	void propInstance(const Common::String &source, const Common::String &newName) override;
+			const Common::Array<Value> &args);
+	int countActors();
+	Common::String indexToActor(int index);
+	bool actorVisible(const Common::String &name, const bool *newVisible);
+	Common::String actorSet(const Common::String &name, const Common::String *newSet);
+	Common::String actorStar(const Common::String &name, const Common::String *newStar);
+	Common::String actorPose(const Common::String &name, const Common::String *newPose);
+	void actorXYZ(const Common::String &name, int x, int y, int z);
+	int actorXYZ(const Common::String &name, int selector);
+	int actorDeg(const Common::String &name, const int *newDeg);
+	int actorValue(const Common::String &name, const int *newValue);
+	Common::String actorOwner(const Common::String &name, const Common::String *newOwner);
+	void actorZClip(const Common::String &name, int zClip);
+	void actorSpeed(const Common::String &name, int speed);
+	void actorScale(const Common::String &name, int scale);
+	void actorTurn(const Common::String &name, int turn);
+	int starXYZ(const Common::String &name, int selector);
+	void openShopFile(const Common::String &name);
+	void closeShopFile(const Common::String &name);
+	void propInstance(const Common::String &source, const Common::String &newName);
 	void sendToShop(const Common::String &shop, const Common::String &message,
-			const Common::Array<Value> &args) override;
+			const Common::Array<Value> &args);
 	Value sendToShopFx(const Common::String &shop, const Common::String &message,
-			const Common::Array<Value> &args) override;
+			const Common::Array<Value> &args);
 	void sendToProp(const Common::String &prop, const Common::String &message,
-			const Common::Array<Value> &args) override;
+			const Common::Array<Value> &args);
 	Value sendToPropFx(const Common::String &prop, const Common::String &message,
-			const Common::Array<Value> &args) override;
-	bool propVisible(const Common::String &name) override;
-	void propVisible(const Common::String &name, bool visible) override;
-	Common::String propView(const Common::String &name) override;
-	void propView(const Common::String &name, const Common::String &shape) override;
-	void propSet(const Common::String &name, const Common::String &setName) override;
-	void propXYZ(const Common::String &name, int x, int y, int z) override;
-	int propXY(const Common::String &name, int selector) override;
-	void setPropXY(const Common::String &name, int x, int y) override;
-	void propScale(const Common::String &name, int scale) override;
-	void propZClip(const Common::String &name, int dist) override;
-	void propDist(const Common::String &name, int dist) override;
-	int propDeg(const Common::String &name, const int *newDeg) override;
-	Common::String propOwner(const Common::String &name, const Common::String *newOwner) override;
-	int propValue(const Common::String &name, const int *newValue) override;
-	int countProps() override;
-	Common::String indexToProp(int index) override;
+			const Common::Array<Value> &args);
+	bool propVisible(const Common::String &name);
+	void propVisible(const Common::String &name, bool visible);
+	Common::String propView(const Common::String &name);
+	void propView(const Common::String &name, const Common::String &shape);
+	void propSet(const Common::String &name, const Common::String &setName);
+	void propXYZ(const Common::String &name, int x, int y, int z);
+	int propXY(const Common::String &name, int selector);
+	void setPropXY(const Common::String &name, int x, int y);
+	void propScale(const Common::String &name, int scale);
+	void propZClip(const Common::String &name, int dist);
+	void propDist(const Common::String &name, int dist);
+	int propDeg(const Common::String &name, const int *newDeg);
+	Common::String propOwner(const Common::String &name, const Common::String *newOwner);
+	int propValue(const Common::String &name, const int *newValue);
+	int countProps();
+	Common::String indexToProp(int index);
 	bool pointInButton(const Common::String &flat,
-			const Common::String &button, int32 packedPoint) override;
+			const Common::String &button, int32 packedPoint);
 	bool pointInPainting(const Common::String &scene, const Common::String &view,
-			const Common::String &painting, int32 packedPoint) override;
-	Common::String hitTest(int32 packedPoint) override;
-	Common::String hitTestResult() override;
-	int32 mousePoint() override;
-	int32 makePoint(int x, int y) override;
-	bool buttonDown() override;
-	bool stillDown() override;
-	int tick() override;
-	int calcDeg(int32 a, int32 b) override;
-	int calcMod(int a, int b) override;
-	void setCursorResource(const Common::String &resourceName) override;
-	void saveGame(const Common::String &signature) override;
-	void openGame(const Common::String &signature) override;
-	bool questionDialog(const Common::String &message) override;
-	void requestQuit() override;
+			const Common::String &painting, int32 packedPoint);
+	Common::String hitTest(int32 packedPoint);
+	Common::String hitTestResult();
+	int32 mousePoint();
+	int32 makePoint(int x, int y);
+	bool buttonDown();
+	bool stillDown();
+	int tick();
+	int calcDeg(int32 a, int32 b);
+	int calcMod(int a, int b);
+	void setCursorResource(const Common::String &resourceName);
+	void saveGame(const Common::String &signature);
+	void openGame(const Common::String &signature);
+	bool questionDialog(const Common::String &message);
+	void requestQuit();
 
 private:
 	friend class AudioRuntime;
@@ -339,6 +340,7 @@ private:
 	const CyberflixGameDescription *_gameDescription;
 	Common::RandomSource _rnd;
 	Console *_console; ///< Owned by the engine framework's debugger, not by us.
+	Common::ScopedPtr<CyberflixVMHost> _vmHost;
 
 	CursorRuntime _cursorRuntime;
 
