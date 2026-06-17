@@ -79,6 +79,80 @@ CyberflixEngine::~CyberflixEngine() {
 	// _exe, _cursorCache (SharedPtr values) and _stage free themselves.
 }
 
+Common::String CyberflixEngine::currentPuppet() {
+	return _puppetRuntime.currentPuppet();
+}
+
+void CyberflixEngine::openPuppetFile(const Common::String &name) {
+	_puppetRuntime.openPuppetFile(name);
+}
+
+void CyberflixEngine::closePuppetFile() {
+	_puppetRuntime.closePuppetFile(*this);
+}
+
+void CyberflixEngine::sendToPuppet(const Common::String &puppetName,
+		const Common::String &message, const Common::Array<Value> &args) {
+	_puppetRuntime.sendToPuppet(*this, puppetName, message, args);
+}
+
+Value CyberflixEngine::sendToPuppetFx(const Common::String &puppetName,
+		const Common::String &message, const Common::Array<Value> &args) {
+	return _puppetRuntime.sendToPuppetFx(*this, puppetName, message, args);
+}
+
+void CyberflixEngine::puppetScript(const Common::String &name) {
+	_puppetRuntime.puppetScript(name);
+}
+
+void CyberflixEngine::puppetClear() {
+	_puppetRuntime.puppetClear(*this);
+}
+
+void CyberflixEngine::puppetSpeak(const Common::String &name, int mode) {
+	_puppetRuntime.puppetSpeak(*this, name, mode);
+}
+
+void CyberflixEngine::puppetBevel(const Common::String &name, int mode) {
+	_puppetRuntime.puppetBevel(*this, name, mode);
+}
+
+void CyberflixEngine::puppetGrab(bool enabled) {
+	_puppetRuntime.puppetGrab(enabled);
+}
+
+int CyberflixEngine::puppetEvent(int timeout) {
+	return _puppetRuntime.puppetEvent(*this, timeout);
+}
+
+Common::String CyberflixEngine::puppetBase(const Common::String *newBase) {
+	return _puppetRuntime.puppetBase(newBase);
+}
+
+bool CyberflixEngine::puppetVisible(const bool *newVisible) {
+	return _puppetRuntime.puppetVisible(*this, newVisible);
+}
+
+bool CyberflixEngine::renderCurrentPuppetFrame(bool present) {
+	return _puppetRuntime.renderCurrentFrame(*this, present);
+}
+
+const Graphics::Font *CyberflixEngine::textFont(int size) {
+	return _puppetRuntime.textFont(size);
+}
+
+int CyberflixEngine::puppetParam(int selector, const int *newValue) {
+	return _puppetRuntime.puppetParam(selector, newValue);
+}
+
+int CyberflixEngine::countPuppets() {
+	return _puppetRuntime.countPuppets();
+}
+
+Common::String CyberflixEngine::indexToPuppet(int index) {
+	return _puppetRuntime.indexToPuppet(index);
+}
+
 int CyberflixEngine::getGameType() const {
 	return _gameDescription->gameType;
 }
@@ -869,7 +943,7 @@ void CyberflixEngine::forceUpdate() {
 	if (!_propsDirty && isReplacementStage(_stage) && hasAnimatedScreenProps())
 		_propsDirty = true;
 	refreshPropsIfDirty();
-	if (_puppet && _puppet->isOpen() && _puppetVisible) {
+	if (_puppetRuntime.isVisible()) {
 		renderCurrentPuppetFrame(true);
 		_screenUpdatePending = false;
 		_framePacingRuntime.noteForceUpdatePresented(true);

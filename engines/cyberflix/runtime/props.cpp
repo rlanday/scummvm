@@ -592,7 +592,7 @@ void CyberflixEngine::refreshPropsIfDirty() {
 	// props are picked up by the next renderSetScene.
 	if (!_propsDirty)
 		return;
-	if (_puppet && _puppet->isOpen() && _puppetVisible) {
+	if (_puppetRuntime.isVisible()) {
 		// Native sendtoprop/sendtoshop dispatch does not repaint immediately.
 		// The next forceupdate() takes the puppet compositor branch, so keep
 		// SET prop dirtiness queued until the puppet is hidden or closed.

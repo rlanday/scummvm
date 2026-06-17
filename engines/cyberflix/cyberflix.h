@@ -39,6 +39,7 @@
 #include "cyberflix/runtime/cursor.h"
 #include "cyberflix/runtime/loops.h"
 #include "cyberflix/runtime/paths.h"
+#include "cyberflix/runtime/puppet_runtime.h"
 #include "cyberflix/runtime/timing.h"
 #include "cyberflix/shop.h"
 #include "cyberflix/vm.h"
@@ -264,6 +265,7 @@ public:
 private:
 	friend class ActorRuntime;
 	friend class LoopRuntime;
+	friend class PuppetRuntime;
 
 	/**
 	 * Special-case the boot script: excise its CD presence check so the game
@@ -379,33 +381,9 @@ private:
 	ActorRuntime _actorRuntime;
 	void refreshActorStarPositions();
 
-	/** Currently open puppet archive (TI.EXE DAT_00461200 cluster). */
-	Common::SharedPtr<Puppet> _puppet;
-	Common::String _puppetBase;
-	Common::String _puppetCurrentAction;
-	uint32 _puppetCurrentFrame = 0;
-	bool _puppetVisible = false;
-	bool _puppetGrab = false;
-	int16 _puppetParams[10] = { 0, 0x80, 0xfa, 0xfb, 0x378, 0x0c, 0, 0, 2, 8 };
-	Audio::SoundHandle _puppetSpeechHandle;
-	struct PuppetBevelOption {
-		Common::String text;
-		int id = 0;
-		Common::Rect rect;
-	};
-	Common::Array<PuppetBevelOption> _puppetBevels;
-	Common::ScopedPtr<Graphics::Font> _nativeTextFont;
-	int _nativeTextFontSize = 0;
-	bool _nativeTextFontAntialiasing = false;
-	const Puppet::ActionEntry *currentPuppetAction() const;
+	PuppetRuntime _puppetRuntime;
 	const Graphics::Font *textFont(int size);
-	bool capturePuppetGrabBackdrop(Common::Array<byte> &backdrop);
-	bool paintPuppetGrabBackdrop(Graphics::Surface &screen, const Common::Array<byte> *cachedBackdrop);
-	bool renderPuppetFrame(const Puppet::ActionEntry &action, uint32 frameIndex,
-			bool present, const Common::Array<byte> *cachedBackdrop = nullptr);
 	bool renderCurrentPuppetFrame(bool present);
-	void renderPuppetBevels(bool present);
-	void playPuppetAction(const Puppet::ActionEntry &action);
 
 	/** Find an open shop by (case-insensitive) file name, or nullptr. */
 	Shop *findShop(const Common::String &name);

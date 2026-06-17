@@ -56,9 +56,9 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 	if (key == "stage")
 		return _stage && _stage->isOpen() && _stage->loadStagePalette(rgb);
 	if (key == "puppet") {
-		if (!_puppet || !_puppet->isOpen() || !_puppet->loadPuppetPalette(rgb))
+		if (!_puppetRuntime.loadPalette(rgb))
 			return false;
-		if (_puppetGrab) {
+		if (_puppetRuntime.grabEnabled()) {
 			byte backdrop[256 * 3];
 			memset(backdrop, 0, sizeof(backdrop));
 			bool haveBackdrop = false;
@@ -67,8 +67,9 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 			else if (_stage && _stage->isOpen())
 				haveBackdrop = _stage->loadStagePalette(backdrop);
 			if (haveBackdrop) {
-				int first = CLIP<int>(_puppetParams[0], 0, 256);
-				int last = CLIP<int>(_puppetParams[1], 0, 256);
+				const int16 *params = _puppetRuntime.params();
+				int first = CLIP<int>(params[0], 0, 256);
+				int last = CLIP<int>(params[1], 0, 256);
 				if (last > first)
 					memcpy(rgb + first * 3, backdrop + first * 3, (last - first) * 3);
 			}
@@ -243,7 +244,7 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 		duration = 1000;
 
 	refreshPropsIfDirty();
-	if (_puppet && _puppet->isOpen() && _puppetVisible) {
+	if (_puppetRuntime.isVisible()) {
 		renderCurrentPuppetFrame(false);
 	} else if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
 		if (_setTransitionType != kSetTransitionNone)

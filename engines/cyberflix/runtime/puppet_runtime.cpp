@@ -39,13 +39,40 @@
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/puppet.h"
 #include "cyberflix/runtime/graphics_helpers.h"
+#include "cyberflix/runtime/puppet_runtime.h"
 #include "cyberflix/set.h"
 #include "cyberflix/stage.h"
 
 namespace Cyberflix {
 
-Common::String CyberflixEngine::currentPuppet() {
-	return (_puppet && _puppet->isOpen()) ? _puppet->sourceName() : Common::String("none");
+PuppetRuntime::~PuppetRuntime() {
+}
+
+Common::String PuppetRuntime::currentPuppet() const {
+	return isOpen() ? _puppet->sourceName() : Common::String("none");
+}
+
+bool PuppetRuntime::loadPalette(byte (&rgb)[256 * 3]) const {
+	return isOpen() && _puppet->loadPuppetPalette(rgb);
+}
+
+void PuppetRuntime::open(const Common::SharedPtr<Puppet> &puppet) {
+	_puppet = puppet;
+	_visible = true; // FUN_00447470 sets DAT_00461202 = 1.
+	_currentAction.clear();
+	_currentFrame = 0;
+	_bevels.clear();
+}
+
+void PuppetRuntime::close(Audio::Mixer *mixer) {
+	if (mixer)
+		mixer->stopHandle(_speechHandle);
+	_puppet.reset();
+	_visible = false;
+	_base.clear();
+	_currentAction.clear();
+	_currentFrame = 0;
+	_bevels.clear();
 }
 
 // ---- Puppet subsystem (TI.EXE FUN_004473c0 and friends) --------------------
@@ -54,10 +81,10 @@ Common::String CyberflixEngine::currentPuppet() {
 // compositor branch (FUN_00448a60), speech runner (FUN_00447ce0/FUN_00448b60),
 // and bevel queue/event path (FUN_00447b30/FUN_00449370/FUN_00449e40).
 
-void CyberflixEngine::openPuppetFile(const Common::String &name) {
+void PuppetRuntime::openPuppetFile(const Common::String &name) {
 	if (name.empty())
 		return;
-	if (_puppet && _puppet->isOpen()) {
+	if (isOpen()) {
 		warning("Cyberflix: openpuppetfile('%s'): puppet already open", name.c_str());
 		return;
 	}
@@ -68,34 +95,24 @@ void CyberflixEngine::openPuppetFile(const Common::String &name) {
 	if (!puppet->open(key))
 		return;
 
-	_puppet = puppet;
-	_puppetVisible = true; // FUN_00447470 sets DAT_00461202 = 1.
-	_puppetCurrentAction.clear();
-	_puppetCurrentFrame = 0;
-	_puppetBevels.clear();
-	debug(1, "Cyberflix: puppet '%s' open", _puppet->sourceName().c_str());
+	open(puppet);
+	debug(1, "Cyberflix: puppet '%s' open", puppet->sourceName().c_str());
 }
 
-void CyberflixEngine::closePuppetFile() {
-	if (!_puppet || !_puppet->isOpen()) {
+void PuppetRuntime::closePuppetFile(CyberflixEngine &engine) {
+	if (!isOpen()) {
 		warning("Cyberflix: closepuppetfile(): no puppet open");
 		return;
 	}
 	debug(1, "Cyberflix: puppet '%s' closed", _puppet->sourceName().c_str());
-	_mixer->stopHandle(_puppetSpeechHandle);
-	_puppet.reset();
-	_puppetVisible = false;
-	_puppetBase.clear();
-	_puppetCurrentAction.clear();
-	_puppetCurrentFrame = 0;
-	_puppetBevels.clear();
+	close(engine._mixer);
 }
 
-void CyberflixEngine::sendToPuppet(const Common::String &puppetName,
+void PuppetRuntime::sendToPuppet(CyberflixEngine &engine, const Common::String &puppetName,
 		const Common::String &message, const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtopuppet('%s') -> %s(%u args)", puppetName.c_str(),
 			message.c_str(), args.size());
-	if (!_puppet || !_puppet->isOpen()) {
+	if (!isOpen()) {
 		warning("Cyberflix: sendtopuppet('%s'): no puppet open", puppetName.c_str());
 		return;
 	}
@@ -109,16 +126,16 @@ void CyberflixEngine::sendToPuppet(const Common::String &puppetName,
 	// PUP script lookups are immutable while the puppet file is open. The hot
 	// Smethels path repeatedly dispatches one-scope puppet messages, so use the
 	// fixed helper instead of building a transient scope-chain array each time.
-	dispatchWithScopes(script.get(), nullptr, _puppet->sourceName(), Common::String(),
+	engine.dispatchWithScopes(script.get(), nullptr, _puppet->sourceName(), Common::String(),
 			message, args, "puppet");
-	refreshPropsIfDirty();
+	engine.refreshPropsIfDirty();
 }
 
-Value CyberflixEngine::sendToPuppetFx(const Common::String &puppetName,
+Value PuppetRuntime::sendToPuppetFx(CyberflixEngine &engine, const Common::String &puppetName,
 		const Common::String &message, const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtopuppetfx('%s') -> %s(%u args)", puppetName.c_str(),
 			message.c_str(), args.size());
-	if (!_puppet || !_puppet->isOpen()) {
+	if (!isOpen()) {
 		warning("Cyberflix: sendtopuppetfx('%s'): no puppet open", puppetName.c_str());
 		return Value();
 	}
@@ -129,12 +146,12 @@ Value CyberflixEngine::sendToPuppetFx(const Common::String &puppetName,
 		return Value();
 	}
 
-	return dispatchWithScopesValue(script.get(), nullptr, _puppet->sourceName(),
+	return engine.dispatchWithScopesValue(script.get(), nullptr, _puppet->sourceName(),
 			Common::String(), message, args, "puppetfx");
 }
 
-void CyberflixEngine::puppetScript(const Common::String &name) {
-	if (!_puppet || !_puppet->isOpen()) {
+void PuppetRuntime::puppetScript(const Common::String &name) {
+	if (!isOpen()) {
 		warning("Cyberflix: puppetscript('%s'): no puppet open", name.c_str());
 		return;
 	}
@@ -145,18 +162,18 @@ void CyberflixEngine::puppetScript(const Common::String &name) {
 	debug(1, "Cyberflix: puppetscript('%s')", name.c_str());
 }
 
-void CyberflixEngine::puppetClear() {
-	if (!_puppet || !_puppet->isOpen()) {
+void PuppetRuntime::puppetClear(CyberflixEngine &engine) {
+	if (!isOpen()) {
 		warning("Cyberflix: puppetclear(): no puppet open");
 		return;
 	}
-	_puppetBevels.clear();
-	renderCurrentPuppetFrame(true);
+	_bevels.clear();
+	renderCurrentFrame(engine, true);
 	debug(1, "Cyberflix: puppetclear()");
 }
 
-void CyberflixEngine::puppetSpeak(const Common::String &name, int mode) {
-	if (!_puppet || !_puppet->isOpen() || !_puppetVisible) {
+void PuppetRuntime::puppetSpeak(CyberflixEngine &engine, const Common::String &name, int mode) {
+	if (!isVisible()) {
 		warning("Cyberflix: puppetspeak('%s'): no visible puppet", name.c_str());
 		return;
 	}
@@ -166,125 +183,125 @@ void CyberflixEngine::puppetSpeak(const Common::String &name, int mode) {
 		return;
 	}
 	debug(1, "Cyberflix: puppetspeak('%s', %d)", name.c_str(), mode);
-	playPuppetAction(*action);
+	playAction(engine, *action);
 }
 
-void CyberflixEngine::puppetBevel(const Common::String &name, int mode) {
-	if (!_puppet || !_puppet->isOpen() || !_puppetVisible) {
+void PuppetRuntime::puppetBevel(CyberflixEngine &engine, const Common::String &name, int mode) {
+	if (!isVisible()) {
 		warning("Cyberflix: puppetbevel('%s'): no visible puppet", name.c_str());
 		return;
 	}
-	PuppetBevelOption option;
+	BevelOption option;
 	option.text = name;
 	option.id = mode;
-	const int top = kScreenHeight + ((int)_puppetBevels.size() - 5) * 24;
+	const int top = kScreenHeight + ((int)_bevels.size() - 5) * 24;
 	option.rect = Common::Rect(0, top, kScreenWidth, top + 24);
-	_puppetBevels.push_back(option);
-	renderPuppetBevels(true);
+	_bevels.push_back(option);
+	renderBevels(engine, true);
 	debug(1, "Cyberflix: puppetbevel('%s', %d)", name.c_str(), mode);
 }
 
-void CyberflixEngine::puppetGrab(bool enabled) {
-	_puppetGrab = enabled;
+void PuppetRuntime::puppetGrab(bool enabled) {
+	_grab = enabled;
 	debug(1, "Cyberflix: puppetgrab(%s)", enabled ? "true" : "false");
 }
 
-int CyberflixEngine::puppetEvent(int timeout) {
-	if (!_puppet || !_puppet->isOpen() || !_puppetVisible) {
+int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
+	if (!isVisible()) {
 		warning("Cyberflix: puppetevent(%d): no visible puppet", timeout);
 		return -1;
 	}
-	renderCurrentPuppetFrame(true);
-	if (_puppetBevels.empty())
+	renderCurrentFrame(engine, true);
+	if (_bevels.empty())
 		return -1;
 
-	setGameCursor("CURS.ARROW");
+	engine.setGameCursor("CURS.ARROW");
 	CursorMan.showMouse(true);
 	int hoverState = -1;
-	const uint32 start = _system->getMillis();
+	const uint32 start = engine._system->getMillis();
 	Common::Event event;
 	for (;;) {
-		if (shouldQuit())
+		if (engine.shouldQuit())
 			return -1;
-		if (timeout >= 0 && _system->getMillis() - start >= (uint32)timeout)
+		if (timeout >= 0 && engine._system->getMillis() - start >= (uint32)timeout)
 			return -1;
 
-		Common::Point mouse = _eventMan->getMousePos();
+		Common::Point mouse = engine._eventMan->getMousePos();
 		int hover = 0;
-		for (uint i = 0; i < _puppetBevels.size(); ++i) {
-			if (_puppetBevels[i].rect.contains(mouse)) {
+		for (uint i = 0; i < _bevels.size(); ++i) {
+			if (_bevels[i].rect.contains(mouse)) {
 				hover = 1;
 				break;
 			}
 		}
 		if (hover != hoverState) {
-			setGameCursor(hover ? "CURS131" : "CURS.ARROW");
+			engine.setGameCursor(hover ? "CURS131" : "CURS.ARROW");
 			hoverState = hover;
 		}
 
-		while (_eventMan->pollEvent(event)) {
+		while (engine._eventMan->pollEvent(event)) {
 			if (event.type == Common::EVENT_KEYDOWN &&
 					event.kbd.keycode == Common::KEYCODE_ESCAPE)
 				return -1;
 			if (event.type != Common::EVENT_LBUTTONDOWN)
 				continue;
-			mouse = _eventMan->getMousePos();
-			for (uint i = 0; i < _puppetBevels.size(); ++i) {
-				if (!_puppetBevels[i].rect.contains(mouse))
+			mouse = engine._eventMan->getMousePos();
+			for (uint i = 0; i < _bevels.size(); ++i) {
+				if (!_bevels[i].rect.contains(mouse))
 					continue;
-				const int id = _puppetBevels[i].id;
+				const int id = _bevels[i].id;
 				debug(1, "Cyberflix: puppetevent(%d) click (%d,%d) -> %d",
 						timeout, mouse.x, mouse.y, id);
-				_puppetBevels.clear();
-				renderCurrentPuppetFrame(true);
+				_bevels.clear();
+				renderCurrentFrame(engine, true);
 				return id;
 			}
 		}
-		_system->updateScreen();
-		_system->delayMillis(10);
+		engine._system->updateScreen();
+		engine._system->delayMillis(10);
 	}
 }
 
-Common::String CyberflixEngine::puppetBase(const Common::String *newBase) {
-	if (!_puppet || !_puppet->isOpen()) {
+Common::String PuppetRuntime::puppetBase(const Common::String *newBase) {
+	if (!isOpen()) {
 		warning("Cyberflix: puppetbase(): no puppet open");
 		return Common::String();
 	}
 	if (newBase) {
 		if (newBase->size() > 31) {
 			warning("Cyberflix: puppetbase('%s'): name too long", newBase->c_str());
-			return _puppetBase;
+			return _base;
 		}
-		_puppetBase = *newBase;
-		_puppetBase.toLowercase();
-		_puppetCurrentAction = _puppetBase;
-		_puppetCurrentFrame = 0;
-		debug(1, "Cyberflix: puppetbase('%s')", _puppetBase.c_str());
+		_base = *newBase;
+		_base.toLowercase();
+		_currentAction = _base;
+		_currentFrame = 0;
+		debug(1, "Cyberflix: puppetbase('%s')", _base.c_str());
 	}
-	return _puppetBase;
+	return _base;
 }
 
-bool CyberflixEngine::puppetVisible(const bool *newVisible) {
-	if (!_puppet || !_puppet->isOpen())
+bool PuppetRuntime::puppetVisible(CyberflixEngine &engine, const bool *newVisible) {
+	if (!isOpen())
 		return false;
 	if (newVisible) {
-		_puppetVisible = *newVisible;
-		if (_puppetVisible)
-			renderCurrentPuppetFrame(true);
-		debug(1, "Cyberflix: puppetvisible(%s)", _puppetVisible ? "true" : "false");
+		_visible = *newVisible;
+		if (_visible)
+			renderCurrentFrame(engine, true);
+		debug(1, "Cyberflix: puppetvisible(%s)", _visible ? "true" : "false");
 	}
-	return _puppetVisible;
+	return _visible;
 }
 
-const Puppet::ActionEntry *CyberflixEngine::currentPuppetAction() const {
-	if (!_puppet || !_puppet->isOpen())
+const Puppet::ActionEntry *PuppetRuntime::currentActionEntry() const {
+	if (!isOpen())
 		return nullptr;
-	if (!_puppetCurrentAction.empty()) {
-		if (const Puppet::ActionEntry *action = _puppet->actionByName(_puppetCurrentAction))
+	if (!_currentAction.empty()) {
+		if (const Puppet::ActionEntry *action = _puppet->actionByName(_currentAction))
 			return action;
 	}
-	if (!_puppetBase.empty()) {
-		if (const Puppet::ActionEntry *action = _puppet->actionByName(_puppetBase))
+	if (!_base.empty()) {
+		if (const Puppet::ActionEntry *action = _puppet->actionByName(_base))
 			return action;
 	}
 	return _puppet->actionAt(0);
@@ -297,8 +314,8 @@ static void copyPuppetGrabBackdropToScreen(const Common::Array<byte> &backdrop,
 	copyFramePixelsToScreen(screen, backdrop.begin(), kScreenWidth, kScreenHeight, 0, 0);
 }
 
-bool CyberflixEngine::capturePuppetGrabBackdrop(Common::Array<byte> &backdrop) {
-	if (!_puppetGrab) {
+bool PuppetRuntime::captureGrabBackdrop(CyberflixEngine &engine, Common::Array<byte> &backdrop) {
+	if (!_grab) {
 		backdrop.clear();
 		return false;
 	}
@@ -306,7 +323,7 @@ bool CyberflixEngine::capturePuppetGrabBackdrop(Common::Array<byte> &backdrop) {
 	backdrop.resize(kScreenWidth * kScreenHeight);
 	memset(backdrop.begin(), 0, backdrop.size());
 
-	if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
+	if (engine._setVisible && engine._set && engine._set->isOpen() && engine._setScene >= 0) {
 		// TI.EXE FUN_00449150 copies from the retained SET backing surface
 		// (0x486770). ScummVM keeps that same surface in _setFrameSequence, so
 		// reuse it for puppetgrab instead of replaying the compressed panorama
@@ -316,12 +333,12 @@ bool CyberflixEngine::capturePuppetGrabBackdrop(Common::Array<byte> &backdrop) {
 		const byte *pixels = nullptr;
 		uint16 frameWidth = 0;
 		uint16 frameHeight = 0;
-		if (!_setFrameSequence.empty()) {
-			pixels = _setFrameSequence.pixels();
-			frameWidth = _setFrameSequence.width();
-			frameHeight = _setFrameSequence.height();
-		} else if (_set->renderScene((uint32)_setScene, (uint32)_setTable,
-				(uint32)_setAngle, _setFrameSequence, frame)) {
+		if (!engine._setFrameSequence.empty()) {
+			pixels = engine._setFrameSequence.pixels();
+			frameWidth = engine._setFrameSequence.width();
+			frameHeight = engine._setFrameSequence.height();
+		} else if (engine._set->renderScene((uint32)engine._setScene, (uint32)engine._setTable,
+				(uint32)engine._setAngle, engine._setFrameSequence, frame)) {
 			pixels = frame.pixels.begin();
 			frameWidth = frame.width;
 			frameHeight = frame.height;
@@ -329,8 +346,8 @@ bool CyberflixEngine::capturePuppetGrabBackdrop(Common::Array<byte> &backdrop) {
 		if (pixels) {
 			// The native grab does not include stage/inventory-bar composite
 			// pixels or SHOP props; it copies just the current SET backing rect.
-			const int x0 = _set->viewLeft();
-			const int y0 = _set->viewTop();
+			const int x0 = engine._set->viewLeft();
+			const int y0 = engine._set->viewTop();
 			int left = x0;
 			int srcX = 0;
 			int width = frameWidth;
@@ -355,9 +372,9 @@ bool CyberflixEngine::capturePuppetGrabBackdrop(Common::Array<byte> &backdrop) {
 		return true;
 	}
 
-	if (_stage && _stage->isOpen()) {
+	if (engine._stage && engine._stage->isOpen()) {
 		FrameImage frame;
-		if (_stage->renderNode((uint32)_stageNode, frame)) {
+		if (engine._stage->renderNode((uint32)engine._stageNode, frame)) {
 			const int width = MIN<int>(frame.width, kScreenWidth);
 			const int height = MIN<int>(frame.height, kScreenHeight);
 			for (int y = 0; y < height; ++y) {
@@ -370,15 +387,15 @@ bool CyberflixEngine::capturePuppetGrabBackdrop(Common::Array<byte> &backdrop) {
 	return true;
 }
 
-bool CyberflixEngine::paintPuppetGrabBackdrop(Graphics::Surface &screen,
+bool PuppetRuntime::paintGrabBackdrop(CyberflixEngine &engine, Graphics::Surface &screen,
 		const Common::Array<byte> *cachedBackdrop) {
-	if (!_puppetGrab)
+	if (!_grab)
 		return false;
 
 	Common::Array<byte> freshBackdrop;
 	const Common::Array<byte> *backdrop = cachedBackdrop;
 	if (!backdrop) {
-		if (!capturePuppetGrabBackdrop(freshBackdrop))
+		if (!captureGrabBackdrop(engine, freshBackdrop))
 			return false;
 		backdrop = &freshBackdrop;
 	}
@@ -387,28 +404,28 @@ bool CyberflixEngine::paintPuppetGrabBackdrop(Graphics::Surface &screen,
 	return true;
 }
 
-bool CyberflixEngine::renderPuppetFrame(const Puppet::ActionEntry &action,
+bool PuppetRuntime::renderFrame(CyberflixEngine &engine, const Puppet::ActionEntry &action,
 		uint32 frameIndex, bool present, const Common::Array<byte> *cachedBackdrop) {
-	Graphics::Surface *screen = _system->lockScreen();
-	const bool backdropPainted = paintPuppetGrabBackdrop(*screen, cachedBackdrop);
+	Graphics::Surface *screen = engine._system->lockScreen();
+	const bool backdropPainted = paintGrabBackdrop(engine, *screen, cachedBackdrop);
 	if (!backdropPainted)
 		screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
-	const bool drew = _puppet->renderActionFrame(action, frameIndex, *screen, _puppetGrab);
-	_system->unlockScreen();
-	renderPuppetBevels(false);
+	const bool drew = _puppet->renderActionFrame(action, frameIndex, *screen, _grab);
+	engine._system->unlockScreen();
+	renderBevels(engine, false);
 	if (present)
-		_system->updateScreen();
+		engine._system->updateScreen();
 	return drew;
 }
 
-bool CyberflixEngine::renderCurrentPuppetFrame(bool present) {
-	const Puppet::ActionEntry *action = currentPuppetAction();
+bool PuppetRuntime::renderCurrentFrame(CyberflixEngine &engine, bool present) {
+	const Puppet::ActionEntry *action = currentActionEntry();
 	if (!action)
 		return false;
-	return renderPuppetFrame(*action, _puppetCurrentFrame, present);
+	return renderFrame(engine, *action, _currentFrame, present);
 }
 
-const Graphics::Font *CyberflixEngine::textFont(int size) {
+const Graphics::Font *PuppetRuntime::textFont(int size) {
 #ifdef USE_FREETYPE2
 	const bool antialiasing = ConfMan.hasKey(CYBERFLIX_OPTION_FONT_ANTIALIASING) &&
 			ConfMan.getBool(CYBERFLIX_OPTION_FONT_ANTIALIASING);
@@ -461,101 +478,101 @@ const Graphics::Font *CyberflixEngine::textFont(int size) {
 	return font;
 }
 
-void CyberflixEngine::renderPuppetBevels(bool present) {
-	if (!_puppet || !_puppet->isOpen())
+void PuppetRuntime::renderBevels(CyberflixEngine &engine, bool present) {
+	if (!isOpen())
 		return;
 
-	Graphics::Surface *screen = _system->lockScreen();
+	Graphics::Surface *screen = engine._system->lockScreen();
 	// FUN_00449370 always draws the PUP master bevel backdrop before checking
 	// the queued bevel count, so Smethels' text-row panel stays visible even
 	// during speech beats that offer no clickable choices.
 	_puppet->renderBevelBackdrop(*screen, kScreenHeight, kScreenWidth);
 
-	const Graphics::Font *font = textFont(_puppetParams[5]);
+	const Graphics::Font *font = textFont(_params[5]);
 	if (font) {
-		for (uint i = 0; i < _puppetBevels.size(); ++i) {
-			const Common::Rect &rect = _puppetBevels[i].rect;
+		for (uint i = 0; i < _bevels.size(); ++i) {
+			const Common::Rect &rect = _bevels[i].rect;
 			Common::Rect clipped = rect;
 			clipped.clip(Common::Rect(kScreenWidth, kScreenHeight));
 			if (clipped.isEmpty())
 				continue;
 			const int baselineY = rect.top + 0x10;
-			const int x = rect.left + _puppetParams[9];
-			font->drawString(screen, _puppetBevels[i].text, x, baselineY - font->getFontAscent(),
-					kScreenWidth - x, (uint32)CLIP<int>(_puppetParams[2], 0, 255));
+			const int x = rect.left + _params[9];
+			font->drawString(screen, _bevels[i].text, x, baselineY - font->getFontAscent(),
+					kScreenWidth - x, (uint32)CLIP<int>(_params[2], 0, 255));
 		}
 	}
-	_system->unlockScreen();
+	engine._system->unlockScreen();
 	if (present)
-		_system->updateScreen();
+		engine._system->updateScreen();
 }
 
-void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
-	_puppetCurrentAction = action.name;
-	_puppetCurrentFrame = 0;
-	_puppetBevels.clear();
-	_mixer->stopHandle(_puppetSpeechHandle);
+void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntry &action) {
+	_currentAction = action.name;
+	_currentFrame = 0;
+	_bevels.clear();
+	engine._mixer->stopHandle(_speechHandle);
 
 	Common::Array<byte> pcm;
 	_puppet->decodeActionAudio(action, pcm);
 	if (!pcm.empty()) {
 		Audio::SeekableAudioStream *stream = makeOwnedRawPcmStream(pcm);
 		if (stream) {
-			_mixer->playStream(Audio::Mixer::kSpeechSoundType, &_puppetSpeechHandle, stream);
-			_mixer->setChannelVolume(_puppetSpeechHandle, effectiveAudioVolume(255));
+			engine._mixer->playStream(Audio::Mixer::kSpeechSoundType, &_speechHandle, stream);
+			engine._mixer->setChannelVolume(_speechHandle, engine.effectiveAudioVolume(255));
 		}
 	}
 
 	const uint32 frameCount = action.frameCount ? action.frameCount : 1;
 	uint32 lastFrame = (uint32)-1;
 	uint32 lastPresentedFrame = (uint32)-1;
-	const uint32 wallStart = _system->getMillis();
+	const uint32 wallStart = engine._system->getMillis();
 	// Puppet speech redraws animation frames at native 30 fps against the same
 	// puppetgrab backdrop. Cache that grabbed SET/STG image once per action so
 	// each frame only restores a memory copy instead of re-decoding the room
 	// background and locking/unlocking the backend twice.
 	Common::Array<byte> grabBackdrop;
 	const Common::Array<byte> *cachedBackdrop =
-			capturePuppetGrabBackdrop(grabBackdrop) ? &grabBackdrop : nullptr;
+			captureGrabBackdrop(engine, grabBackdrop) ? &grabBackdrop : nullptr;
 	Common::Event event;
 	const uint32 kPuppetActionPollCapMs = 33; // one native 30 fps puppet frame
 	for (;;) {
-		if (shouldQuit())
+		if (engine.shouldQuit())
 			break;
-		uint32 elapsed = _mixer->isSoundHandleActive(_puppetSpeechHandle)
-				? _mixer->getSoundElapsedTime(_puppetSpeechHandle)
-				: (_system->getMillis() - wallStart);
+		uint32 elapsed = engine._mixer->isSoundHandleActive(_speechHandle)
+				? engine._mixer->getSoundElapsedTime(_speechHandle)
+				: (engine._system->getMillis() - wallStart);
 		uint32 frame = (uint32)((uint64)elapsed * 60 / 1000 / 2);
 		if (frame >= frameCount)
 			frame = frameCount - 1;
 		if (frame != lastFrame) {
-			_puppetCurrentFrame = frame;
+			_currentFrame = frame;
 			if (lastPresentedFrame == (uint32)-1 ||
-					!_puppet->actionFramesVisuallyEqual(action, lastPresentedFrame, frame, _puppetGrab)) {
-				renderPuppetFrame(action, frame, true, cachedBackdrop);
+					!_puppet->actionFramesVisuallyEqual(action, lastPresentedFrame, frame, _grab)) {
+				renderFrame(engine, action, frame, true, cachedBackdrop);
 				lastPresentedFrame = frame;
 			}
 			lastFrame = frame;
 		}
 		bool aborted = false;
-		while (_eventMan->pollEvent(event)) {
+		while (engine._eventMan->pollEvent(event)) {
 			if (event.type == Common::EVENT_KEYDOWN &&
 					event.kbd.keycode == Common::KEYCODE_ESCAPE) {
-				_mixer->stopHandle(_puppetSpeechHandle);
+				engine._mixer->stopHandle(_speechHandle);
 				aborted = true;
 				break;
 			}
 		}
 		if (aborted)
 			break;
-		if (!_mixer->isSoundHandleActive(_puppetSpeechHandle)) {
+		if (!engine._mixer->isSoundHandleActive(_speechHandle)) {
 			if (pcm.empty() && frame + 1 < frameCount) {
 				const uint32 nextFrameMs = (uint32)(((uint64)frame + 1) * 1000 + 29) / 30;
 				// Silent puppet actions are clocked from wall time at the same
 				// 30 fps cadence as speech. Sleep toward the next frame boundary
 				// instead of waking the backend event pump several times per
 				// frame; there is no cursor tracking during action playback.
-				_system->delayMillis(nextFrameMs > elapsed ?
+				engine._system->delayMillis(nextFrameMs > elapsed ?
 						MIN<uint32>(nextFrameMs - elapsed, kPuppetActionPollCapMs) : 1);
 				continue;
 			}
@@ -565,23 +582,23 @@ void CyberflixEngine::playPuppetAction(const Puppet::ActionEntry &action) {
 		// Speech playback is frame-clocked from the mixer at native 30 fps.
 		// Poll Esc at that same cadence, avoiding extra SDL/Cocoa event-pump
 		// wakeups between frames when the picture cannot change.
-		_system->delayMillis(nextFrameMs > elapsed ?
+		engine._system->delayMillis(nextFrameMs > elapsed ?
 				MIN<uint32>(nextFrameMs - elapsed, kPuppetActionPollCapMs) : 1);
 	}
-	_puppetCurrentFrame = frameCount - 1;
+	_currentFrame = frameCount - 1;
 	// If playback timing already presented the final visual frame, avoid one
 	// redundant backend swap at the end of the action.
 	if (lastPresentedFrame == (uint32)-1 ||
-			!_puppet->actionFramesVisuallyEqual(action, lastPresentedFrame, _puppetCurrentFrame, _puppetGrab))
-		renderPuppetFrame(action, _puppetCurrentFrame, true, cachedBackdrop);
+			!_puppet->actionFramesVisuallyEqual(action, lastPresentedFrame, _currentFrame, _grab))
+		renderFrame(engine, action, _currentFrame, true, cachedBackdrop);
 }
 
-int CyberflixEngine::puppetParam(int selector, const int *newValue) {
-	if (selector < 1 || selector > (int)ARRAYSIZE(_puppetParams)) {
+int PuppetRuntime::puppetParam(int selector, const int *newValue) {
+	if (selector < 1 || selector > 10) {
 		warning("Cyberflix: puppetparam(%d): selector out of range", selector);
 		return 0;
 	}
-	int16 &slot = _puppetParams[selector - 1];
+	int16 &slot = _params[selector - 1];
 	if (newValue) {
 		slot = (int16)*newValue;
 		debug(1, "Cyberflix: puppetparam(%d, %d)", selector, *newValue);
@@ -589,16 +606,16 @@ int CyberflixEngine::puppetParam(int selector, const int *newValue) {
 	return slot;
 }
 
-int CyberflixEngine::countPuppets() {
-	if (!_puppet || !_puppet->isOpen()) {
+int PuppetRuntime::countPuppets() const {
+	if (!isOpen()) {
 		warning("Cyberflix: countpuppets(): no puppet open");
 		return 0;
 	}
 	return (int)_puppet->scriptCount();
 }
 
-Common::String CyberflixEngine::indexToPuppet(int index) {
-	if (!_puppet || !_puppet->isOpen()) {
+Common::String PuppetRuntime::indexToPuppet(int index) const {
+	if (!isOpen()) {
 		warning("Cyberflix: indextopuppet(%d): no puppet open", index);
 		return Common::String();
 	}
