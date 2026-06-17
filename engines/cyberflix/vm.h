@@ -69,12 +69,17 @@ struct Value {
  * logged no-op, which keeps the VM usable as a standalone reverse-engineering
  * harness.
  */
-class VMHost {
+class VMMovieHost {
 public:
-	virtual ~VMHost() {}
+	virtual ~VMMovieHost() {}
 
 	/** Play the movie named @p name (a MOVIES/ basename, e.g. "logo.mov"). */
 	virtual void playMovie(const Common::String &name) = 0;
+};
+
+class VMNavigationHost {
+public:
+	virtual ~VMNavigationHost() {}
 
 	/** Open the stage file @p name (a DATA/ basename, e.g. "main.stg"). */
 	virtual void openStageFile(const Common::String &name) {}
@@ -215,6 +220,11 @@ public:
 
 	/** roadahead(scene, view) (0x4e94): whether the view has a forward transition. */
 	virtual bool roadAhead(const Common::String &scene, const Common::String &view) { return false; }
+};
+
+class VMSystemHost {
+public:
+	virtual ~VMSystemHost() {}
 
 	/**
 	 * actionframe(n): true if the last movie ended on action frame @p n —
@@ -286,6 +296,11 @@ public:
 
 	/** pausecricket(kind, paused): pause or resume cricket ambient cues. */
 	virtual void pauseCricket(const Common::String &kind, bool paused) {}
+};
+
+class VMAudioHost {
+public:
+	virtual ~VMAudioHost() {}
 
 	/** opentrackfile('name.trk'): load a .TRK track file (TI.EXE FUN_00411be0). */
 	virtual void openTrackFile(const Common::String &name) {}
@@ -341,6 +356,11 @@ public:
 
 	/** currentvoice(): active voice cue name, or "None" when silent. */
 	virtual Common::String currentVoice() { return "None"; }
+};
+
+class VMInputHost {
+public:
+	virtual ~VMInputHost() {}
 
 	/** keyaborts([res, key, flag]) (0x3ead): key-abort table toggle/global state. */
 	virtual bool keyAborts(const Common::String *resource, const Common::String *key,
@@ -354,6 +374,11 @@ public:
 
 	/** currentcd([name]) (0x3ea2 FUN_00439df0/FUN_0043a290): switch/query current CD label. */
 	virtual Common::String currentCD(const Common::String *requested) { return Common::String(); }
+};
+
+class VMActorHost {
+public:
+	virtual ~VMActorHost() {}
 
 	/** opencastfile('name.cst') (0x2eed FUN_0041f1c0): load actor records. */
 	virtual void openCastFile(const Common::String &name) {}
@@ -391,6 +416,11 @@ public:
 	virtual void actorScale(const Common::String &name, int scale) {}
 	virtual void actorTurn(const Common::String &name, int turn) {}
 	virtual int starXYZ(const Common::String &name, int selector) { return 0; }
+};
+
+class VMPropHost {
+public:
+	virtual ~VMPropHost() {}
 
 	/** openshopfile('name.shp'): load a .SHP prop container and dispatch its
 	 *  openshop()/openprop() messages (TI.EXE 0x2f18 FUN_00428450). */
@@ -535,6 +565,11 @@ public:
 
 	/** calcmod(a, b) (0x4e72 FUN_004358f0): signed integer remainder. */
 	virtual int calcMod(int a, int b) { return b != 0 ? a % b : 0; }
+};
+
+class VMSaveHost {
+public:
+	virtual ~VMSaveHost() {}
 
 	/** savegame(signature) (0x2f2d FUN_00426620): open the save UI and persist state. */
 	virtual void saveGame(const Common::String &signature) {}
@@ -547,6 +582,13 @@ public:
 
 	/** quit() (0x2f27 FUN_00446c80): request engine shutdown. */
 	virtual void requestQuit() {}
+};
+
+class VMHost : public VMMovieHost, public VMNavigationHost, public VMSystemHost,
+		public VMAudioHost, public VMInputHost, public VMActorHost,
+		public VMPropHost, public VMSaveHost {
+public:
+	~VMHost() override {}
 };
 
 /**
