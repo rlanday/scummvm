@@ -514,7 +514,7 @@ static bool parseCricketChunk(Common::SeekableReadStream &in, int64 end,
 }
 
 bool CyberflixEngine::canSaveGameStateCurrently(Common::U32String *msg) {
-	return (_stage && _stage->isOpen()) || (_set && _set->isOpen());
+	return (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) || (_set && _set->isOpen());
 }
 
 bool CyberflixEngine::canLoadGameStateCurrently(Common::U32String *msg) {
@@ -658,10 +658,10 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	_audioRuntime.clearTracks();
 	_propRuntime.clear();
 	_loopRuntime.clear();
-	_stage.reset();
+	_stageRuntime.stage().reset();
 	clearStageShellFrame();
-	_stageVisible = false;
-	_stageNode = 0;
+	_stageRuntime.visible() = false;
+	_stageRuntime.node() = 0;
 	_set.reset();
 	_setScene = -1;
 	_setTable = 0;
@@ -807,12 +807,12 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 			// the pre-load room. Otherwise SET redraw after loading can copy stale
 			// inventory-bar pixels and recolor them with the restored cabin palette.
 			clearStageShellFrame();
-			_stage = stage;
-			_stageVisible = true;
-			_stageNode = header.stageNode;
-			if (_stageNode < 0 || (uint32)_stageNode >= _stage->nodeCount()) {
-				int node = _stage->findNode(header.flatName);
-				_stageNode = node >= 0 ? node : 0;
+			_stageRuntime.stage() = stage;
+			_stageRuntime.visible() = true;
+			_stageRuntime.node() = header.stageNode;
+			if (_stageRuntime.node() < 0 || (uint32)_stageRuntime.node() >= _stageRuntime.stage()->nodeCount()) {
+				int node = _stageRuntime.stage()->findNode(header.flatName);
+				_stageRuntime.node() = node >= 0 ? node : 0;
 			}
 		} else {
 			warning("Cyberflix: load could not reopen stage '%s'", header.stageName.c_str());
@@ -846,10 +846,10 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		}
 	}
 
-	if (_setVisible && _set && _set->isOpen() && _setScene >= 0 && !isLoadedReplacementStage(_stage)) {
+	if (_setVisible && _set && _set->isOpen() && _setScene >= 0 && !isLoadedReplacementStage(_stageRuntime.stage())) {
 		renderSetScene(_setScene, _setTable, _setAngle, _setView);
-	} else if (_stage && _stage->isOpen()) {
-		renderStageNode(_stageNode);
+	} else if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) {
+		renderStageNode(_stageRuntime.node());
 	} else {
 		blackScreen();
 	}
@@ -889,10 +889,10 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		writeSaveString(payload, _hitKind);
 		payload.writeUint16LE(_actionFrameMask);
 
-		writeSaveString(payload, _stage && _stage->isOpen() ? _stage->name() : Common::String());
-		payload.writeSint32LE(_stageNode);
-		writeSaveString(payload, _stage && _stage->isOpen()
-				? _stage->nodeName((uint32)_stageNode) : Common::String());
+		writeSaveString(payload, _stageRuntime.stage() && _stageRuntime.stage()->isOpen() ? _stageRuntime.stage()->name() : Common::String());
+		payload.writeSint32LE(_stageRuntime.node());
+		writeSaveString(payload, _stageRuntime.stage() && _stageRuntime.stage()->isOpen()
+				? _stageRuntime.stage()->nodeName((uint32)_stageRuntime.node()) : Common::String());
 
 		writeSaveString(payload, _set && _set->isOpen() ? _set->name() : Common::String());
 		writeSaveString(payload, _set && _set->isOpen() ? _set->setName() : Common::String());

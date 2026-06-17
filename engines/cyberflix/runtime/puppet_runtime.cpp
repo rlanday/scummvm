@@ -372,9 +372,9 @@ bool PuppetRuntime::captureGrabBackdrop(CyberflixEngine &engine, Common::Array<b
 		return true;
 	}
 
-	if (engine._stage && engine._stage->isOpen()) {
+	if (engine._stageRuntime.stage() && engine._stageRuntime.stage()->isOpen()) {
 		FrameImage frame;
-		if (engine._stage->renderNode((uint32)engine._stageNode, frame)) {
+		if (engine._stageRuntime.stage()->renderNode((uint32)engine._stageRuntime.node(), frame)) {
 			const int width = MIN<int>(frame.width, kScreenWidth);
 			const int height = MIN<int>(frame.height, kScreenHeight);
 			for (int y = 0; y < height; ++y) {

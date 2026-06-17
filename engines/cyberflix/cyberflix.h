@@ -43,6 +43,7 @@
 #include "cyberflix/runtime/paths.h"
 #include "cyberflix/runtime/props.h"
 #include "cyberflix/runtime/puppet_runtime.h"
+#include "cyberflix/runtime/stage_runtime.h"
 #include "cyberflix/runtime/timing.h"
 #include "cyberflix/shop.h"
 #include "cyberflix/vm.h"
@@ -347,11 +348,8 @@ private:
 
 	CursorRuntime _cursorRuntime;
 
-	Common::SharedPtr<Stage> _stage; ///< Currently open stage (DATA/*.STG), or null.
-	bool _stageVisible = false;      ///< DAT_00461156, queried by stagevisible().
+	StageRuntime _stageRuntime;
 	Common::ScopedPtr<Set> _set;     ///< Currently open set (DATA/*.SET), or null.
-	FrameImage _stageShellFrame;     ///< Cached STG node 0 backing under SET viewports.
-	bool _stageShellFrameValid = false;
 	enum SetTransitionType {
 		kSetTransitionNone,
 		kSetTransitionTurn,
@@ -366,7 +364,6 @@ private:
 	uint32 _setTransitionFrame = 0;    ///< Active forward transition frame index.
 	FrameSequence _setFrameSequence; ///< Retained SET background buffer (TI.EXE 0x486770).
 	bool _setVisible = false;        ///< TI.EXE DAT_00461182, read by setvisible().
-	int _stageNode = 0;              ///< Current stage node (TI.EXE DAT_00461160).
 	bool _screenUpdatePending = false; ///< Avoid redundant OpenGL uploads when forceupdate() did not draw.
 
 	/** Kind recorded by the last hittest, read back by result() — mirrors the

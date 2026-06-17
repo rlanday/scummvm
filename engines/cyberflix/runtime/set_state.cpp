@@ -242,8 +242,8 @@ bool CyberflixEngine::setVisible(const bool *newVisible) {
 		} else {
 			_setTransitionType = kSetTransitionNone;
 			_propRuntime.setDirty(false);
-			if (_stage && _stage->isOpen())
-				renderStageNode(_stageNode, false);
+			if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen())
+				renderStageNode(_stageRuntime.node(), false);
 		}
 	}
 	return _setVisible;
