@@ -478,7 +478,7 @@ void CyberflixEngine::repaintDirtyStageRects() {
 // ---- Cast/actor subsystem (TI.EXE FUN_0041f1c0 and friends) ---------------
 // RE notes: files/decomp/stage-notes.md. The original keeps one global actor
 // array (DAT_0046112c/DAT_00461130) across all open casts; lookups and
-// countactors/indextoactor therefore span _casts in open order.
+// countactors/indextoactor therefore span open casts in open order.
 
 void CyberflixEngine::collectWorldActors(Common::Array<const Cast::Actor *> &draw,
 		Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
@@ -486,18 +486,19 @@ void CyberflixEngine::collectWorldActors(Common::Array<const Cast::Actor *> &dra
 	if (!_set || !_set->isOpen())
 		return;
 	const Common::String &setName = _set->setName();
-	for (uint32 c = 0; c < _casts.size(); ++c) {
-		for (uint32 i = 0; i < _casts[c]->actorCount(); ++i) {
-			const Cast::Actor &actor = _casts[c]->actor(i);
+	const Common::Array<Common::SharedPtr<Cast> > &casts = _actorRuntime.casts();
+	for (uint32 c = 0; c < casts.size(); ++c) {
+		for (uint32 i = 0; i < casts[c]->actorCount(); ++i) {
+			const Cast::Actor &actor = casts[c]->actor(i);
 			if (!actor.visible || !actor.setName.equalsIgnoreCase(setName))
 				continue;
 			CelImage cel;
 			Common::Rect rect;
 			int16 depth = 0;
-			if (!_casts[c]->renderWorldActor(actor, camera, setName, cel, rect, depth))
+			if (!casts[c]->renderWorldActor(actor, camera, setName, cel, rect, depth))
 				continue;
 			draw.push_back(&actor);
-			drawCast.push_back(_casts[c].get());
+			drawCast.push_back(casts[c].get());
 			depths.push_back(depth);
 		}
 	}

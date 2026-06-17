@@ -29,7 +29,7 @@
 
 namespace Cyberflix {
 
-Common::SharedPtr<Cast> CyberflixEngine::findCastShared(const Common::String &name) {
+Common::SharedPtr<Cast> ActorRuntime::findCastShared(const Common::String &name) const {
 	Common::String key = name;
 	key.toLowercase();
 	for (uint32 i = 0; i < _casts.size(); ++i)
@@ -38,7 +38,7 @@ Common::SharedPtr<Cast> CyberflixEngine::findCastShared(const Common::String &na
 	return Common::SharedPtr<Cast>();
 }
 
-CyberflixEngine::ActorRef CyberflixEngine::findActorRef(const Common::String &name) {
+ActorRuntime::ActorRef ActorRuntime::findActorRef(const Common::String &name) const {
 	ActorRef ref;
 	for (uint32 i = 0; i < _casts.size(); ++i) {
 		Common::SharedPtr<Cast::Actor> actor = _casts[i]->findActor(name);
@@ -51,37 +51,42 @@ CyberflixEngine::ActorRef CyberflixEngine::findActorRef(const Common::String &na
 	return ref;
 }
 
-bool CyberflixEngine::resolveActorStar(Cast::Actor &actor) {
-	if (!_set || !_set->isOpen() || !actor.setName.equalsIgnoreCase(_set->setName()))
+bool ActorRuntime::resolveActorStar(CyberflixEngine &engine, Cast::Actor &actor) {
+	if (!engine._set || !engine._set->isOpen() ||
+			!actor.setName.equalsIgnoreCase(engine._set->setName()))
 		return false;
 
 	int16 x = 0, y = 0, z = 0;
-	if (!_set->starXYZ(actor.sceneName, x, y, z))
+	if (!engine._set->starXYZ(actor.sceneName, x, y, z))
 		return false;
 
 	if (actor.x != x || actor.y != y || actor.z != z) {
 		actor.x = x;
 		actor.y = y;
 		actor.z = z;
-		_propsDirty = true;
+		engine._propsDirty = true;
 	}
 	return true;
 }
 
-void CyberflixEngine::refreshActorStarPositions() {
-	if (!_set || !_set->isOpen())
+void ActorRuntime::refreshActorStarPositions(CyberflixEngine &engine) {
+	if (!engine._set || !engine._set->isOpen())
 		return;
 
 	for (uint32 c = 0; c < _casts.size(); ++c) {
 		for (uint32 i = 0; i < _casts[c]->actorCount(); ++i)
-			resolveActorStar(_casts[c]->actor(i));
+			resolveActorStar(engine, _casts[c]->actor(i));
 	}
+}
+
+void CyberflixEngine::refreshActorStarPositions() {
+	_actorRuntime.refreshActorStarPositions(*this);
 }
 
 void CyberflixEngine::openCastFile(const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
-	if (findCastShared(key)) {
+	if (_actorRuntime.findCastShared(key)) {
 		debug(1, "Cyberflix: cast '%s' already open", key.c_str());
 		return;
 	}
@@ -89,7 +94,7 @@ void CyberflixEngine::openCastFile(const Common::String &name) {
 	Common::SharedPtr<Cast> cast(new Cast());
 	if (!cast->open(key))
 		return;
-	_casts.push_back(cast);
+	_actorRuntime.casts().push_back(cast);
 	refreshActorStarPositions();
 	_propsDirty = true;
 }
@@ -97,10 +102,11 @@ void CyberflixEngine::openCastFile(const Common::String &name) {
 void CyberflixEngine::closeCastFile(const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
-	for (uint32 i = 0; i < _casts.size(); ++i) {
-		if (_casts[i]->name() == key) {
+	Common::Array<Common::SharedPtr<Cast> > &casts = _actorRuntime.casts();
+	for (uint32 i = 0; i < casts.size(); ++i) {
+		if (casts[i]->name() == key) {
 			debug(1, "Cyberflix: cast '%s' closed", key.c_str());
-			_casts.remove_at(i);
+			casts.remove_at(i);
 			_propsDirty = true;
 			return;
 		}
@@ -112,7 +118,7 @@ void CyberflixEngine::sendToCast(const Common::String &castName, const Common::S
 		const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtocast('%s') -> %s(%u args)", castName.c_str(),
 			message.c_str(), args.size());
-	Common::SharedPtr<Cast> cast = findCastShared(castName);
+	Common::SharedPtr<Cast> cast = _actorRuntime.findCastShared(castName);
 	if (!cast) {
 		warning("Cyberflix: sendtocast('%s'): cast not open", castName.c_str());
 		return;
@@ -125,7 +131,7 @@ Value CyberflixEngine::sendToCastFx(const Common::String &castName, const Common
 		const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtocastfx('%s') -> %s(%u args)", castName.c_str(),
 			message.c_str(), args.size());
-	Common::SharedPtr<Cast> cast = findCastShared(castName);
+	Common::SharedPtr<Cast> cast = _actorRuntime.findCastShared(castName);
 	if (!cast) {
 		warning("Cyberflix: sendtocastfx('%s'): cast not open", castName.c_str());
 		return Value();
@@ -138,7 +144,7 @@ void CyberflixEngine::sendToActor(const Common::String &actorName, const Common:
 		const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtoactor('%s') -> %s(%u args)", actorName.c_str(),
 			message.c_str(), args.size());
-	ActorRef ref = findActorRef(actorName);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(actorName);
 	if (!ref.actor) {
 		warning("Cyberflix: sendtoactor('%s'): no such actor", actorName.c_str());
 		return;
@@ -154,7 +160,7 @@ Value CyberflixEngine::sendToActorFx(const Common::String &actorName, const Comm
 		const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtoactorfx('%s') -> %s(%u args)", actorName.c_str(),
 			message.c_str(), args.size());
-	ActorRef ref = findActorRef(actorName);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(actorName);
 	if (!ref.actor) {
 		warning("Cyberflix: sendtoactorfx('%s'): no such actor", actorName.c_str());
 		return Value();
@@ -166,8 +172,9 @@ Value CyberflixEngine::sendToActorFx(const Common::String &actorName, const Comm
 
 int CyberflixEngine::countActors() {
 	uint32 count = 0;
-	for (uint32 i = 0; i < _casts.size(); ++i)
-		count += _casts[i]->actorCount();
+	const Common::Array<Common::SharedPtr<Cast> > &casts = _actorRuntime.casts();
+	for (uint32 i = 0; i < casts.size(); ++i)
+		count += casts[i]->actorCount();
 	return (int)count;
 }
 
@@ -175,16 +182,17 @@ Common::String CyberflixEngine::indexToActor(int index) {
 	if (index < 1)
 		return Common::String();
 	uint32 remaining = (uint32)index;
-	for (uint32 i = 0; i < _casts.size(); ++i) {
-		if (remaining <= _casts[i]->actorCount())
-			return _casts[i]->actor(remaining - 1).name;
-		remaining -= _casts[i]->actorCount();
+	const Common::Array<Common::SharedPtr<Cast> > &casts = _actorRuntime.casts();
+	for (uint32 i = 0; i < casts.size(); ++i) {
+		if (remaining <= casts[i]->actorCount())
+			return casts[i]->actor(remaining - 1).name;
+		remaining -= casts[i]->actorCount();
 	}
 	return Common::String();
 }
 
 bool CyberflixEngine::actorVisible(const Common::String &name, const bool *newVisible) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorvisible('%s'): no such actor", name.c_str());
 		return false;
@@ -197,7 +205,7 @@ bool CyberflixEngine::actorVisible(const Common::String &name, const bool *newVi
 }
 
 Common::String CyberflixEngine::actorSet(const Common::String &name, const Common::String *newSet) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorset('%s'): no such actor", name.c_str());
 		return Common::String();
@@ -214,7 +222,7 @@ Common::String CyberflixEngine::actorSet(const Common::String &name, const Commo
 }
 
 Common::String CyberflixEngine::actorStar(const Common::String &name, const Common::String *newStar) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorstar('%s'): no such actor", name.c_str());
 		return Common::String();
@@ -226,13 +234,13 @@ Common::String CyberflixEngine::actorStar(const Common::String &name, const Comm
 			ref.actor->sceneName = key;
 			_propsDirty = true;
 		}
-		resolveActorStar(*ref.actor);
+		_actorRuntime.resolveActorStar(*this, *ref.actor);
 	}
 	return ref.actor->sceneName;
 }
 
 Common::String CyberflixEngine::actorPose(const Common::String &name, const Common::String *newPose) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorpose('%s'): no such actor", name.c_str());
 		return Common::String();
@@ -249,7 +257,7 @@ Common::String CyberflixEngine::actorPose(const Common::String &name, const Comm
 }
 
 void CyberflixEngine::actorXYZ(const Common::String &name, int x, int y, int z) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorxyz('%s'): no such actor", name.c_str());
 		return;
@@ -263,7 +271,7 @@ void CyberflixEngine::actorXYZ(const Common::String &name, int x, int y, int z) 
 }
 
 int CyberflixEngine::actorXYZ(const Common::String &name, int selector) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorxyz('%s'): no such actor", name.c_str());
 		return 0;
@@ -283,7 +291,7 @@ int CyberflixEngine::actorXYZ(const Common::String &name, int selector) {
 }
 
 int CyberflixEngine::actorDeg(const Common::String &name, const int *newDeg) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actordeg('%s'): no such actor", name.c_str());
 		return 0;
@@ -296,7 +304,7 @@ int CyberflixEngine::actorDeg(const Common::String &name, const int *newDeg) {
 }
 
 int CyberflixEngine::actorValue(const Common::String &name, const int *newValue) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorvalue('%s'): no such actor", name.c_str());
 		return 0;
@@ -308,7 +316,7 @@ int CyberflixEngine::actorValue(const Common::String &name, const int *newValue)
 
 Common::String CyberflixEngine::actorOwner(const Common::String &name,
 		const Common::String *newOwner) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorowner('%s'): no such actor", name.c_str());
 		return Common::String();
@@ -322,7 +330,7 @@ Common::String CyberflixEngine::actorOwner(const Common::String &name,
 }
 
 void CyberflixEngine::actorZClip(const Common::String &name, int zClip) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorzclip('%s'): no such actor", name.c_str());
 		return;
@@ -334,7 +342,7 @@ void CyberflixEngine::actorZClip(const Common::String &name, int zClip) {
 }
 
 void CyberflixEngine::actorSpeed(const Common::String &name, int speed) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorspeed('%s'): no such actor", name.c_str());
 		return;
@@ -343,7 +351,7 @@ void CyberflixEngine::actorSpeed(const Common::String &name, int speed) {
 }
 
 void CyberflixEngine::actorScale(const Common::String &name, int scale) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorscale('%s'): no such actor", name.c_str());
 		return;
@@ -356,7 +364,7 @@ void CyberflixEngine::actorScale(const Common::String &name, int scale) {
 }
 
 void CyberflixEngine::actorTurn(const Common::String &name, int turn) {
-	ActorRef ref = findActorRef(name);
+	ActorRuntime::ActorRef ref = _actorRuntime.findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorturn('%s'): no such actor", name.c_str());
 		return;

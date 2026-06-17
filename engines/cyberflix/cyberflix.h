@@ -35,6 +35,7 @@
 #include "cyberflix/detection.h"
 #include "cyberflix/image.h"
 #include "cyberflix/puppet.h"
+#include "cyberflix/runtime/actors.h"
 #include "cyberflix/runtime/cursor.h"
 #include "cyberflix/runtime/loops.h"
 #include "cyberflix/runtime/paths.h"
@@ -261,6 +262,7 @@ public:
 	void requestQuit() override;
 
 private:
+	friend class ActorRuntime;
 	friend class LoopRuntime;
 
 	/**
@@ -374,15 +376,7 @@ private:
 	bool _propsDirty = false; ///< Prop state changed; re-render before idling.
 	Common::Array<Common::Rect> _dirtyRects; ///< Native-style dirty screen rectangles for prop changes.
 
-	/** Open cast files and the global actor list they contribute. */
-	Common::Array<Common::SharedPtr<Cast> > _casts;
-	Common::SharedPtr<Cast> findCastShared(const Common::String &name);
-	struct ActorRef {
-		Common::SharedPtr<Cast> cast;
-		Common::SharedPtr<Cast::Actor> actor;
-	};
-	ActorRef findActorRef(const Common::String &name);
-	bool resolveActorStar(Cast::Actor &actor);
+	ActorRuntime _actorRuntime;
 	void refreshActorStarPositions();
 
 	/** Currently open puppet archive (TI.EXE DAT_00461200 cluster). */
