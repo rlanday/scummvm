@@ -577,6 +577,30 @@ void ScriptVM::parseCallArgs(const Script &script, uint32 &pc, Common::Array<Val
 	}
 }
 
+bool ScriptVM::callCoreMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
+	switch (opcode) {
+	case Script::kMethodRandom: // random(n) -> FUN_004366c0/FUN_0041b060
+		result = Value::makeInt(_host ? _host->randomNumber(args.empty() ? 0 : args[0].intValue) : 0);
+		return true;
+	case Script::kMethodStringToNum: // stringtonum(str) -> FUN_00436ee0
+		result = Value::makeInt(stringToNum(args.empty() ? Common::String() : args[0].strValue));
+		return true;
+	case Script::kMethodNumToString: // numtostring(n) -> FUN_00436f60
+		result = Value::makeString(Common::String::format("%d", args.empty() ? 0 : args[0].intValue));
+		return true;
+	case Script::kMethodFindWord: // findword(str, delimiter, index) -> FUN_00437160, 1-based
+		result = Value::makeString(findWord(args.size() > 0 ? args[0].strValue : Common::String(),
+				args.size() > 1 ? args[1].strValue : Common::String(),
+				args.size() > 2 ? args[2].intValue : 0));
+		return true;
+	case Script::kMethodStringLength: // stringlength(str) -> FUN_004373e0
+		result = Value::makeInt(args.empty() ? 0 : args[0].strValue.size());
+		return true;
+	default:
+		return false;
+	}
+}
+
 Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args) {
 	// Dispatch a builtin method by opcode. The interpreter routes 0x2Exx/0x2Fxx
 	// through dispatch B and 0x3Exx/0x4Exx through dispatch A (files/opcode-map.md
@@ -596,26 +620,14 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		debug(0, "    call %s#%#06x(%s)", label, opcode, a.c_str());
 	}
 
+	Value result;
+	if (callCoreMethod(opcode, args, result))
+		return result;
+
 	// Forward the effectful builtins we implement to the engine host. Opcodes
 	// not handled here remain logged no-ops (see files/method-catalog.md).
 	// (The message-carrying send* builtins never reach this path; they are
 	// routed through dispatchMessageBuiltin with the message unevaluated.)
-	switch (opcode) {
-	case Script::kMethodRandom: // random(n) -> FUN_004366c0/FUN_0041b060
-		return Value::makeInt(_host ? _host->randomNumber(args.empty() ? 0 : args[0].intValue) : 0);
-	case Script::kMethodStringToNum: // stringtonum(str) -> FUN_00436ee0
-		return Value::makeInt(stringToNum(args.empty() ? Common::String() : args[0].strValue));
-	case Script::kMethodNumToString: // numtostring(n) -> FUN_00436f60
-		return Value::makeString(Common::String::format("%d", args.empty() ? 0 : args[0].intValue));
-	case Script::kMethodFindWord: // findword(str, delimiter, index) -> FUN_00437160, 1-based
-		return Value::makeString(findWord(args.size() > 0 ? args[0].strValue : Common::String(),
-				args.size() > 1 ? args[1].strValue : Common::String(),
-				args.size() > 2 ? args[2].intValue : 0));
-	case Script::kMethodStringLength: // stringlength(str) -> FUN_004373e0
-		return Value::makeInt(args.empty() ? 0 : args[0].strValue.size());
-	default:
-		break;
-	}
 
 	if (_host) {
 		switch (opcode) {

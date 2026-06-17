@@ -742,6 +742,7 @@ private:
 	 * symbol when the call head was a symbol atom, else empty.
 	 */
 	Value callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args);
+	bool callCoreMethod(uint16 opcode, const Common::Array<Value> &args, Value &result);
 
 	/** Apply @p opcode to two operand values (no stack involved). */
 	Value applyBinary(uint16 opcode, const Value &lhs, const Value &rhs);
