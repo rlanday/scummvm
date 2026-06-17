@@ -38,6 +38,7 @@
 #include "cyberflix/runtime/actors.h"
 #include "cyberflix/runtime/cursor.h"
 #include "cyberflix/runtime/loops.h"
+#include "cyberflix/runtime/palette.h"
 #include "cyberflix/runtime/paths.h"
 #include "cyberflix/runtime/puppet_runtime.h"
 #include "cyberflix/runtime/timing.h"
@@ -544,13 +545,13 @@ private:
 	 * Resolve the named CLUT to 256 RGB triplets, mirroring TI.EXE's clut
 	 * registry (FUN_004470b0): "black" = all black; "set"/"stage" = the
 	 * palette embedded in the currently open set/stage file; "current" = the
-	 * hardware palette mirror (_screenClut). Returns false if unresolvable.
+	 * hardware palette mirror. Returns false if unresolvable.
 	 */
 	bool resolveClut(const Common::String &name, byte (&rgb)[256 * 3]);
 
 	/**
-	 * Program the hardware palette and remember it in _screenClut (the
-	 * "current" clut, TI.EXE DAT_0045f3c8 + FUN_004010f0). All engine palette
+	 * Program the hardware palette and remember it as the "current" clut
+	 * (TI.EXE DAT_0045f3c8 + FUN_004010f0). All engine palette
 	 * writes funnel through here so fades always start from the true state.
 	 */
 	void programPalette(const byte (&rgb)[256 * 3]);
@@ -565,16 +566,7 @@ private:
 	 *  paint stays invisible until the next fade-in reveals it. */
 	bool paletteIsBlack() const;
 
-	/**
-	 * Hardware palette mirror — what is on screen right now. Boot starts black,
-	 * matching run()'s initial clear. Fades interpolate from/to this so that a
-	 * set/stage render performed while the palette is black stays invisible
-	 * until blacktoscreen() reveals it (the original's transition model).
-	 */
-	byte _screenClut[256 * 3] = {};
-	double _paletteGamma[3] = { 0.65, 0.65, 0.65 };
-	byte _paletteGammaTable[3][256] = {};
-	bool _paletteGammaTableDirty = true;
+	PaletteRuntime _paletteRuntime;
 
 	Common::String _saveSignature; ///< Current savegame()/opengame() argument while a ScummVM dialog is active.
 	int _pendingLoadSlot = -1;

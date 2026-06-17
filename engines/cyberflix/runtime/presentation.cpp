@@ -48,7 +48,7 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 	if (key == "black" || key.empty())
 		return true;
 	if (key == "current") {
-		memcpy(rgb, _screenClut, sizeof(rgb));
+		_paletteRuntime.copyCurrent(rgb);
 		return true;
 	}
 	if (key == "set")
@@ -80,7 +80,7 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 	return false;
 }
 
-// Program the hardware palette and mirror it in _screenClut ("current",
+// Program the hardware palette and mirror it as the "current" CLUT
 // TI.EXE DAT_0045f3c8 programmed by FUN_004010f0). The original forces
 // entry 0 to black and 255 to white; the game palettes already obey that.
 //
@@ -91,31 +91,25 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 // adjustable from F1-F8 (steps *1.05 / *0.952381, clamped 0.15..2.5,
 // FUN_00403bf0 from the message pump FUN_00403690; F9 resets to 0.65).
 // 0.65 < 1 brightens the mid-tones considerably, which is why the original
-// renders noticeably lighter than the raw clut colors. _screenClut stays
+// renders noticeably lighter than the raw clut colors. The current CLUT stays
 // pre-gamma like DAT_0045f3c8 (fades interpolate raw cluts and re-apply the
 // curve every step, matching FUN_0041ba80 -> FUN_004010f0).
 void CyberflixEngine::updatePaletteGammaTable() {
-	if (!_paletteGammaTableDirty)
-		return;
 	// Fades call programPalette() once per 60 Hz step. Gamma changes only via
 	// F1-F9, so cache the expensive pow() lookup table and reuse it across fade
 	// steps instead of rebuilding it for every palette update.
-	for (int c = 0; c < 3; ++c) {
-		for (int i = 0; i < 256; ++i)
-			_paletteGammaTable[c][i] = (byte)(pow(i / 255.0, _paletteGamma[c]) * 255.0); // trunc, like __ftol
-	}
-	_paletteGammaTableDirty = false;
+	_paletteRuntime.updateGammaTable();
 }
 
 void CyberflixEngine::programPalette(const byte (&rgb)[256 * 3]) {
-	memcpy(_screenClut, rgb, sizeof(_screenClut));
+	_paletteRuntime.setCurrent(rgb);
 	updatePaletteGammaTable();
 
 	byte hw[256 * 3];
 	for (int i = 0; i < 256; ++i) {
-		hw[i * 3 + 0] = _paletteGammaTable[0][_screenClut[i * 3 + 0]];
-		hw[i * 3 + 1] = _paletteGammaTable[1][_screenClut[i * 3 + 1]];
-		hw[i * 3 + 2] = _paletteGammaTable[2][_screenClut[i * 3 + 2]];
+		hw[i * 3 + 0] = _paletteRuntime.gammaMapped(0, rgb[i * 3 + 0]);
+		hw[i * 3 + 1] = _paletteRuntime.gammaMapped(1, rgb[i * 3 + 1]);
+		hw[i * 3 + 2] = _paletteRuntime.gammaMapped(2, rgb[i * 3 + 2]);
 	}
 	_system->getPaletteManager()->setPalette(hw, 0, 256);
 }
@@ -195,10 +189,7 @@ void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool 
 }
 
 bool CyberflixEngine::paletteIsBlack() const {
-	for (int i = 0; i < 256 * 3; ++i)
-		if (_screenClut[i])
-			return false;
-	return true;
+	return _paletteRuntime.isBlack();
 }
 
 void CyberflixEngine::fadePaletteSteps(const byte (&from)[256 * 3], const byte (&to)[256 * 3], int steps) {

@@ -17,6 +17,7 @@ MODULE_OBJS = \
 	runtime/dispatch.o \
 	runtime/loops.o \
 	runtime/movie.o \
+	runtime/palette.o \
 	runtime/paths.o \
 	runtime/presentation.o \
 	runtime/props.o \

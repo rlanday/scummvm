@@ -676,12 +676,12 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		_pathRuntime.setPathSlot(i, pathSlots[i]);
 	}
 
-	memcpy(_screenClut, savedClut, sizeof(_screenClut));
-	for (uint i = 0; i < ARRAYSIZE(_paletteGamma); ++i)
-		_paletteGamma[i] = savedGamma[i];
+	_paletteRuntime.setCurrent(savedClut);
+	for (uint i = 0; i < 3; ++i)
+		_paletteRuntime.setGamma(i, savedGamma[i]);
 	// The palette lookup table is cached for fade performance; after loading
 	// saved gamma values it must be rebuilt before the restored CLUT is applied.
-	_paletteGammaTableDirty = true;
+	_paletteRuntime.markGammaTableDirty();
 
 	if (varsSeen) {
 		_vm.globalVars().clear();
@@ -917,9 +917,11 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		payload.write(_screenClut, sizeof(_screenClut));
-		for (uint i = 0; i < ARRAYSIZE(_paletteGamma); ++i)
-			payload.writeDoubleLE(_paletteGamma[i]);
+		byte currentClut[256 * 3];
+		_paletteRuntime.copyCurrent(currentClut);
+		payload.write(currentClut, sizeof(currentClut));
+		for (uint i = 0; i < 3; ++i)
+			payload.writeDoubleLE(_paletteRuntime.gamma(i));
 		writeChunk(*saveFile, "PAL ", payload);
 	}
 

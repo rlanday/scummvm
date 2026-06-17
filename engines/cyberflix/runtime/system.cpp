@@ -161,33 +161,33 @@ bool CyberflixEngine::handleGlobalKey(const Common::Event &event) {
 	switch (kc) {
 	case Common::KEYCODE_F1:
 		for (int i = 0; i < 3; ++i)
-			_paletteGamma[i] *= kPaletteGammaDown;
+			_paletteRuntime.gamma(i) *= kPaletteGammaDown;
 		break;
 	case Common::KEYCODE_F2:
 		for (int i = 0; i < 3; ++i)
-			_paletteGamma[i] *= kPaletteGammaUp;
+			_paletteRuntime.gamma(i) *= kPaletteGammaUp;
 		break;
 	case Common::KEYCODE_F3:
-		_paletteGamma[0] *= kPaletteGammaDown;
+		_paletteRuntime.gamma(0) *= kPaletteGammaDown;
 		break;
 	case Common::KEYCODE_F4:
-		_paletteGamma[0] *= kPaletteGammaUp;
+		_paletteRuntime.gamma(0) *= kPaletteGammaUp;
 		break;
 	case Common::KEYCODE_F5:
-		_paletteGamma[1] *= kPaletteGammaDown;
+		_paletteRuntime.gamma(1) *= kPaletteGammaDown;
 		break;
 	case Common::KEYCODE_F6:
-		_paletteGamma[1] *= kPaletteGammaUp;
+		_paletteRuntime.gamma(1) *= kPaletteGammaUp;
 		break;
 	case Common::KEYCODE_F7:
-		_paletteGamma[2] *= kPaletteGammaDown;
+		_paletteRuntime.gamma(2) *= kPaletteGammaDown;
 		break;
 	case Common::KEYCODE_F8:
-		_paletteGamma[2] *= kPaletteGammaUp;
+		_paletteRuntime.gamma(2) *= kPaletteGammaUp;
 		break;
 	case Common::KEYCODE_F9:
 		for (int i = 0; i < 3; ++i)
-			_paletteGamma[i] = kDefaultPaletteGamma;
+			_paletteRuntime.gamma(i) = kDefaultPaletteGamma;
 		break;
 	case Common::KEYCODE_F12:
 		showAboutDialog();
@@ -201,11 +201,10 @@ bool CyberflixEngine::handleGlobalKey(const Common::Event &event) {
 		return false;
 
 	for (int i = 0; i < 3; ++i)
-		_paletteGamma[i] = CLIP(_paletteGamma[i], kPaletteGammaMin, kPaletteGammaMax);
-	_paletteGammaTableDirty = true;
+		_paletteRuntime.setGamma(i, CLIP(_paletteRuntime.gamma(i), kPaletteGammaMin, kPaletteGammaMax));
 
 	byte rgb[256 * 3];
-	memcpy(rgb, _screenClut, sizeof(rgb));
+	_paletteRuntime.copyCurrent(rgb);
 	programPalette(rgb);
 	_system->updateScreen();
 	return true;
