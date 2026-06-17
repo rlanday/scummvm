@@ -659,7 +659,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	_propRuntime.clear();
 	_loopRuntime.clear();
 	_stageRuntime.stage().reset();
-	clearStageShellFrame();
+	stageRuntime().clearShellFrame();
 	_stageRuntime.visible() = false;
 	_stageRuntime.node() = 0;
 	_setRuntime.set().reset();
@@ -806,7 +806,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 			// openStageFile(), so invalidate any cached MAIN.STG/node-0 shell from
 			// the pre-load room. Otherwise SET redraw after loading can copy stale
 			// inventory-bar pixels and recolor them with the restored cabin palette.
-			clearStageShellFrame();
+			stageRuntime().clearShellFrame();
 			_stageRuntime.stage() = stage;
 			_stageRuntime.visible() = true;
 			_stageRuntime.node() = header.stageNode;
@@ -849,7 +849,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0 && !isLoadedReplacementStage(_stageRuntime.stage())) {
 		setRuntime().renderSetScene(*this, _setRuntime.scene(), _setRuntime.table(), _setRuntime.angle(), _setRuntime.view());
 	} else if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) {
-		renderStageNode(_stageRuntime.node());
+		stageRuntime().renderStageNode(*this, _stageRuntime.node());
 	} else {
 		blackScreen();
 	}

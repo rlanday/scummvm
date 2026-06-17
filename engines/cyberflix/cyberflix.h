@@ -293,6 +293,7 @@ private:
 	friend class PropRuntime;
 	friend class PuppetRuntime;
 	friend class SetRuntime;
+	friend class StageRuntime;
 
 	/**
 	 * Special-case the boot script: excise its CD presence check so the game
@@ -312,15 +313,6 @@ private:
 	 */
 	bool setGameCursor(const Common::String &name);
 	bool pumpCursorMotionEvents();
-
-	/**
-	 * Render node @p node of the currently open stage to the screen: decode its
-	 * background frame (compositing from the nearest keyframe), apply the stage
-	 * palette and optionally show the navigation cursor. Direct native stage-node
-	 * renders (FUN_0040b180) show CURS.ARROW, while forceupdate/compositor
-	 * repaints choose the cursor separately through BOOTFILE idle hittest.
-	 */
-	void renderStageNode(int node, bool resetCursor = true);
 
 	/**
 	 * Process the global/movie keyboard shortcuts that the original handles
@@ -390,7 +382,6 @@ private:
 	void queueDirtyRect(const Common::Rect &rect);
 	void markPropDirty(const Shop &shop, const Shop::Prop &prop, const Common::Rect *oldRect);
 	void markShopDirty(const Shop &shop);
-	void repaintDirtyStageRects();
 	/**
 	 * Dispatch `message(args)` with temporary scope-chain entries pushed on
 	 * the VM (newest searched first), mirroring the original's per-dispatch
@@ -444,8 +435,6 @@ private:
 	uint16 _actionFrameMask = 0;
 
 	AudioRuntime _audioRuntime;
-	void clearStageShellFrame();
-	const FrameImage *stageShellFrame();
 	bool _keyAborts = false;  ///< Global keyaborts() getter state.
 
 	LoopRuntime _loopRuntime;

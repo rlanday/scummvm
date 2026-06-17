@@ -245,7 +245,7 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 	} else if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) {
 		// visualeffect() reaches the same update/compositor path as forceupdate();
 		// it repaints pixels but native cursor state remains script-controlled.
-		renderStageNode(_stageRuntime.node(), false);
+		stageRuntime().renderStageNode(*this, _stageRuntime.node(), false);
 		_propRuntime.setDirty(false);
 	} else {
 		_system->updateScreen();

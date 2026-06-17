@@ -601,11 +601,11 @@ void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine) {
 	if (!engine._setRuntime.visible() || isReplacementStageForProps(engine._stageRuntime.stage())) {
 		if (engine._stageRuntime.stage() && engine._stageRuntime.stage()->isOpen()) {
 			if (!_dirtyRects.empty())
-				engine.repaintDirtyStageRects();
+				engine.stageRuntime().repaintDirtyStageRects(engine);
 			else {
 				// Prop refresh without dirty bounds is still a compositor repaint,
 				// not navigation to a new flat, so keep the current script cursor.
-				engine.renderStageNode(engine._stageRuntime.node(), false);
+				engine.stageRuntime().renderStageNode(engine, engine.stageRuntime().node(), false);
 			}
 		}
 		_dirtyRects.clear();

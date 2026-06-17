@@ -24,6 +24,7 @@ MODULE_OBJS = \
 	runtime/puppet_runtime.o \
 	runtime/set_runtime.o \
 	runtime/set_state.o \
+	runtime/stage_runtime.o \
 	runtime/system.o \
 	runtime/timing.o \
 	saveload.o \

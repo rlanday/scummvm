@@ -22,12 +22,17 @@
 #ifndef CYBERFLIX_RUNTIME_STAGE_RUNTIME_H
 #define CYBERFLIX_RUNTIME_STAGE_RUNTIME_H
 
+#include "common/array.h"
 #include "common/ptr.h"
+#include "common/str.h"
 
 #include "cyberflix/image.h"
 #include "cyberflix/stage.h"
 
 namespace Cyberflix {
+
+class CyberflixEngine;
+struct Value;
 
 class StageRuntime {
 public:
@@ -41,6 +46,29 @@ public:
 	const FrameImage &shellFrameData() const { return _shellFrame; }
 	bool &shellFrameValid() { return _shellFrameValid; }
 	bool shellFrameValid() const { return _shellFrameValid; }
+
+	void openStageFile(CyberflixEngine &engine, const Common::String &name);
+	void closeStageFile(CyberflixEngine &engine);
+	void gotoFlat(CyberflixEngine &engine, const Value &flat);
+	Common::String currentStage() const;
+	bool stageVisible(const bool *newVisible);
+	Common::String currentFlat() const;
+	const FrameImage *stageShellFrame();
+
+	void sendToStage(CyberflixEngine &engine, const Common::String &message, const Common::Array<Value> &args);
+	Value sendToStageFx(CyberflixEngine &engine, const Common::String &message, const Common::Array<Value> &args);
+	void sendToFlat(CyberflixEngine &engine, const Common::String &flat, const Common::String &message,
+			const Common::Array<Value> &args);
+	Value sendToFlatFx(CyberflixEngine &engine, const Common::String &flat, const Common::String &message,
+			const Common::Array<Value> &args);
+	void sendToButton(CyberflixEngine &engine, const Common::String &flat, const Common::String &button,
+			const Common::String &message, const Common::Array<Value> &args);
+	Value sendToButtonFx(CyberflixEngine &engine, const Common::String &flat, const Common::String &button,
+			const Common::String &message, const Common::Array<Value> &args);
+
+	void renderStageNode(CyberflixEngine &engine, int node, bool resetCursor = true);
+	void repaintDirtyStageRects(CyberflixEngine &engine);
+	bool pointInButton(const Common::String &flat, const Common::String &button, int32 packedPoint) const;
 
 	void clearShellFrame() {
 		_shellFrame.width = 0;

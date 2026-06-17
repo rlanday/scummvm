@@ -243,7 +243,7 @@ bool SetRuntime::setVisible(CyberflixEngine &engine, const bool *newVisible) {
 			transitionType() = kSetTransitionNone;
 			engine.propRuntime().setDirty(false);
 			if (engine.stageRuntime().stage() && engine.stageRuntime().stage()->isOpen())
-				engine.renderStageNode(engine.stageRuntime().node(), false);
+				engine.stageRuntime().renderStageNode(engine, engine.stageRuntime().node(), false);
 		}
 	}
 	return visible();

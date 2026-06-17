@@ -317,7 +317,7 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		return;
 
 	engine.advancePropPoses();
-	const FrameImage *stageBg = engine.stageShellFrame();
+	const FrameImage *stageBg = engine.stageRuntime().stageShellFrame();
 	Graphics::Surface *screen = engine._system->lockScreen();
 	// Base layer: the stage's UI shell (MAIN.STG node 0 — art-deco frame +
 	// inventory bar). The original's compositor keeps it on screen beneath
