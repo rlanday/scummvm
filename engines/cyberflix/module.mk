@@ -20,6 +20,7 @@ MODULE_OBJS = \
 	runtime/props.o \
 	saveload.o \
 	ui/console.o \
+	vm/builtins.o \
 	vm/script.o \
 	vm/vm.o
 
