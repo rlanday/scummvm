@@ -3,6 +3,7 @@ MODULE := engines/cyberflix
 MODULE_OBJS = \
 	archive.o \
 	audio.o \
+	actors.o \
 	cast.o \
 	console.o \
 	cyberflix.o \
