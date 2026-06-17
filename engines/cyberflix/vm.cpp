@@ -601,6 +601,72 @@ bool ScriptVM::callCoreMethod(uint16 opcode, const Common::Array<Value> &args, V
 	}
 }
 
+bool ScriptVM::callAudioMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
+	switch (opcode) {
+	case Script::kMethodOpenTrackFile: // opentrackfile('name.trk') -> FUN_00411be0/FUN_00411cc0
+		_host->openTrackFile(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodCloseTrackFile: // closetrackfile('name.trk') -> FUN_00412070
+		_host->closeTrackFile(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodPlayTheme: // playtheme('name.trk') -> FUN_00412250: start the track's
+	             // theme playlist on the theme channel (replaces current)
+		_host->playTheme(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodSingleSound: // singlesound(name) -> FUN_004122d0/FUN_0042fa80
+	case Script::kMethodMultipleSound: // multiplesound(name) -> FUN_00412310/FUN_0042fb20
+	case Script::kMethodDualSound: // dualsound(name) -> FUN_00412350/FUN_0042fbc0
+	case Script::kMethodBothSound: // bothsound(name) -> FUN_00412390/FUN_0042fc30
+		_host->playSound(args.empty() ? Common::String() : args[0].strValue,
+				opcode - Script::kMethodSingleSound);
+		return true;
+	case Script::kMethodVoiceSound: // voicesound(name) -> FUN_004123d0/FUN_0042fc70
+		_host->playVoice(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodHaltSound: // haltsound(1|2|3) -> FUN_00412430/FUN_0042f690
+		_host->haltSound(args.empty() ? 3 : args[0].intValue);
+		return true;
+	case Script::kMethodHaltTheme: // halttheme() -> FUN_00412410: stop the theme channel
+		_host->haltTheme();
+		return true;
+	case Script::kMethodHaltVoice: // haltvoice() -> FUN_004124d0/FUN_0042f690
+		_host->haltVoice();
+		return true;
+	case Script::kMethodThemeVol: // themevol('name.trk', vol 0-255) -> FUN_004125c0
+		_host->themeVolume(args.size() > 0 ? args[0].strValue : Common::String(),
+				args.size() > 1 ? args[1].intValue : 255);
+		return true;
+	case Script::kMethodWaveVolume: { // wavevolume([level 0..9]) -> FUN_00436670/FUN_00439df0
+		int level = args.empty() ? 0 : args[0].intValue;
+		const int *newLevel = args.empty() ? nullptr : &level;
+		result = Value::makeInt(_host->waveVolume(newLevel));
+		return true;
+	}
+	case Script::kMethodSoundVol: { // soundvol(name[, volume 0..255]) -> FUN_00412ad0/FUN_004125c0
+		if (args.empty()) {
+			result = Value::makeInt(0);
+			return true;
+		}
+		int volume = args.size() > 1 ? args[1].intValue : 0;
+		const int *newVolume = args.size() > 1 ? &volume : nullptr;
+		result = Value::makeInt(_host->soundVolume(args[0].strValue, newVolume));
+		return true;
+	}
+	case Script::kMethodCurrentTheme: // currenttheme(1|2) -> FUN_00412f20: 1 = playing cue name,
+	             // 2 = its track file name; 'none' if silent
+		result = Value::makeString(_host->currentTheme(args.empty() ? 1 : args[0].intValue));
+		return true;
+	case Script::kMethodCurrentSound: // currentsound(1|2|3) -> FUN_00412e60: active SFX cue or 'None'
+		result = Value::makeString(_host->currentSound(args.empty() ? 1 : args[0].intValue));
+		return true;
+	case Script::kMethodCurrentVoice: // currentvoice() -> FUN_00412ff0: active voice cue or 'None'
+		result = Value::makeString(_host->currentVoice());
+		return true;
+	default:
+		return false;
+	}
+}
+
 Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args) {
 	// Dispatch a builtin method by opcode. The interpreter routes 0x2Exx/0x2Fxx
 	// through dispatch B and 0x3Exx/0x4Exx through dispatch A (files/opcode-map.md
@@ -630,6 +696,9 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 	// routed through dispatchMessageBuiltin with the message unevaluated.)
 
 	if (_host) {
+		if (callAudioMethod(opcode, args, result))
+			return result;
+
 		switch (opcode) {
 		case Script::kMethodMessage: // message(text) -> FUN_00446240
 			_host->message(args.empty() ? Common::String() : args[0].strValue);
@@ -797,51 +866,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			const int *newRate = args.empty() ? nullptr : &rate;
 			return Value::makeInt(_host->frameRate(newRate));
 		}
-		case Script::kMethodOpenTrackFile: // opentrackfile('name.trk') -> FUN_00411be0/FUN_00411cc0
-			_host->openTrackFile(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodCloseTrackFile: // closetrackfile('name.trk') -> FUN_00412070
-			_host->closeTrackFile(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodPlayTheme: // playtheme('name.trk') -> FUN_00412250: start the track's
-		             // theme playlist on the theme channel (replaces current)
-			_host->playTheme(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodSingleSound: // singlesound(name) -> FUN_004122d0/FUN_0042fa80
-		case Script::kMethodMultipleSound: // multiplesound(name) -> FUN_00412310/FUN_0042fb20
-		case Script::kMethodDualSound: // dualsound(name) -> FUN_00412350/FUN_0042fbc0
-		case Script::kMethodBothSound: // bothsound(name) -> FUN_00412390/FUN_0042fc30
-			_host->playSound(args.empty() ? Common::String() : args[0].strValue,
-					opcode - Script::kMethodSingleSound);
-			break;
-		case Script::kMethodVoiceSound: // voicesound(name) -> FUN_004123d0/FUN_0042fc70
-			_host->playVoice(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodHaltSound: // haltsound(1|2|3) -> FUN_00412430/FUN_0042f690
-			_host->haltSound(args.empty() ? 3 : args[0].intValue);
-			break;
-		case Script::kMethodHaltTheme: // halttheme() -> FUN_00412410: stop the theme channel
-			_host->haltTheme();
-			break;
-		case Script::kMethodHaltVoice: // haltvoice() -> FUN_004124d0/FUN_0042f690
-			_host->haltVoice();
-			break;
-		case Script::kMethodThemeVol: // themevol('name.trk', vol 0-255) -> FUN_004125c0
-			_host->themeVolume(args.size() > 0 ? args[0].strValue : Common::String(),
-					args.size() > 1 ? args[1].intValue : 255);
-			break;
-		case Script::kMethodWaveVolume: { // wavevolume([level 0..9]) -> FUN_00436670/FUN_00439df0
-			int level = args.empty() ? 0 : args[0].intValue;
-			const int *newLevel = args.empty() ? nullptr : &level;
-			return Value::makeInt(_host->waveVolume(newLevel));
-		}
-		case Script::kMethodSoundVol: { // soundvol(name[, volume 0..255]) -> FUN_00412ad0/FUN_004125c0
-			if (args.empty())
-				return Value::makeInt(0);
-			int volume = args.size() > 1 ? args[1].intValue : 0;
-			const int *newVolume = args.size() > 1 ? &volume : nullptr;
-			return Value::makeInt(_host->soundVolume(args[0].strValue, newVolume));
-		}
 		case Script::kMethodKeyAborts: { // keyaborts([resource, key, flag]) -> FUN_00435a00/FUN_00446e10
 			bool enabled = args.size() > 2 && args[2].intValue != 0;
 			return Value::makeBool(_host->keyAborts(
@@ -849,13 +873,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 					args.size() > 1 ? &args[1].strValue : nullptr,
 					args.size() > 2 ? &enabled : nullptr));
 		}
-		case Script::kMethodCurrentTheme: // currenttheme(1|2) -> FUN_00412f20: 1 = playing cue name,
-		             // 2 = its track file name; 'none' if silent
-			return Value::makeString(_host->currentTheme(args.empty() ? 1 : args[0].intValue));
-		case Script::kMethodCurrentSound: // currentsound(1|2|3) -> FUN_00412e60: active SFX cue or 'None'
-			return Value::makeString(_host->currentSound(args.empty() ? 1 : args[0].intValue));
-		case Script::kMethodCurrentVoice: // currentvoice() -> FUN_00412ff0: active voice cue or 'None'
-			return Value::makeString(_host->currentVoice());
 		case Script::kMethodPath: { // path(slot[, value]) -> FUN_004462a0/FUN_00438450
 			int slot = args.empty() ? 0 : args[0].intValue;
 			const Common::String *newPath = args.size() >= 2 ? &args[1].strValue : nullptr;
