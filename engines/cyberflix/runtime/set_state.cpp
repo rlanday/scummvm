@@ -27,47 +27,47 @@
 
 namespace Cyberflix {
 
-void CyberflixEngine::openSetFile(const Common::String &name,
-		const Common::String &scene, const Common::String &view) {
+void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name,
+		const Common::String &sceneName, const Common::String &viewName) {
 	if (name.empty())
 		return;
 
 	int previousHeading = 0;
-	if (_setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0) {
+	if (set() && set()->isOpen() && this->scene() >= 0) {
 		Set::CameraData cameraData;
-		if (_setRuntime.transitionType() == kSetTransitionForward && _setRuntime.transitionResource() != 0) {
-			if (_setRuntime.set()->transitionCameraData(_setRuntime.transitionResource(), _setRuntime.transitionFrame(), cameraData))
+		if (transitionType() == kSetTransitionForward && transitionResource() != 0) {
+			if (set()->transitionCameraData(transitionResource(), transitionFrame(), cameraData))
 				previousHeading = cameraData.heading;
-		} else if (_setRuntime.set()->cameraData((uint32)_setRuntime.scene(), (uint32)_setRuntime.table(),
-				(uint32)_setRuntime.angle(), cameraData)) {
+		} else if (set()->cameraData((uint32)this->scene(), (uint32)table(),
+				(uint32)angle(), cameraData)) {
 			previousHeading = cameraData.heading;
 		}
 	}
 
-	Common::ScopedPtr<Set> set(new Set());
-	if (!set->open(name)) {
+	Common::ScopedPtr<Set> newSet(new Set());
+	if (!newSet->open(name)) {
 		warning("Cyberflix: opensetfile('%s') failed", name.c_str());
 		return;
 	}
-	_setRuntime.set().reset(set.release());
-	_setRuntime.scene() = -1;
-	_setRuntime.table() = 0;
-	_setRuntime.angle() = 0;
-	_setRuntime.view().clear();
-	_setRuntime.transitionType() = kSetTransitionNone;
-	_setRuntime.transitionResource() = 0;
-	_setRuntime.transitionFrame() = 0;
-	_setRuntime.frameSequence().clear();
-	_setRuntime.visible() = true;
+	set().reset(newSet.release());
+	this->scene() = -1;
+	table() = 0;
+	angle() = 0;
+	this->view().clear();
+	transitionType() = kSetTransitionNone;
+	transitionResource() = 0;
+	transitionFrame() = 0;
+	frameSequence().clear();
+	visible() = true;
 	debug(1, "Cyberflix: set '%s' open (%u scenes, name '%s', default scene '%s' view '%s')",
-			name.c_str(), _setRuntime.set()->sceneCount(), _setRuntime.set()->setName().c_str(),
-			_setRuntime.set()->defaultScene().c_str(), _setRuntime.set()->defaultView().c_str());
-	refreshActorStarPositions();
+			name.c_str(), set()->sceneCount(), set()->setName().c_str(),
+			set()->defaultScene().c_str(), set()->defaultView().c_str());
+	engine.refreshActorStarPositions();
 
 	// FUN_004307f0: when no scene/view argument is given, the defaults come
 	// from the set's master header (+0xa0e / +0xa1e).
-	Common::String useScene = !scene.empty() ? scene : _setRuntime.set()->defaultScene();
-	Common::String useView = !view.empty() ? view : _setRuntime.set()->defaultView();
+	Common::String useScene = !sceneName.empty() ? sceneName : set()->defaultScene();
+	Common::String useView = !viewName.empty() ? viewName : set()->defaultView();
 
 	// The original finishes opensetfile by sending the system messages
 	// (FUN_00430fa0): it runs openset() against [set script, BOOTFILE res2],
@@ -75,49 +75,49 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 	// sendtoscene executor FUN_004311e0, which paints and dispatches against
 	// [scene script, set script, BOOTFILE res2].
 	Common::Array<Value> noArgs;
-	Common::String openedName = _setRuntime.set()->setName();
-	dispatchSetMessage("openset", noArgs);
+	Common::String openedName = set()->setName();
+	engine.dispatchSetMessage("openset", noArgs);
 
-	if (_setRuntime.set() && _setRuntime.set()->setName() == openedName && !useScene.empty()) {
-		int sceneIdx = _setRuntime.set()->findScene(useScene);
+	if (set() && set()->setName() == openedName && !useScene.empty()) {
+		int sceneIdx = set()->findScene(useScene);
 		if (sceneIdx < 0) {
-			if (_setRuntime.set()->sceneCount() == 0) {
-				warning("Cyberflix: set '%s' has no scenes", _setRuntime.set()->name().c_str());
+			if (set()->sceneCount() == 0) {
+				warning("Cyberflix: set '%s' has no scenes", set()->name().c_str());
 				return;
 			}
 			debug(1, "Cyberflix: set '%s' scene '%s' not found, using first scene '%s'",
-					_setRuntime.set()->name().c_str(), useScene.c_str(), _setRuntime.set()->sceneName(0).c_str());
+					set()->name().c_str(), useScene.c_str(), set()->sceneName(0).c_str());
 			sceneIdx = 0;
 		}
-		Common::String actualScene = _setRuntime.set()->sceneName((uint32)sceneIdx);
+		Common::String actualScene = set()->sceneName((uint32)sceneIdx);
 		// View select (TI.EXE FUN_00433960 stores the view, FUN_004425e0 aims
 		// the camera at the panorama record tagged with the view's index).
 		int angle = 0;
 		Common::String activeView;
 		if (!useView.empty()) {
-			int viewIdx = _setRuntime.set()->findView((uint32)sceneIdx, useView);
+			int viewIdx = set()->findView((uint32)sceneIdx, useView);
 			if (viewIdx < 0) {
 				// FUN_00433960 preserves the requested view name, but if the
 				// selected scene lacks it, it chooses the view whose authored
 				// heading is closest to the previous camera heading before
 				// calling FUN_004425e0.
-				viewIdx = _setRuntime.set()->nearestViewForHeading((uint32)sceneIdx, previousHeading);
+				viewIdx = set()->nearestViewForHeading((uint32)sceneIdx, previousHeading);
 				if (viewIdx >= 0)
 					debug(1, "Cyberflix: opensetfile view '%s' not found in scene '%s', using nearest view '%s'",
 							useView.c_str(), actualScene.c_str(),
-							_setRuntime.set()->viewName((uint32)sceneIdx, (uint32)viewIdx).c_str());
+							set()->viewName((uint32)sceneIdx, (uint32)viewIdx).c_str());
 			}
-			int viewAngle = _setRuntime.set()->angleForView((uint32)sceneIdx, 0, viewIdx);
+			int viewAngle = set()->angleForView((uint32)sceneIdx, 0, viewIdx);
 			if (viewAngle >= 0) {
 				angle = viewAngle;
-				activeView = _setRuntime.set()->viewName((uint32)sceneIdx, (uint32)viewIdx);
+				activeView = set()->viewName((uint32)sceneIdx, (uint32)viewIdx);
 			} else {
 				warning("Cyberflix: opensetfile view '%s' not found in scene '%s'",
 						useView.c_str(), actualScene.c_str());
 			}
 		}
-		renderSetScene(sceneIdx, 0, angle, activeView);
-		dispatchSceneMessage((uint32)sceneIdx, "openscene", noArgs);
+		renderSetScene(engine, sceneIdx, 0, angle, activeView);
+		engine.dispatchSceneMessage((uint32)sceneIdx, "openscene", noArgs);
 	}
 }
 
@@ -128,125 +128,125 @@ void CyberflixEngine::openSetFile(const Common::String &name,
 // global closeset() calls putdownsound() which halts the room theme, and it
 // switches on currentset(), so the messages must go out while the set is
 // still current.
-void CyberflixEngine::closeSetFile() {
-	if (_setRuntime.set() && _setRuntime.set()->isOpen()) {
+void SetRuntime::closeSetFile(CyberflixEngine &engine) {
+	if (set() && set()->isOpen()) {
 		Common::Array<Value> noArgs;
-		Common::String openedName = _setRuntime.set()->setName();
-		if (_setRuntime.scene() >= 0)
-			dispatchSceneMessage((uint32)_setRuntime.scene(), "closescene", noArgs);
-		if (_setRuntime.set() && _setRuntime.set()->setName() == openedName)
-			dispatchSetMessage("closeset", noArgs);
+		Common::String openedName = set()->setName();
+		if (scene() >= 0)
+			engine.dispatchSceneMessage((uint32)scene(), "closescene", noArgs);
+		if (set() && set()->setName() == openedName)
+			engine.dispatchSetMessage("closeset", noArgs);
 	}
-	_setRuntime.set().reset();
-	_setRuntime.scene() = -1;
-	_setRuntime.table() = 0;
-	_setRuntime.angle() = 0;
-	_setRuntime.view().clear();
-	_setRuntime.transitionType() = kSetTransitionNone;
-	_setRuntime.transitionResource() = 0;
-	_setRuntime.transitionFrame() = 0;
-	_setRuntime.frameSequence().clear();
-	_setRuntime.visible() = false;
+	set().reset();
+	scene() = -1;
+	table() = 0;
+	angle() = 0;
+	view().clear();
+	transitionType() = kSetTransitionNone;
+	transitionResource() = 0;
+	transitionFrame() = 0;
+	frameSequence().clear();
+	visible() = false;
 }
 
 // currentset(): the open set's EMBEDDED name (master header +0x070, e.g.
 // 'bedsit1' -- no '.set'), or 'none' (TI.EXE builtin 0x4e55 returns the set
 // record's name field, copied from the header by FUN_004307f0; setupsound,
 // themetype and changeset all switch/compare on this form).
-Common::String CyberflixEngine::currentSet() {
-	if (_setRuntime.set() && _setRuntime.set()->isOpen())
-		return _setRuntime.set()->setName();
+Common::String SetRuntime::currentSet() const {
+	if (set() && set()->isOpen())
+		return set()->setName();
 	return "none";
 }
 
 // currentview(): DAT_004611dc in TI.EXE (FUN_00431ce0), or "Moving" while a
 // panorama transition resource is active.
-Common::String CyberflixEngine::currentView() {
-	if (_setRuntime.transitionType() != kSetTransitionNone)
+Common::String SetRuntime::currentView() const {
+	if (transitionType() != kSetTransitionNone)
 		return "Moving";
-	if (_setRuntime.set() && _setRuntime.set()->isOpen() && !_setRuntime.view().empty())
-		return _setRuntime.view();
+	if (set() && set()->isOpen() && !view().empty())
+		return view();
 	return "none";
 }
 
 // currentscene([arg]): no-arg reads DAT_004611cc. With "left"/"right"/"strait",
 // BOOTFILE res2's keydown fallback reaches TI.EXE FUN_00430c70/FUN_00442140 to
 // navigate the current set; other strings are scene names to switch to.
-Common::String CyberflixEngine::currentScene(const Common::String *target) {
-	if (!_setRuntime.set() || !_setRuntime.set()->isOpen() || _setRuntime.scene() < 0)
+Common::String SetRuntime::currentScene(CyberflixEngine &engine, const Common::String *target) {
+	if (!set() || !set()->isOpen() || scene() < 0)
 		return "none";
 
 	if (target && !target->empty()) {
 		if (target->equalsIgnoreCase("left") || target->equalsIgnoreCase("right") ||
 				target->equalsIgnoreCase("strait")) {
-			navigateSet(*target);
+			navigateSet(engine, *target);
 		} else {
-			int scene = _setRuntime.set()->findScene(*target);
-			if (scene >= 0) {
-				int angle = 0;
-				Common::String view = _setRuntime.set()->defaultView();
-				int viewIdx = _setRuntime.set()->findView((uint32)scene, view);
-				int viewAngle = _setRuntime.set()->angleForView((uint32)scene, 0, viewIdx);
+			int sceneIdx = set()->findScene(*target);
+			if (sceneIdx >= 0) {
+				int targetAngle = 0;
+				Common::String targetView = set()->defaultView();
+				int viewIdx = set()->findView((uint32)sceneIdx, targetView);
+				int viewAngle = set()->angleForView((uint32)sceneIdx, 0, viewIdx);
 				if (viewAngle >= 0)
-					angle = viewAngle;
+					targetAngle = viewAngle;
 				else
-					view.clear();
-				renderSetScene(scene, 0, angle, view);
+					targetView.clear();
+				renderSetScene(engine, sceneIdx, 0, targetAngle, targetView);
 			} else {
 				warning("Cyberflix: currentscene('%s'): no such scene", target->c_str());
 			}
 		}
 	}
 
-	return (_setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0) ?
-			_setRuntime.set()->sceneName((uint32)_setRuntime.scene()) : Common::String("none");
+	return (set() && set()->isOpen() && scene() >= 0) ?
+			set()->sceneName((uint32)scene()) : Common::String("none");
 }
 
-int CyberflixEngine::countPaintings(const Common::String &scene, const Common::String &view) {
-	if (!_setRuntime.set() || !_setRuntime.set()->isOpen())
+int SetRuntime::countPaintings(const Common::String &scene, const Common::String &view) const {
+	if (!set() || !set()->isOpen())
 		return 0;
-	int sceneIdx = _setRuntime.set()->findScene(scene);
-	return sceneIdx >= 0 ? (int)_setRuntime.set()->paintingCount((uint32)sceneIdx, view) : 0;
+	int sceneIdx = set()->findScene(scene);
+	return sceneIdx >= 0 ? (int)set()->paintingCount((uint32)sceneIdx, view) : 0;
 }
 
-Common::String CyberflixEngine::indexToPainting(const Common::String &scene,
-		const Common::String &view, int index) {
-	if (!_setRuntime.set() || !_setRuntime.set()->isOpen() || index < 1)
+Common::String SetRuntime::indexToPainting(const Common::String &scene,
+		const Common::String &view, int index) const {
+	if (!set() || !set()->isOpen() || index < 1)
 		return Common::String();
-	int sceneIdx = _setRuntime.set()->findScene(scene);
-	return sceneIdx >= 0 ? _setRuntime.set()->indexToPainting((uint32)sceneIdx, view, (uint32)index) :
+	int sceneIdx = set()->findScene(scene);
+	return sceneIdx >= 0 ? set()->indexToPainting((uint32)sceneIdx, view, (uint32)index) :
 			Common::String();
 }
 
-bool CyberflixEngine::roadAhead(const Common::String &scene, const Common::String &view) {
-	if (!_setRuntime.set() || !_setRuntime.set()->isOpen())
+bool SetRuntime::roadAhead(const Common::String &scene, const Common::String &view) const {
+	if (!set() || !set()->isOpen())
 		return false;
-	int sceneIdx = _setRuntime.set()->findScene(scene);
+	int sceneIdx = set()->findScene(scene);
 	if (sceneIdx < 0)
 		return false;
-	int viewIdx = _setRuntime.set()->findView((uint32)sceneIdx, view);
-	return _setRuntime.set()->forwardTransitionForView((uint32)sceneIdx, viewIdx) != 0;
+	int viewIdx = set()->findView((uint32)sceneIdx, view);
+	return set()->forwardTransitionForView((uint32)sceneIdx, viewIdx) != 0;
 }
 
-bool CyberflixEngine::setVisible(const bool *newVisible) {
-	if (!_setRuntime.set() || !_setRuntime.set()->isOpen())
+bool SetRuntime::setVisible(CyberflixEngine &engine, const bool *newVisible) {
+	if (!set() || !set()->isOpen())
 		return false;
 	if (newVisible) {
-		bool wasVisible = _setRuntime.visible();
-		_setRuntime.visible() = *newVisible;
-		if (_setRuntime.visible()) {
-			if (!wasVisible && _setRuntime.scene() >= 0)
-				renderSetScene(_setRuntime.scene(), _setRuntime.table(), _setRuntime.angle(), _setRuntime.view());
+		bool wasVisible = visible();
+		visible() = *newVisible;
+		if (visible()) {
+			if (!wasVisible && scene() >= 0)
+				renderSetScene(engine, scene(), table(), angle(), view());
 			else
-				_propRuntime.setDirty(true);
+				engine.propRuntime().setDirty(true);
 		} else {
-			_setRuntime.transitionType() = kSetTransitionNone;
-			_propRuntime.setDirty(false);
-			if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen())
-				renderStageNode(_stageRuntime.node(), false);
+			transitionType() = kSetTransitionNone;
+			engine.propRuntime().setDirty(false);
+			if (engine.stageRuntime().stage() && engine.stageRuntime().stage()->isOpen())
+				engine.renderStageNode(engine.stageRuntime().node(), false);
 		}
 	}
-	return _setRuntime.visible();
+	return visible();
 }
 
 } // End of namespace Cyberflix

@@ -612,16 +612,17 @@ void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine) {
 		_propsDirty = false;
 		return;
 	}
-	if (engine._setRuntime.set() && engine._setRuntime.set()->isOpen() && engine._setRuntime.scene() >= 0) {
+	SetRuntime &setRuntime = engine.setRuntime();
+	if (setRuntime.set() && setRuntime.set()->isOpen() && setRuntime.scene() >= 0) {
 		// ScummVM-only optimization matching the native backing-surface model:
 		// prop mutations do not change the SET background, and the current
 		// decoded/transitioned background is already retained in _setRuntime.frameSequence().
 		// Recompose that surface with live props instead of re-decoding the same
 		// compressed panorama/transition frame for every sendtoprop() refresh.
-		if (!engine._setRuntime.frameSequence().empty())
-			engine.displaySetFrame(engine._setRuntime.frameSequence());
+		if (!setRuntime.frameSequence().empty())
+			setRuntime.displaySetFrame(engine, setRuntime.frameSequence());
 		else
-			engine.renderSetScene(engine._setRuntime.scene(), engine._setRuntime.angle());
+			setRuntime.renderSetScene(engine, setRuntime.scene(), setRuntime.table(), setRuntime.angle());
 	}
 	_dirtyRects.clear();
 }

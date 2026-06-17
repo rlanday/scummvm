@@ -22,6 +22,7 @@
 #ifndef CYBERFLIX_RUNTIME_SET_RUNTIME_H
 #define CYBERFLIX_RUNTIME_SET_RUNTIME_H
 
+#include "common/array.h"
 #include "common/ptr.h"
 #include "common/str.h"
 
@@ -29,6 +30,9 @@
 #include "cyberflix/set.h"
 
 namespace Cyberflix {
+
+class CyberflixEngine;
+struct Value;
 
 enum SetTransitionType {
 	kSetTransitionNone,
@@ -60,6 +64,39 @@ public:
 	bool visible() const { return _visible; }
 	bool &screenUpdatePending() { return _screenUpdatePending; }
 	bool screenUpdatePending() const { return _screenUpdatePending; }
+
+	void openSetFile(CyberflixEngine &engine, const Common::String &name,
+			const Common::String &scene = Common::String(),
+			const Common::String &view = Common::String());
+	void closeSetFile(CyberflixEngine &engine);
+	Common::String currentSet() const;
+	Common::String currentView() const;
+	Common::String currentScene(CyberflixEngine &engine, const Common::String *target);
+	bool setVisible(CyberflixEngine &engine, const bool *newVisible);
+
+	void sendToScene(CyberflixEngine &engine, const Common::String &scene,
+			const Common::String &message, const Common::Array<Value> &args);
+	Value sendToSceneFx(CyberflixEngine &engine, const Common::String &scene,
+			const Common::String &message, const Common::Array<Value> &args);
+	void sendToPainting(CyberflixEngine &engine, const Common::String &scene,
+			const Common::String &view, const Common::String &painting,
+			const Common::String &message, const Common::Array<Value> &args);
+	Value sendToPaintingFx(CyberflixEngine &engine, const Common::String &scene,
+			const Common::String &view, const Common::String &painting,
+			const Common::String &message, const Common::Array<Value> &args);
+	int countPaintings(const Common::String &scene, const Common::String &view) const;
+	Common::String indexToPainting(const Common::String &scene,
+			const Common::String &view, int index) const;
+	bool roadAhead(const Common::String &scene, const Common::String &view) const;
+
+	void navigateSet(CyberflixEngine &engine, const Common::String &action);
+	void advanceSetTransition(CyberflixEngine &engine);
+	void renderSetScene(CyberflixEngine &engine, int scene, int table, int angle,
+			const Common::String &view = Common::String());
+	void displaySetFrame(CyberflixEngine &engine, const FrameImage &frame);
+	void displaySetFrame(CyberflixEngine &engine, const FrameSequence &frame);
+	void displaySetFramePixels(CyberflixEngine &engine, const byte *pixels, uint16 width, uint16 height);
+	bool presentPendingScreenUpdate(CyberflixEngine &engine);
 
 	void clearNavigation() {
 		_scene = -1;

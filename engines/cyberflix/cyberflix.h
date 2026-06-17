@@ -86,6 +86,25 @@ public:
 
 	Common::Error run() override;
 
+	AudioRuntime &audioRuntime() { return _audioRuntime; }
+	const AudioRuntime &audioRuntime() const { return _audioRuntime; }
+	ActorRuntime &actorRuntime() { return _actorRuntime; }
+	const ActorRuntime &actorRuntime() const { return _actorRuntime; }
+	CursorRuntime &cursorRuntime() { return _cursorRuntime; }
+	const CursorRuntime &cursorRuntime() const { return _cursorRuntime; }
+	LoopRuntime &loopRuntime() { return _loopRuntime; }
+	const LoopRuntime &loopRuntime() const { return _loopRuntime; }
+	PathRuntime &pathRuntime() { return _pathRuntime; }
+	const PathRuntime &pathRuntime() const { return _pathRuntime; }
+	PropRuntime &propRuntime() { return _propRuntime; }
+	const PropRuntime &propRuntime() const { return _propRuntime; }
+	PuppetRuntime &puppetRuntime() { return _puppetRuntime; }
+	const PuppetRuntime &puppetRuntime() const { return _puppetRuntime; }
+	SetRuntime &setRuntime() { return _setRuntime; }
+	const SetRuntime &setRuntime() const { return _setRuntime; }
+	StageRuntime &stageRuntime() { return _stageRuntime; }
+	const StageRuntime &stageRuntime() const { return _stageRuntime; }
+
 	bool hasFeature(EngineFeature f) const override;
 	Common::Error loadGameState(int slot) override;
 	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
@@ -273,6 +292,7 @@ private:
 	friend class LoopRuntime;
 	friend class PropRuntime;
 	friend class PuppetRuntime;
+	friend class SetRuntime;
 
 	/**
 	 * Special-case the boot script: excise its CD presence check so the game
@@ -301,29 +321,6 @@ private:
 	 * repaints choose the cursor separately through BOOTFILE idle hittest.
 	 */
 	void renderStageNode(int node, bool resetCursor = true);
-
-	/**
-	 * Render the current angle of scene @p scene of the currently open set to the
-	 * screen: replay the panorama frames up to the camera angle (cold-start buffer
-	 * state), apply the set palette and show the navigation cursor. Mirrors the
-	 * background-paint half of TI.EXE FUN_00431200 (sendtoscene). @p angle is the
-	 * panorama index; the heading-to-view selection (FUN_00442b70 / FUN_00426250)
-	 * lands with panorama navigation.
-	 */
-	void renderSetScene(int scene, int table, int angle,
-			const Common::String &view = Common::String());
-	void renderSetScene(int scene, int angle) { renderSetScene(scene, _setRuntime.table(), angle); }
-	/** Composite a decoded SET background frame with the stage shell and props. */
-	void displaySetFrame(const FrameImage &frame);
-	/** Present retained SET pixels directly, avoiding a full-frame copy per transition frame. */
-	void displaySetFrame(const FrameSequence &frame);
-	void displaySetFramePixels(const byte *pixels, uint16 width, uint16 height);
-	/** Upload composited pixels only when displaySetFramePixels() actually changed them. */
-	bool presentPendingScreenUpdate();
-	/** Run the verified SET navigation actions used by currentscene(). */
-	void navigateSet(const Common::String &action);
-	/** Advance an active SET transition by one native frame. */
-	void advanceSetTransition();
 
 	/**
 	 * Process the global/movie keyboard shortcuts that the original handles

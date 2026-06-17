@@ -847,7 +847,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	}
 
 	if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0 && !isLoadedReplacementStage(_stageRuntime.stage())) {
-		renderSetScene(_setRuntime.scene(), _setRuntime.table(), _setRuntime.angle(), _setRuntime.view());
+		setRuntime().renderSetScene(*this, _setRuntime.scene(), _setRuntime.table(), _setRuntime.angle(), _setRuntime.view());
 	} else if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) {
 		renderStageNode(_stageRuntime.node());
 	} else {

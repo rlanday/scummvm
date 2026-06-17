@@ -239,9 +239,9 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 		renderCurrentPuppetFrame(false);
 	} else if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0) {
 		if (_setRuntime.transitionType() != kSetTransitionNone)
-			advanceSetTransition();
+			setRuntime().advanceSetTransition(*this);
 		else
-			renderSetScene(_setRuntime.scene(), _setRuntime.table(), _setRuntime.angle(), _setRuntime.view());
+			setRuntime().renderSetScene(*this, _setRuntime.scene(), _setRuntime.table(), _setRuntime.angle(), _setRuntime.view());
 	} else if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) {
 		// visualeffect() reaches the same update/compositor path as forceupdate();
 		// it repaints pixels but native cursor state remains script-controlled.

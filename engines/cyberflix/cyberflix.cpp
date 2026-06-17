@@ -458,6 +458,66 @@ Common::String CyberflixEngine::currentVoice() {
 	return _audioRuntime.currentVoice(*this);
 }
 
+void CyberflixEngine::openSetFile(const Common::String &name,
+		const Common::String &scene, const Common::String &view) {
+	_setRuntime.openSetFile(*this, name, scene, view);
+}
+
+void CyberflixEngine::closeSetFile() {
+	_setRuntime.closeSetFile(*this);
+}
+
+Common::String CyberflixEngine::currentSet() {
+	return _setRuntime.currentSet();
+}
+
+Common::String CyberflixEngine::currentView() {
+	return _setRuntime.currentView();
+}
+
+Common::String CyberflixEngine::currentScene(const Common::String *target) {
+	return _setRuntime.currentScene(*this, target);
+}
+
+bool CyberflixEngine::setVisible(const bool *newVisible) {
+	return _setRuntime.setVisible(*this, newVisible);
+}
+
+void CyberflixEngine::sendToScene(const Common::String &scene,
+		const Common::String &message, const Common::Array<Value> &args) {
+	_setRuntime.sendToScene(*this, scene, message, args);
+}
+
+Value CyberflixEngine::sendToSceneFx(const Common::String &scene,
+		const Common::String &message, const Common::Array<Value> &args) {
+	return _setRuntime.sendToSceneFx(*this, scene, message, args);
+}
+
+void CyberflixEngine::sendToPainting(const Common::String &scene,
+		const Common::String &view, const Common::String &painting,
+		const Common::String &message, const Common::Array<Value> &args) {
+	_setRuntime.sendToPainting(*this, scene, view, painting, message, args);
+}
+
+Value CyberflixEngine::sendToPaintingFx(const Common::String &scene,
+		const Common::String &view, const Common::String &painting,
+		const Common::String &message, const Common::Array<Value> &args) {
+	return _setRuntime.sendToPaintingFx(*this, scene, view, painting, message, args);
+}
+
+int CyberflixEngine::countPaintings(const Common::String &scene, const Common::String &view) {
+	return _setRuntime.countPaintings(scene, view);
+}
+
+Common::String CyberflixEngine::indexToPainting(const Common::String &scene,
+		const Common::String &view, int index) {
+	return _setRuntime.indexToPainting(scene, view, index);
+}
+
+bool CyberflixEngine::roadAhead(const Common::String &scene, const Common::String &view) {
+	return _setRuntime.roadAhead(scene, view);
+}
+
 int CyberflixEngine::getGameType() const {
 	return _gameDescription->gameType;
 }
@@ -1215,7 +1275,7 @@ void CyberflixEngine::forceUpdate() {
 		_framePacingRuntime.noteForceUpdatePresented(true);
 		presented = true;
 	} else {
-		advanceSetTransition();
+		setRuntime().advanceSetTransition(*this);
 		// Native forceupdate() presents after its compositor pass, but in
 		// ScummVM advanceSetTransition() may be a no-op when a scene script calls
 		// forceupdate() while no movement/dirty repaint is pending. Only upload
@@ -1224,7 +1284,7 @@ void CyberflixEngine::forceUpdate() {
 		// script-visible timing of forceupdate(). If no pixels changed, leave
 		// the idle-presented flag false so the main loop still does its cheap
 		// cursor-only updateScreen() and mouse movement stays responsive.
-		presented = presentPendingScreenUpdate();
+		presented = setRuntime().presentPendingScreenUpdate(*this);
 		_framePacingRuntime.noteForceUpdatePresented(presented);
 	}
 	if (cursorMoved && !presented) {
