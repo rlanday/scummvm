@@ -278,6 +278,8 @@ private:
 	 */
 	bool setGameCursor(const Common::String &name);
 	bool pumpCursorMotionEvents();
+	bool shouldTraceBridgeCursor() const;
+	void debugBridgeCursorHit(int16 x, int16 y, const char *kind, const Common::String &name) const;
 
 	/** Lazily open the game's TI.EXE for resource access. Returns nullptr if
 	 *  it cannot be found (the game can still run without a custom cursor). */
@@ -286,9 +288,11 @@ private:
 	/**
 	 * Render node @p node of the currently open stage to the screen: decode its
 	 * background frame (compositing from the nearest keyframe), apply the stage
-	 * palette and show the navigation cursor. Mirrors TI.EXE FUN_0040b180.
+	 * palette and optionally show the navigation cursor. Direct native stage-node
+	 * renders (FUN_0040b180) show CURS.ARROW, while forceupdate/compositor
+	 * repaints choose the cursor separately through BOOTFILE idle hittest.
 	 */
-	void renderStageNode(int node);
+	void renderStageNode(int node, bool resetCursor = true);
 
 	/**
 	 * Render the current angle of scene @p scene of the currently open set to the

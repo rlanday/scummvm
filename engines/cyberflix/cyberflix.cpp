@@ -551,6 +551,17 @@ bool CyberflixEngine::setGameCursor(const Common::String &name) {
 	return true;
 }
 
+bool CyberflixEngine::shouldTraceBridgeCursor() const {
+	return _stage && _stage->isOpen() && _stage->name().equalsIgnoreCase("bridge.stg");
+}
+
+void CyberflixEngine::debugBridgeCursorHit(int16 x, int16 y, const char *kind,
+		const Common::String &name) const {
+	if (shouldTraceBridgeCursor())
+		debug(1, "Cyberflix: bridge hover hittest(%d,%d) -> %s '%s'",
+				x, y, kind, name.c_str());
+}
+
 // openstagefile(name): open a DATA/*.STG deck. The boot script calls this for
 // MAIN.STG just before sendtostage(0). Mirrors TI.EXE FUN_004090b0 (which parses
 // via FUN_00409150). See files/decomp/stage-notes.md.
@@ -809,11 +820,14 @@ Value CyberflixEngine::sendToButtonFx(const Common::String &flat, const Common::
 	return dispatchWithScopeChainValue(scopes, button, button, message, args, "buttonfx");
 }
 
-void CyberflixEngine::renderStageNode(int node) {
+void CyberflixEngine::renderStageNode(int node, bool resetCursor) {
 	if (!_stage || !_stage->isOpen()) {
 		warning("Cyberflix: sendtostage(%d) with no stage open", node);
 		return;
 	}
+	if (shouldTraceBridgeCursor())
+		debug(1, "Cyberflix: bridge renderStageNode(%d, resetCursor=%d)",
+				node, resetCursor ? 1 : 0);
 	_stageNode = node;
 
 	FrameImage frame;
@@ -857,9 +871,10 @@ void CyberflixEngine::renderStageNode(int node) {
 	}
 	_system->unlockScreen();
 
-	// Show the default arrow over the rendered node until per-node hotspot
-	// hit-testing (directional cursors) is implemented.
-	if (setGameCursor("CURS.ARROW"))
+	// FUN_0040b180 installs the default arrow for direct stage-node renders
+	// (openstagefile/gotoflat). FUN_00446910 -> FUN_00423a60 compositor
+	// repaints do not touch the cursor; BOOTFILE idle hittest/setcursor owns it.
+	if (resetCursor && setGameCursor("CURS.ARROW"))
 		CursorMan.showMouse(true);
 	_dirtyRects.clear();
 	_propsDirty = false;
@@ -879,7 +894,9 @@ void CyberflixEngine::repaintDirtyStageRects() {
 
 	FrameImage frame;
 	if (!_stage->renderNode((uint32)_stageNode, frame)) {
-		renderStageNode(_stageNode);
+		// Repaint fallback only: preserve the cursor chosen by the script
+		// hittest path, matching FUN_00442d90's lack of cursor side effects.
+		renderStageNode(_stageNode, false);
 		return;
 	}
 
@@ -1150,7 +1167,7 @@ bool CyberflixEngine::setVisible(const bool *newVisible) {
 			_setTransitionType = kSetTransitionNone;
 			_propsDirty = false;
 			if (_stage && _stage->isOpen())
-				renderStageNode(_stageNode);
+				renderStageNode(_stageNode, false);
 		}
 	}
 	return _setVisible;
@@ -2285,6 +2302,7 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 		if (!cel.isOpaque(x - r.left, y - r.top))
 			continue;
 		_hitKind = "prop";
+		debugBridgeCursorHit(x, y, _hitKind.c_str(), draw[i]->name);
 		return draw[i]->name;
 	}
 
@@ -2336,6 +2354,7 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 				if (!cel.isOpaque(srcX, srcY))
 					continue;
 				_hitKind = itemType[(uint)i] ? "actor" : "prop";
+				debugBridgeCursorHit(x, y, _hitKind.c_str(), name);
 				return name;
 			}
 		}
@@ -2345,10 +2364,13 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 		Common::String button = _stage->hitTestButton((uint32)_stageNode, x, y);
 		if (!button.empty()) {
 			_hitKind = "button";
+			debugBridgeCursorHit(x, y, _hitKind.c_str(), button);
 			return button;
 		}
 		_hitKind = "flat";
-		return _stage->nodeName((uint32)_stageNode);
+		Common::String flat = _stage->nodeName((uint32)_stageNode);
+		debugBridgeCursorHit(x, y, _hitKind.c_str(), flat);
+		return flat;
 	}
 
 	if (_setVisible && _set && _set->isOpen() && _setScene >= 0) {
@@ -2358,11 +2380,14 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 				Common::String painting = _set->hitTestPainting((uint32)_setScene, _setView, x, y);
 				if (!painting.empty()) {
 					_hitKind = "painting";
+					debugBridgeCursorHit(x, y, _hitKind.c_str(), painting);
 					return painting;
 				}
 			}
 			_hitKind = "scene";
-			return _set->sceneName((uint32)_setScene);
+			Common::String scene = _set->sceneName((uint32)_setScene);
+			debugBridgeCursorHit(x, y, _hitKind.c_str(), scene);
+			return scene;
 		}
 	}
 
@@ -2370,13 +2395,17 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 		Common::String button = _stage->hitTestButton((uint32)_stageNode, x, y);
 		if (!button.empty()) {
 			_hitKind = "button";
+			debugBridgeCursorHit(x, y, _hitKind.c_str(), button);
 			return button;
 		}
 		_hitKind = "flat";
-		return _stage->nodeName((uint32)_stageNode);
+		Common::String flat = _stage->nodeName((uint32)_stageNode);
+		debugBridgeCursorHit(x, y, _hitKind.c_str(), flat);
+		return flat;
 	}
 
 	_hitKind = "None";
+	debugBridgeCursorHit(x, y, _hitKind.c_str(), Common::String());
 	return Common::String();
 }
 
@@ -2477,6 +2506,9 @@ int CyberflixEngine::calcMod(int a, int b) {
 // cursor(...) -> TI.EXE FUN_00446920, with the script name already resolved
 // to a PE resource name by the VM (see VMHost::setCursorResource).
 void CyberflixEngine::setCursorResource(const Common::String &resourceName) {
+	if (shouldTraceBridgeCursor())
+		debug(1, "Cyberflix: bridge hover cursor request '%s' after %s hit",
+				resourceName.c_str(), _hitKind.c_str());
 	if (setGameCursor(resourceName))
 		CursorMan.showMouse(true);
 	else
@@ -3023,8 +3055,11 @@ void CyberflixEngine::refreshPropsIfDirty() {
 		if (_stage && _stage->isOpen()) {
 			if (!_dirtyRects.empty())
 				repaintDirtyStageRects();
-			else
-				renderStageNode(_stageNode);
+			else {
+				// Prop refresh without dirty bounds is still a compositor repaint,
+				// not navigation to a new flat, so keep the current script cursor.
+				renderStageNode(_stageNode, false);
+			}
 		}
 		_dirtyRects.clear();
 		_propsDirty = false;
@@ -4141,7 +4176,9 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 		else
 			renderSetScene(_setScene, _setTable, _setAngle, _setView);
 	} else if (_stage && _stage->isOpen()) {
-		renderStageNode(_stageNode);
+		// visualeffect() reaches the same update/compositor path as forceupdate();
+		// it repaints pixels but native cursor state remains script-controlled.
+		renderStageNode(_stageNode, false);
 		_propsDirty = false;
 	} else {
 		_system->updateScreen();
