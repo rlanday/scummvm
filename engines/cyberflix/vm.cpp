@@ -925,6 +925,77 @@ bool ScriptVM::callPuppetMethod(uint16 opcode, const Common::Array<Value> &args,
 	}
 }
 
+bool ScriptVM::callStageSetMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
+	switch (opcode) {
+	case Script::kMethodOpenStageFile: // openstagefile('name.stg')
+		_host->openStageFile(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodCloseStageFile: // closestagefile() -> FUN_00409330
+		_host->closeStageFile();
+		return true;
+	case Script::kMethodGotoFlat: // gotoflat(name|index) -> FUN_00409460
+		if (!args.empty())
+			_host->gotoFlat(args[0]);
+		return true;
+	case Script::kMethodOpenSetFile: // opensetfile('name.set'[, scene[, view]]) -> FUN_00430690
+		_host->openSetFile(args.size() > 0 ? args[0].strValue : Common::String(),
+				args.size() > 1 ? args[1].strValue : Common::String(),
+				args.size() > 2 ? args[2].strValue : Common::String());
+		return true;
+	case Script::kMethodCloseSetFile: // closesetfile() -> TI.EXE set-archive close
+		_host->closeSetFile();
+		return true;
+	// (sendtoscene 0x2f02 never reaches here: it always appears with a
+	// parenthesised message and routes through dispatchMessageBuiltin.)
+	case Script::kMethodCurrentSet: // currentset() -> open set name or 'none'
+		result = Value::makeString(_host->currentSet());
+		return true;
+	case Script::kMethodCurrentStage: // currentstage() -> open stage name or native 'None'
+		result = Value::makeString(_host->currentStage());
+		return true;
+	case Script::kMethodStageVisible: { // stagevisible([flag]) -> DAT_00461156
+		bool visible = args.empty() ? false : (args[0].intValue != 0);
+		const bool *newVisible = args.empty() ? nullptr : &visible;
+		result = Value::makeBool(_host->stageVisible(newVisible));
+		return true;
+	}
+	case Script::kMethodCurrentFlat: // currentflat() -> current stage node name or native 'None'
+		result = Value::makeString(_host->currentFlat());
+		return true;
+	case Script::kMethodCurrentView: // currentview() -> current SET view name
+		result = Value::makeString(_host->currentView());
+		return true;
+	case Script::kMethodCurrentScene: { // currentscene([name|left|right|strait])
+		const Common::String *target = args.empty() ? nullptr : &args[0].strValue;
+		result = Value::makeString(_host->currentScene(target));
+		return true;
+	}
+	case Script::kMethodSetVisible: { // setvisible([flag]) -> current SET visibility flag
+		bool visible = args.empty() ? false : (args[0].intValue != 0);
+		const bool *newVisible = args.empty() ? nullptr : &visible;
+		result = Value::makeBool(_host->setVisible(newVisible));
+		return true;
+	}
+	case Script::kMethodCountPaintings: // countpaintings(scene, view) -> FUN_00431fe0
+		result = args.size() >= 2 ?
+				Value::makeInt(_host->countPaintings(args[0].strValue, args[1].strValue)) :
+				Value::makeInt(0);
+		return true;
+	case Script::kMethodIndexToPainting: // indextopainting(scene, view, index) -> FUN_00432120, 1-based
+		if (args.size() >= 3)
+			result = Value::makeString(_host->indexToPainting(args[0].strValue,
+					args[1].strValue, args[2].intValue));
+		return true;
+	case Script::kMethodRoadAhead: // roadahead(scene, view) -> FUN_00431bd0/FUN_004337b0
+		result = args.size() >= 2 ?
+				Value::makeBool(_host->roadAhead(args[0].strValue, args[1].strValue)) :
+				Value::makeBool(false);
+		return true;
+	default:
+		return false;
+	}
+}
+
 Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args) {
 	// Dispatch a builtin method by opcode. The interpreter routes 0x2Exx/0x2Fxx
 	// through dispatch B and 0x3Exx/0x4Exx through dispatch A (files/opcode-map.md
@@ -962,6 +1033,8 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return result;
 		if (callPuppetMethod(opcode, args, result))
 			return result;
+		if (callStageSetMethod(opcode, args, result))
+			return result;
 
 		switch (opcode) {
 		case Script::kMethodMessage: // message(text) -> FUN_00446240
@@ -970,26 +1043,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		case Script::kMethodPlayMovie: // playmovie('name.mov')
 			_host->playMovie(args.empty() ? Common::String() : args[0].strValue);
 			break;
-		case Script::kMethodOpenStageFile: // openstagefile('name.stg')
-			_host->openStageFile(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodCloseStageFile: // closestagefile() -> FUN_00409330
-			_host->closeStageFile();
-			break;
-		case Script::kMethodGotoFlat: // gotoflat(name|index) -> FUN_00409460
-			if (!args.empty())
-				_host->gotoFlat(args[0]);
-			break;
-		case Script::kMethodOpenSetFile: // opensetfile('name.set'[, scene[, view]]) -> FUN_00430690
-			_host->openSetFile(args.size() > 0 ? args[0].strValue : Common::String(),
-					args.size() > 1 ? args[1].strValue : Common::String(),
-					args.size() > 2 ? args[2].strValue : Common::String());
-			break;
-		case Script::kMethodCloseSetFile: // closesetfile() -> TI.EXE set-archive close
-			_host->closeSetFile();
-			break;
-		// (sendtoscene 0x2f02 never reaches here: it always appears with a
-		// parenthesised message and routes through dispatchMessageBuiltin.)
 		case Script::kMethodClut: // clut(name): snap the hardware palette (FUN_00446500)
 			_host->setClut(args.empty() ? Common::String() : args[0].strValue);
 			break;
@@ -1052,28 +1105,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() >= 2)
 				_host->pauseCricket(args[0].strValue, args[1].intValue != 0);
 			break;
-		case Script::kMethodCurrentSet: // currentset() -> open set name or 'none'
-			return Value::makeString(_host->currentSet());
-		case Script::kMethodCurrentStage: // currentstage() -> open stage name or native 'None'
-			return Value::makeString(_host->currentStage());
-		case Script::kMethodStageVisible: { // stagevisible([flag]) -> DAT_00461156
-			bool visible = args.empty() ? false : (args[0].intValue != 0);
-			const bool *newVisible = args.empty() ? nullptr : &visible;
-			return Value::makeBool(_host->stageVisible(newVisible));
-		}
-		case Script::kMethodCurrentFlat: // currentflat() -> current stage node name or native 'None'
-			return Value::makeString(_host->currentFlat());
-		case Script::kMethodCurrentView: // currentview() -> current SET view name
-			return Value::makeString(_host->currentView());
-		case Script::kMethodCurrentScene: { // currentscene([name|left|right|strait])
-			const Common::String *target = args.empty() ? nullptr : &args[0].strValue;
-			return Value::makeString(_host->currentScene(target));
-		}
-		case Script::kMethodSetVisible: { // setvisible([flag]) -> current SET visibility flag
-			bool visible = args.empty() ? false : (args[0].intValue != 0);
-			const bool *newVisible = args.empty() ? nullptr : &visible;
-			return Value::makeBool(_host->setVisible(newVisible));
-		}
 		case Script::kMethodActionFrame: // actionframe(n) -> bool, FUN_004362c0 (n must be 1 or 2)
 			return Value::makeBool(_host->actionFrame(args.empty() ? 0 : args[0].intValue));
 		case Script::kMethodFrameRate: { // framerate([n]) -> DAT_00461126
@@ -1115,19 +1146,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 					args.empty() ? Common::String() : args[0].strValue));
 		case Script::kMethodOptionKey: // optionkey() -> FUN_004376e0/GetAsyncKeyState(VK_SHIFT)
 			return Value::makeBool(_host->optionKey());
-		case Script::kMethodCountPaintings: // countpaintings(scene, view) -> FUN_00431fe0
-			if (args.size() >= 2)
-				return Value::makeInt(_host->countPaintings(args[0].strValue, args[1].strValue));
-			return Value::makeInt(0);
-		case Script::kMethodIndexToPainting: // indextopainting(scene, view, index) -> FUN_00432120, 1-based
-			if (args.size() >= 3)
-				return Value::makeString(_host->indexToPainting(args[0].strValue,
-						args[1].strValue, args[2].intValue));
-			break;
-		case Script::kMethodRoadAhead: // roadahead(scene, view) -> FUN_00431bd0/FUN_004337b0
-			if (args.size() >= 2)
-				return Value::makeBool(_host->roadAhead(args[0].strValue, args[1].strValue));
-			return Value::makeBool(false);
 		case Script::kMethodPointInButton: // pointinbutton(flat, button, point) -> FUN_0040a0d0
 			if (args.size() >= 3)
 				return Value::makeBool(_host->pointInButton(args[0].strValue,

@@ -747,6 +747,7 @@ private:
 	bool callActorMethod(uint16 opcode, const Common::Array<Value> &args, Value &result);
 	bool callPropMethod(uint16 opcode, const Common::Array<Value> &args, Value &result);
 	bool callPuppetMethod(uint16 opcode, const Common::Array<Value> &args, Value &result);
+	bool callStageSetMethod(uint16 opcode, const Common::Array<Value> &args, Value &result);
 
 	/** Apply @p opcode to two operand values (no stack involved). */
 	Value applyBinary(uint16 opcode, const Value &lhs, const Value &rhs);
