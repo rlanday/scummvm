@@ -774,6 +774,91 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 	}
 }
 
+bool ScriptVM::callPropMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
+	switch (opcode) {
+	case Script::kMethodOpenShopFile: // openshopfile('name.shp') -> FUN_00428450: parse the .SHP,
+	             // then dispatch openshop() and per-prop openprop().
+		_host->openShopFile(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodCloseShopFile: // closeshopfile('name.shp') -> FUN_0042a7e0
+		_host->closeShopFile(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodPropInstance: // propinstance(source, newName) -> FUN_00428940
+		if (args.size() >= 2)
+			_host->propInstance(args[0].strValue, args[1].strValue);
+		return true;
+	case Script::kMethodPropVisible: // propvisible(name, flag) -> FUN_00429d00
+		if (args.size() >= 2)
+			_host->propVisible(args[0].strValue, args[1].intValue != 0);
+		if (args.size() == 1)
+			result = Value::makeBool(_host->propVisible(args[0].strValue));
+		return true;
+	case Script::kMethodPropView: // propview(name, shape) -> FUN_004293a0
+		if (args.size() >= 2)
+			_host->propView(args[0].strValue, args[1].strValue);
+		if (args.size() == 1)
+			result = Value::makeString(_host->propView(args[0].strValue));
+		return true;
+	case Script::kMethodPropSet: // propset(name, set) -> FUN_00428c20
+		if (args.size() >= 2)
+			_host->propSet(args[0].strValue, args[1].strValue);
+		return true;
+	case Script::kMethodPropXYZ: // propxyz(name, x, y, z) -> FUN_0042a140 (mode=1)
+		if (args.size() >= 4)
+			_host->propXYZ(args[0].strValue, args[1].intValue,
+					args[2].intValue, args[3].intValue);
+		return true;
+	case Script::kMethodPropXY: // propxy(name, x, y) -> FUN_0042a370 (mode=0, depth=-1)
+		if (args.size() >= 3)
+			_host->setPropXY(args[0].strValue, args[1].intValue, args[2].intValue);
+		if (args.size() == 2)
+			result = Value::makeInt(_host->propXY(args[0].strValue, args[1].intValue));
+		return true;
+	case Script::kMethodPropScale: // propscale(name, scale) -> FUN_00429870
+		if (args.size() >= 2)
+			_host->propScale(args[0].strValue, args[1].intValue);
+		return true;
+	case Script::kMethodPropZClip: // propzclip(name, dist) -> FUN_00428ea0
+		if (args.size() >= 2)
+			_host->propZClip(args[0].strValue, args[1].intValue);
+		return true;
+	case Script::kMethodPropDist: // propdist(name, d) -> FUN_004295c0
+		if (args.size() >= 2)
+			_host->propDist(args[0].strValue, args[1].intValue);
+		return true;
+	case Script::kMethodPropDeg: // propdeg(name[, deg]) -> FUN_00429730/FUN_00429520
+		if (args.size() >= 2) {
+			int deg = args[1].intValue;
+			result = Value::makeInt(_host->propDeg(args[0].strValue, &deg));
+		} else if (args.size() == 1) {
+			result = Value::makeInt(_host->propDeg(args[0].strValue, nullptr));
+		}
+		return true;
+	case Script::kMethodPropOwner: // propowner(name[, owner]) -> FUN_00428d40: get or set
+		if (args.size() >= 2)
+			result = Value::makeString(_host->propOwner(args[0].strValue, &args[1].strValue));
+		else if (args.size() == 1)
+			result = Value::makeString(_host->propOwner(args[0].strValue, nullptr));
+		return true;
+	case Script::kMethodPropValue: // propvalue(name[, value]) -> FUN_004290d0/FUN_00428e00
+		if (args.size() >= 2) {
+			int value = args[1].intValue;
+			result = Value::makeInt(_host->propValue(args[0].strValue, &value));
+		} else if (args.size() == 1) {
+			result = Value::makeInt(_host->propValue(args[0].strValue, nullptr));
+		}
+		return true;
+	case Script::kMethodCountProps: // countprops() -> FUN_0042b4f0: global count, all shops
+		result = Value::makeInt(_host->countProps());
+		return true;
+	case Script::kMethodIndexToProp: // indextoprop(i) -> FUN_0042b550: 1-based global index
+		result = Value::makeString(_host->indexToProp(args.empty() ? 0 : args[0].intValue));
+		return true;
+	default:
+		return false;
+	}
+}
+
 Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args) {
 	// Dispatch a builtin method by opcode. The interpreter routes 0x2Exx/0x2Fxx
 	// through dispatch B and 0x3Exx/0x4Exx through dispatch A (files/opcode-map.md
@@ -806,6 +891,8 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		if (callAudioMethod(opcode, args, result))
 			return result;
 		if (callActorMethod(opcode, args, result))
+			return result;
+		if (callPropMethod(opcode, args, result))
 			return result;
 
 		switch (opcode) {
@@ -1022,82 +1109,6 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			return Value::makeString(_host->indexToPuppet(args.empty() ? 0 : args[0].intValue));
 		case Script::kMethodPuppetEvent: // puppetevent(timeout) -> FUN_00449e40 waits for a clicked bevel id
 			return Value::makeInt(_host->puppetEvent(args.empty() ? -1 : args[0].intValue));
-		case Script::kMethodOpenShopFile: // openshopfile('name.shp') -> FUN_00428450: parse the .SHP,
-		             // then dispatch openshop() and per-prop openprop().
-			_host->openShopFile(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodCloseShopFile: // closeshopfile('name.shp') -> FUN_0042a7e0
-			_host->closeShopFile(args.empty() ? Common::String() : args[0].strValue);
-			break;
-		case Script::kMethodPropInstance: // propinstance(source, newName) -> FUN_00428940
-			if (args.size() >= 2)
-				_host->propInstance(args[0].strValue, args[1].strValue);
-			break;
-		case Script::kMethodPropVisible: // propvisible(name, flag) -> FUN_00429d00
-			if (args.size() >= 2)
-				_host->propVisible(args[0].strValue, args[1].intValue != 0);
-			if (args.size() == 1)
-				return Value::makeBool(_host->propVisible(args[0].strValue));
-			break;
-		case Script::kMethodPropView: // propview(name, shape) -> FUN_004293a0
-			if (args.size() >= 2)
-				_host->propView(args[0].strValue, args[1].strValue);
-			if (args.size() == 1)
-				return Value::makeString(_host->propView(args[0].strValue));
-			break;
-		case Script::kMethodPropSet: // propset(name, set) -> FUN_00428c20
-			if (args.size() >= 2)
-				_host->propSet(args[0].strValue, args[1].strValue);
-			break;
-		case Script::kMethodPropXYZ: // propxyz(name, x, y, z) -> FUN_0042a140 (mode=1)
-			if (args.size() >= 4)
-				_host->propXYZ(args[0].strValue, args[1].intValue,
-						args[2].intValue, args[3].intValue);
-			break;
-		case Script::kMethodPropXY: // propxy(name, x, y) -> FUN_0042a370 (mode=0, depth=-1)
-			if (args.size() >= 3)
-				_host->setPropXY(args[0].strValue, args[1].intValue, args[2].intValue);
-			if (args.size() == 2)
-				return Value::makeInt(_host->propXY(args[0].strValue, args[1].intValue));
-			break;
-		case Script::kMethodPropScale: // propscale(name, scale) -> FUN_00429870
-			if (args.size() >= 2)
-				_host->propScale(args[0].strValue, args[1].intValue);
-			break;
-		case Script::kMethodPropZClip: // propzclip(name, dist) -> FUN_00428ea0
-			if (args.size() >= 2)
-				_host->propZClip(args[0].strValue, args[1].intValue);
-			break;
-		case Script::kMethodPropDist: // propdist(name, d) -> FUN_004295c0
-			if (args.size() >= 2)
-				_host->propDist(args[0].strValue, args[1].intValue);
-			break;
-		case Script::kMethodPropDeg: // propdeg(name[, deg]) -> FUN_00429730/FUN_00429520
-			if (args.size() >= 2) {
-				int deg = args[1].intValue;
-				return Value::makeInt(_host->propDeg(args[0].strValue, &deg));
-			}
-			if (args.size() == 1)
-				return Value::makeInt(_host->propDeg(args[0].strValue, nullptr));
-			break;
-		case Script::kMethodPropOwner: // propowner(name[, owner]) -> FUN_00428d40: get or set
-			if (args.size() >= 2)
-				return Value::makeString(_host->propOwner(args[0].strValue, &args[1].strValue));
-			if (args.size() == 1)
-				return Value::makeString(_host->propOwner(args[0].strValue, nullptr));
-			break;
-		case Script::kMethodPropValue: // propvalue(name[, value]) -> FUN_004290d0/FUN_00428e00
-			if (args.size() >= 2) {
-				int value = args[1].intValue;
-				return Value::makeInt(_host->propValue(args[0].strValue, &value));
-			}
-			if (args.size() == 1)
-				return Value::makeInt(_host->propValue(args[0].strValue, nullptr));
-			break;
-		case Script::kMethodCountProps: // countprops() -> FUN_0042b4f0: global count, all shops
-			return Value::makeInt(_host->countProps());
-		case Script::kMethodIndexToProp: // indextoprop(i) -> FUN_0042b550: 1-based global index
-			return Value::makeString(_host->indexToProp(args.empty() ? 0 : args[0].intValue));
 		case Script::kMethodPointInButton: // pointinbutton(flat, button, point) -> FUN_0040a0d0
 			if (args.size() >= 3)
 				return Value::makeBool(_host->pointInButton(args[0].strValue,
