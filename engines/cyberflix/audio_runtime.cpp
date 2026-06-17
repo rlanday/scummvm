@@ -33,29 +33,12 @@
 
 #include "cyberflix/archive.h"
 #include "cyberflix/cyberflix.h"
+#include "cyberflix/resource_helpers.h"
 #include "cyberflix/cbx_audio.h"
 
 #include <math.h>
 
 namespace Cyberflix {
-
-static const byte *engineBase(const Common::Array<byte> &fileData, const Archive::Resource &res) {
-	if (res.empty || res.dataOffset < 4 || res.dataOffset > fileData.size())
-		return nullptr;
-	return fileData.begin() + res.dataOffset - 4;
-}
-
-// Read a Pascal string (1-byte length prefix) into a Common::String, bounded by
-// the end of the file buffer.
-static Common::String readPascalString(const byte *p, const Common::Array<byte> &fileData) {
-	if (!p || p < fileData.begin() || p >= fileData.end())
-		return Common::String();
-	uint len = *p;
-	const byte *s = p + 1;
-	if (s + len > fileData.end())
-		len = (uint)(fileData.end() - s);
-	return Common::String((const char *)s, len);
-}
 
 CyberflixEngine::ThemeTrack *CyberflixEngine::findTrack(const Common::String &name) {
 	Common::SharedPtr<ThemeTrack> track = findTrackRef(name);
@@ -408,12 +391,12 @@ void CyberflixEngine::openTrackFile(const Common::String &name) {
 	}
 
 	const byte *master = archive.getResourceCount()
-			? engineBase(track->fileData, archive.getResource(0)) : nullptr;
+			? resourceEngineBase(track->fileData, archive.getResource(0)) : nullptr;
 	if (!master || master + 0x28 > track->fileData.end()) {
 		warning("Cyberflix: track '%s' has no master header", name.c_str());
 		return;
 	}
-	Common::String logicalName = readPascalString(master + 0x24, track->fileData);
+	Common::String logicalName = readPascalString(master + 0x24, track->fileData, true);
 	if (!logicalName.empty()) {
 		track->name = logicalName;
 		track->name.toLowercase();
@@ -421,7 +404,7 @@ void CyberflixEngine::openTrackFile(const Common::String &name) {
 	uint32 themeTableId = READ_LE_UINT32(master + 0x1c);
 	uint32 sfxTableId = READ_LE_UINT32(master + 0x20);
 	const byte *tt = (themeTableId < archive.getResourceCount())
-			? engineBase(track->fileData, archive.getResource(themeTableId)) : nullptr;
+			? resourceEngineBase(track->fileData, archive.getResource(themeTableId)) : nullptr;
 	if (!tt || tt + 0x10e > track->fileData.end()) {
 		warning("Cyberflix: track '%s' has no theme table", name.c_str());
 		return;
@@ -443,7 +426,7 @@ void CyberflixEngine::openTrackFile(const Common::String &name) {
 		ThemeTrack::Cue cue;
 		uint32 resId = READ_LE_UINT32(rec + 4);
 		cue.resId = resId;
-		cue.name = readPascalString(rec + 0xa, track->fileData);
+		cue.name = readPascalString(rec + 0xa, track->fileData, true);
 		if (resId < archive.getResourceCount() && !archive.getResource(resId).empty) {
 			cue.dataOffset = archive.getResource(resId).dataOffset;
 			cue.length = archive.getResource(resId).length;
@@ -452,7 +435,7 @@ void CyberflixEngine::openTrackFile(const Common::String &name) {
 	}
 
 	const byte *st = (sfxTableId < archive.getResourceCount())
-			? engineBase(track->fileData, archive.getResource(sfxTableId)) : nullptr;
+			? resourceEngineBase(track->fileData, archive.getResource(sfxTableId)) : nullptr;
 	if (st && st + 8 <= track->fileData.end()) {
 		uint32 sfxCueCount = READ_LE_UINT32(st + 4);
 		for (uint32 i = 0; i < sfxCueCount; ++i) {
@@ -462,7 +445,7 @@ void CyberflixEngine::openTrackFile(const Common::String &name) {
 			ThemeTrack::Cue cue;
 			cue.flags = rec[0];
 			cue.resId = READ_LE_UINT32(rec + 4);
-			cue.name = readPascalString(rec + 0xa, track->fileData);
+			cue.name = readPascalString(rec + 0xa, track->fileData, true);
 			if (cue.resId < archive.getResourceCount() && !archive.getResource(cue.resId).empty) {
 				cue.dataOffset = archive.getResource(cue.resId).dataOffset;
 				cue.length = archive.getResource(cue.resId).length;

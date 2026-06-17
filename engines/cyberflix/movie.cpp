@@ -42,6 +42,7 @@
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/image.h"
 #include "cyberflix/cbx_audio.h"
+#include "cyberflix/resource_helpers.h"
 
 namespace Cyberflix {
 
@@ -77,25 +78,6 @@ static void copyFramePixelsToScreen(Graphics::Surface &screen, const byte *pixel
 		memcpy(screen.getBasePtr(dstX, dstY + y),
 				pixels + (uint)(srcY + y) * width + srcX, copyWidth);
 	}
-}
-
-
-static const byte *engineBase(const Common::Array<byte> &fileData, const Archive::Resource &res) {
-	if (res.empty || res.dataOffset < 4 || res.dataOffset > fileData.size())
-		return nullptr;
-	return fileData.begin() + res.dataOffset - 4;
-}
-
-// Read a Pascal string (1-byte length prefix) into a Common::String, bounded by
-// the end of the file buffer.
-static Common::String readPascalString(const byte *p, const Common::Array<byte> &fileData) {
-	if (!p || p < fileData.begin() || p >= fileData.end())
-		return Common::String();
-	uint len = *p;
-	const byte *s = p + 1;
-	if (s + len > fileData.end())
-		len = (uint)(fileData.end() - s);
-	return Common::String((const char *)s, len);
 }
 
 // Sample-add an 8-bit unsigned mono SFX buffer into the music track at the given
@@ -287,7 +269,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 	if (masterIdx < 0) {
 		warning("Cyberflix: movie '%s' has no master header; playing without audio", name.c_str());
 	} else {
-		const byte *hdr = engineBase(fileData, archive.getResource(masterIdx));
+		const byte *hdr = resourceEngineBase(fileData, archive.getResource(masterIdx));
 		// Guard the per-frame table extent before trusting the header layout.
 		if (hdr && hdr + 0x87c <= fileData.end()) {
 			movieSkippable = (hdr[0x18] & 1) != 0;
@@ -309,7 +291,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			// 1. MUSIC track: decode each music-table cue's 22050 Hz resource in
 			//    order. (Skip non-22050 cues such as the silent 11025 Hz pad.)
 			if (musicTableIdx < archive.getResourceCount()) {
-				const byte *mt = engineBase(fileData, archive.getResource(musicTableIdx));
+				const byte *mt = resourceEngineBase(fileData, archive.getResource(musicTableIdx));
 				if (mt && mt + 0x10e <= fileData.end()) {
 					uint32 mc = READ_LE_UINT32(mt + 0x10a);
 					for (uint32 e = 0; e < mc; ++e) {
@@ -341,7 +323,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			//    (~15.9 s); the trailing fade plays over silence, as in the
 			//    original.
 			const byte *st = (sfxTableIdx < archive.getResourceCount())
-					? engineBase(fileData, archive.getResource(sfxTableIdx)) : nullptr;
+					? resourceEngineBase(fileData, archive.getResource(sfxTableIdx)) : nullptr;
 			uint32 sfxCount = (st && st + 8 <= fileData.end()) ? READ_LE_UINT32(st + 4) : 0;
 			uint32 cumMs = 0;
 			for (uint32 f = 0; f < pfCount; ++f) {
@@ -352,7 +334,7 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 				uint32 eventId = READ_LE_UINT32(rec + 0x10);
 				uint32 ebLen = 0;
 				if (eventId < archive.getResourceCount()) {
-					eb = engineBase(fileData, archive.getResource(eventId));
+					eb = resourceEngineBase(fileData, archive.getResource(eventId));
 					ebLen = archive.getResource(eventId).length;
 				}
 
@@ -362,12 +344,12 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 						? READ_LE_UINT16(eb) : 6 /* default NEXT */);
 				pfDrawOp.push_back((eb && eb + 0xe <= fileData.end())
 						? READ_LE_UINT16(eb + 0xc) : 0x10 /* plain blit */);
-				pfName.push_back(readPascalString(rec + 0x1a, fileData));
+				pfName.push_back(readPascalString(rec + 0x1a, fileData, true));
 				// FUN_0040d710 command 2 resolves a Pascal target in the event
 				// chunk. The decompile's +0x19 is word-indexed; in the raw
 				// record+8 frame used here it is byte offset +0x32.
 				pfNavTarget.push_back((eb && eb + 0x33 <= fileData.end())
-						? readPascalString(eb + 0x32, fileData) : Common::String());
+						? readPascalString(eb + 0x32, fileData, true) : Common::String());
 
 				// Interactive buttons: raw event chunks store a u32 count at
 				// +0x442 and 0x40-byte button records at +0x446. Ghidra's
@@ -390,21 +372,21 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 					mb.left   = (int16)READ_LE_UINT16(br + 10);
 					mb.bottom = (int16)READ_LE_UINT16(br + 12);
 					mb.right  = (int16)READ_LE_UINT16(br + 14);
-					mb.target = readPascalString(br + 0x30, fileData);
+					mb.target = readPascalString(br + 0x30, fileData, true);
 					buttons.push_back(mb);
 				}
 				pfButtons.push_back(buttons);
 
 				Common::SharedPtr<Common::Array<byte> > frameSfx;
 				if (eb) {
-					Common::String cue = readPascalString(eb + 0x12, fileData);
+					Common::String cue = readPascalString(eb + 0x12, fileData, true);
 					if (!cue.empty()) {
 						uint32 sfxResId = (uint32)-1;
 						for (uint32 e = 0; e < sfxCount; ++e) {
 							const byte *ent = st + 8 + e * 0x2a;
 							if (ent + 0x2a > fileData.end())
 								break;
-							if (readPascalString(ent + 0xa, fileData) == cue) {
+							if (readPascalString(ent + 0xa, fileData, true) == cue) {
 								sfxResId = READ_LE_UINT32(ent + 4);
 								break;
 							}
@@ -448,8 +430,8 @@ void CyberflixEngine::playMovie(const Common::String &name) {
 			// 3. Action-cue frames: resolve the master header's cue names
 			//    against the per-frame name column (TI.EXE iVar12/iVar9 in
 			//    FUN_0040ca80). Missing names resolve to -1 (never matched).
-			actionCue1 = resolveFrameName(pfName, readPascalString(hdr + 0x40, fileData));
-			actionCue2 = resolveFrameName(pfName, readPascalString(hdr + 0x50, fileData));
+			actionCue1 = resolveFrameName(pfName, readPascalString(hdr + 0x40, fileData, true));
+			actionCue2 = resolveFrameName(pfName, readPascalString(hdr + 0x50, fileData, true));
 		}
 	}
 

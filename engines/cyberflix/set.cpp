@@ -28,6 +28,7 @@
 
 #include "cyberflix/set.h"
 #include "cyberflix/cbx_audio.h" // kMasterHeaderInfoTag
+#include "cyberflix/resource_helpers.h"
 
 namespace Cyberflix {
 
@@ -77,12 +78,7 @@ int Set::resourceIndexById(uint32 id) const {
 }
 
 Common::String Set::pascalString(const byte *p) const {
-	if (!p || p < _fileData.begin() || p >= _fileData.end())
-		return Common::String();
-	uint len = *p;
-	if (p + 1 + len > _fileData.end())
-		return Common::String();
-	return Common::String((const char *)p + 1, len);
+	return readPascalString(p, _fileData);
 }
 
 Common::SharedPtr<Script> Set::scriptByIdShared(uint32 id) const {
@@ -343,18 +339,9 @@ bool Set::open(const Common::String &name) {
 	// Embedded names TI.EXE copies out of the master header (FUN_004307f0):
 	// the set's own name (what currentset() returns) and the default scene
 	// and view used when opensetfile gets no scene/view arguments.
-	const byte *end = _fileData.end();
-	auto readPascal = [end](const byte *p) -> Common::String {
-		if (!p || p >= end)
-			return Common::String();
-		uint len = *p;
-		if (p + 1 + len > end)
-			len = (uint)(end - (p + 1));
-		return Common::String((const char *)p + 1, len);
-	};
-	_setName = readPascal(hdr + kMasterNameOffset);
-	_defaultScene = readPascal(hdr + kMasterDefaultSceneOffset);
-	_defaultView = readPascal(hdr + kMasterDefaultViewOffset);
+	_setName = readPascalString(hdr + kMasterNameOffset, _fileData, true);
+	_defaultScene = readPascalString(hdr + kMasterDefaultSceneOffset, _fileData, true);
+	_defaultView = readPascalString(hdr + kMasterDefaultViewOffset, _fileData, true);
 	_setScriptId = READ_LE_UINT32(hdr + kSetScriptIdOffset);
 	_starTable = resourceIndexById(READ_LE_UINT32(hdr + kStarTableIdOffset));
 

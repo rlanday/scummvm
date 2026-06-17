@@ -28,6 +28,7 @@
 
 #include "cyberflix/shop.h"
 #include "cyberflix/cbx_audio.h" // kMasterHeaderInfoTag
+#include "cyberflix/resource_helpers.h"
 
 #include <math.h>
 
@@ -52,12 +53,7 @@ int Shop::resourceIndexById(uint32 id) const {
 }
 
 Common::String Shop::pascalString(const byte *p) const {
-	if (!p || p >= _fileData.end())
-		return Common::String();
-	uint len = *p;
-	if (p + 1 + len > _fileData.end())
-		return Common::String();
-	return Common::String((const char *)p + 1, len);
+	return readPascalString(p, _fileData);
 }
 
 bool Shop::open(const Common::String &name) {
