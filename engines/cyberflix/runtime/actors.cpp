@@ -64,7 +64,7 @@ bool ActorRuntime::resolveActorStar(CyberflixEngine &engine, Cast::Actor &actor)
 		actor.x = x;
 		actor.y = y;
 		actor.z = z;
-		engine._propsDirty = true;
+		engine._propRuntime.setDirty(true);
 	}
 	return true;
 }
@@ -130,7 +130,7 @@ void ActorRuntime::openCastFile(CyberflixEngine &engine, const Common::String &n
 		return;
 	_casts.push_back(cast);
 	refreshActorStarPositions(engine);
-	engine._propsDirty = true;
+	engine._propRuntime.setDirty(true);
 }
 
 void ActorRuntime::closeCastFile(CyberflixEngine &engine, const Common::String &name) {
@@ -140,7 +140,7 @@ void ActorRuntime::closeCastFile(CyberflixEngine &engine, const Common::String &
 		if (_casts[i]->name() == key) {
 			debug(1, "Cyberflix: cast '%s' closed", key.c_str());
 			_casts.remove_at(i);
-			engine._propsDirty = true;
+			engine._propRuntime.setDirty(true);
 			return;
 		}
 	}
@@ -230,7 +230,7 @@ bool ActorRuntime::actorVisible(CyberflixEngine &engine, const Common::String &n
 	}
 	if (newVisible && ref.actor->visible != *newVisible) {
 		ref.actor->visible = *newVisible;
-		engine._propsDirty = true;
+		engine._propRuntime.setDirty(true);
 	}
 	return ref.actor->visible;
 }
@@ -246,7 +246,7 @@ Common::String ActorRuntime::actorSet(CyberflixEngine &engine, const Common::Str
 		key.toLowercase();
 		if (ref.actor->setName != key) {
 			ref.actor->setName = key;
-			engine._propsDirty = true;
+			engine._propRuntime.setDirty(true);
 		}
 	}
 	return ref.actor->setName;
@@ -263,7 +263,7 @@ Common::String ActorRuntime::actorStar(CyberflixEngine &engine, const Common::St
 		key.toLowercase();
 		if (ref.actor->sceneName != key) {
 			ref.actor->sceneName = key;
-			engine._propsDirty = true;
+			engine._propRuntime.setDirty(true);
 		}
 		resolveActorStar(engine, *ref.actor);
 	}
@@ -281,7 +281,7 @@ Common::String ActorRuntime::actorPose(CyberflixEngine &engine, const Common::St
 		key.toLowercase();
 		if (ref.actor->shapeName != key) {
 			ref.actor->shapeName = key;
-			engine._propsDirty = true;
+			engine._propRuntime.setDirty(true);
 		}
 	}
 	return ref.actor->shapeName;
@@ -297,7 +297,7 @@ void ActorRuntime::actorXYZ(CyberflixEngine &engine, const Common::String &name,
 		ref.actor->x = (int16)x;
 		ref.actor->y = (int16)y;
 		ref.actor->z = (int16)z;
-		engine._propsDirty = true;
+		engine._propRuntime.setDirty(true);
 	}
 }
 
@@ -329,7 +329,7 @@ int ActorRuntime::actorDeg(CyberflixEngine &engine, const Common::String &name, 
 	}
 	if (newDeg && ref.actor->angle != (int16)(*newDeg & 0xff)) {
 		ref.actor->angle = (int16)(*newDeg & 0xff);
-		engine._propsDirty = true;
+		engine._propRuntime.setDirty(true);
 	}
 	return ref.actor->angle;
 }
@@ -368,7 +368,7 @@ void ActorRuntime::actorZClip(CyberflixEngine &engine, const Common::String &nam
 	}
 	if (ref.actor->zClip != zClip) {
 		ref.actor->zClip = zClip;
-		engine._propsDirty = true;
+		engine._propRuntime.setDirty(true);
 	}
 }
 
@@ -390,7 +390,7 @@ void ActorRuntime::actorScale(CyberflixEngine &engine, const Common::String &nam
 	const int newScale = MAX(1, scale);
 	if (ref.actor->scale != newScale) {
 		ref.actor->scale = newScale;
-		engine._propsDirty = true;
+		engine._propRuntime.setDirty(true);
 	}
 }
 

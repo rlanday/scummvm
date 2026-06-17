@@ -654,7 +654,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	haltSound(3);
 	haltVoice();
 	_tracks.clear();
-	_shops.clear();
+	_propRuntime.clear();
 	_loopRuntime.clear();
 	_stage.reset();
 	clearStageShellFrame();
@@ -670,7 +670,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	_setTransitionFrame = 0;
 	_setFrameSequence.clear();
 	_setVisible = false;
-	_propsDirty = false;
+	_propRuntime.setDirty(false);
 
 	for (uint i = 0; i < ARRAYSIZE(pathSlots); ++i) {
 		_pathRuntime.setPathSlot(i, pathSlots[i]);
@@ -718,7 +718,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 			prop->shapeName = state.shapeName;
 			prop->owner = state.owner;
 		}
-		_shops.push_back(shop);
+		_propRuntime.shops().push_back(shop);
 	}
 
 	for (uint i = 0; i < trackStates.size(); ++i) {
@@ -934,9 +934,9 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		payload.writeUint32LE((uint32)_shops.size());
-		for (uint s = 0; s < _shops.size(); ++s) {
-			const Shop &shop = *_shops[s];
+		payload.writeUint32LE((uint32)_propRuntime.shops().size());
+		for (uint s = 0; s < _propRuntime.shops().size(); ++s) {
+			const Shop &shop = *_propRuntime.shops()[s];
 			writeSaveString(payload, shop.name());
 			payload.writeUint32LE(shop.propCount());
 			for (uint p = 0; p < shop.propCount(); ++p) {

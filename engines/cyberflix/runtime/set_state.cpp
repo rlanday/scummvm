@@ -238,10 +238,10 @@ bool CyberflixEngine::setVisible(const bool *newVisible) {
 			if (!wasVisible && _setScene >= 0)
 				renderSetScene(_setScene, _setTable, _setAngle, _setView);
 			else
-				_propsDirty = true;
+				_propRuntime.setDirty(true);
 		} else {
 			_setTransitionType = kSetTransitionNone;
-			_propsDirty = false;
+			_propRuntime.setDirty(false);
 			if (_stage && _stage->isOpen())
 				renderStageNode(_stageNode, false);
 		}

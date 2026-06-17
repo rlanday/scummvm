@@ -250,6 +250,158 @@ int CyberflixEngine::starXYZ(const Common::String &name, int selector) {
 	return _actorRuntime.starXYZ(*this, name, selector);
 }
 
+Shop *CyberflixEngine::findShop(const Common::String &name) {
+	return _propRuntime.findShop(name);
+}
+
+Common::SharedPtr<Shop> CyberflixEngine::findShopShared(const Common::String &name) {
+	return _propRuntime.findShopShared(name);
+}
+
+Shop::Prop *CyberflixEngine::findProp(const Common::String &name, Shop **shopOut) {
+	return _propRuntime.findProp(name, shopOut);
+}
+
+Common::SharedPtr<Shop> CyberflixEngine::findPropOwnerShared(const Common::String &name,
+		Shop::Prop **propOut) {
+	return _propRuntime.findPropOwnerShared(name, propOut);
+}
+
+void CyberflixEngine::collectScreenProps(Common::Array<const Shop::Prop *> &draw,
+		Common::Array<const Shop *> &drawShop) {
+	_propRuntime.collectScreenProps(draw, drawShop);
+}
+
+void CyberflixEngine::advancePropPoses() {
+	_propRuntime.advancePropPoses();
+}
+
+bool CyberflixEngine::hasAnimatedScreenProps() const {
+	return _propRuntime.hasAnimatedScreenProps();
+}
+
+void CyberflixEngine::collectWorldProps(Common::Array<const Shop::Prop *> &draw,
+		Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
+		const Shop::WorldCamera &camera) {
+	_propRuntime.collectWorldProps(*this, draw, drawShop, depths, camera);
+}
+
+bool CyberflixEngine::screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const {
+	return _propRuntime.screenPropRect(shop, prop, rect);
+}
+
+void CyberflixEngine::queueDirtyRect(const Common::Rect &rect) {
+	_propRuntime.queueDirtyRect(rect);
+}
+
+void CyberflixEngine::markPropDirty(const Shop &shop, const Shop::Prop &prop, const Common::Rect *oldRect) {
+	_propRuntime.markPropDirty(shop, prop, oldRect);
+}
+
+void CyberflixEngine::markShopDirty(const Shop &shop) {
+	_propRuntime.markShopDirty(shop);
+}
+
+void CyberflixEngine::openShopFile(const Common::String &name) {
+	_propRuntime.openShopFile(*this, name);
+}
+
+void CyberflixEngine::closeShopFile(const Common::String &name) {
+	_propRuntime.closeShopFile(*this, name);
+}
+
+void CyberflixEngine::propInstance(const Common::String &source, const Common::String &newName) {
+	_propRuntime.propInstance(source, newName);
+}
+
+void CyberflixEngine::sendToShop(const Common::String &shopName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	_propRuntime.sendToShop(*this, shopName, message, args);
+}
+
+Value CyberflixEngine::sendToShopFx(const Common::String &shopName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	return _propRuntime.sendToShopFx(*this, shopName, message, args);
+}
+
+void CyberflixEngine::sendToProp(const Common::String &propName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	_propRuntime.sendToProp(*this, propName, message, args);
+}
+
+Value CyberflixEngine::sendToPropFx(const Common::String &propName, const Common::String &message,
+		const Common::Array<Value> &args) {
+	return _propRuntime.sendToPropFx(*this, propName, message, args);
+}
+
+bool CyberflixEngine::propVisible(const Common::String &name) {
+	return _propRuntime.propVisible(name);
+}
+
+void CyberflixEngine::propVisible(const Common::String &name, bool visible) {
+	_propRuntime.propVisible(name, visible);
+}
+
+Common::String CyberflixEngine::propView(const Common::String &name) {
+	return _propRuntime.propView(name);
+}
+
+void CyberflixEngine::propView(const Common::String &name, const Common::String &shape) {
+	_propRuntime.propView(name, shape);
+}
+
+int CyberflixEngine::propXY(const Common::String &name, int selector) {
+	return _propRuntime.propXY(name, selector);
+}
+
+void CyberflixEngine::setPropXY(const Common::String &name, int x, int y) {
+	_propRuntime.setPropXY(name, x, y);
+}
+
+void CyberflixEngine::propSet(const Common::String &name, const Common::String &setName) {
+	_propRuntime.propSet(name, setName);
+}
+
+void CyberflixEngine::propXYZ(const Common::String &name, int x, int y, int z) {
+	_propRuntime.propXYZ(name, x, y, z);
+}
+
+void CyberflixEngine::propScale(const Common::String &name, int scale) {
+	_propRuntime.propScale(name, scale);
+}
+
+void CyberflixEngine::propZClip(const Common::String &name, int dist) {
+	_propRuntime.propZClip(name, dist);
+}
+
+void CyberflixEngine::propDist(const Common::String &name, int dist) {
+	_propRuntime.propDist(name, dist);
+}
+
+int CyberflixEngine::propDeg(const Common::String &name, const int *newDeg) {
+	return _propRuntime.propDeg(name, newDeg);
+}
+
+Common::String CyberflixEngine::propOwner(const Common::String &name, const Common::String *newOwner) {
+	return _propRuntime.propOwner(name, newOwner);
+}
+
+int CyberflixEngine::propValue(const Common::String &name, const int *newValue) {
+	return _propRuntime.propValue(name, newValue);
+}
+
+int CyberflixEngine::countProps() {
+	return _propRuntime.countProps();
+}
+
+Common::String CyberflixEngine::indexToProp(int index) {
+	return _propRuntime.indexToProp(index);
+}
+
+void CyberflixEngine::refreshPropsIfDirty() {
+	_propRuntime.refreshPropsIfDirty(*this);
+}
+
 int CyberflixEngine::getGameType() const {
 	return _gameDescription->gameType;
 }
@@ -576,8 +728,8 @@ void CyberflixEngine::renderStageNode(int node, bool resetCursor) {
 	// repaints do not touch the cursor; BOOTFILE idle hittest/setcursor owns it.
 	if (resetCursor && setGameCursor("CURS.ARROW"))
 		CursorMan.showMouse(true);
-	_dirtyRects.clear();
-	_propsDirty = false;
+	_propRuntime.clearDirtyRects();
+	_propRuntime.setDirty(false);
 	_system->updateScreen();
 	if (node == 0) {
 		_stageShellFrame = frame;
@@ -589,7 +741,7 @@ void CyberflixEngine::renderStageNode(int node, bool resetCursor) {
 }
 
 void CyberflixEngine::repaintDirtyStageRects() {
-	if (!_stage || !_stage->isOpen() || _dirtyRects.empty())
+	if (!_stage || !_stage->isOpen() || _propRuntime.dirtyRects().empty())
 		return;
 
 	FrameImage frame;
@@ -606,8 +758,8 @@ void CyberflixEngine::repaintDirtyStageRects() {
 	collectScreenProps(draw, drawShop);
 
 	Graphics::Surface *screen = _system->lockScreen();
-	for (uint32 r = 0; r < _dirtyRects.size(); ++r) {
-		Common::Rect dirty = _dirtyRects[r];
+	for (uint32 r = 0; r < _propRuntime.dirtyRects().size(); ++r) {
+		Common::Rect dirty = _propRuntime.dirtyRects()[r];
 		dirty.clip(Common::Rect(kScreenWidth, kScreenHeight));
 		if (dirty.isEmpty())
 			continue;
@@ -636,8 +788,8 @@ void CyberflixEngine::repaintDirtyStageRects() {
 	// Dirty stage rects are compositor work (native FUN_00442d90/FUN_00407000),
 	// not direct flat navigation, so they must not overwrite the cursor selected
 	// by BOOTFILE idle hittest and the prop/flat setcursor scripts.
-	_dirtyRects.clear();
-	_propsDirty = false;
+	_propRuntime.clearDirtyRects();
+	_propRuntime.setDirty(false);
 	_system->updateScreen();
 }
 
@@ -1004,8 +1156,8 @@ void CyberflixEngine::forceUpdate() {
 	const bool cursorMoved = pumpCursorMotionEvents();
 	bool presented = false;
 	processScheduledLoops();
-	if (!_propsDirty && isReplacementStage(_stage) && hasAnimatedScreenProps())
-		_propsDirty = true;
+	if (!_propRuntime.dirty() && isReplacementStage(_stage) && hasAnimatedScreenProps())
+		_propRuntime.setDirty(true);
 	refreshPropsIfDirty();
 	if (_puppetRuntime.isVisible()) {
 		renderCurrentPuppetFrame(true);
@@ -1197,7 +1349,7 @@ Common::Error CyberflixEngine::run() {
 		bool handled = false;
 		_framePacingRuntime.beginIdle();
 		_vm.callFunction("idle", Common::Array<Value>(), &handled);
-		const bool propsDirtyAfterIdle = _propsDirty;
+		const bool propsDirtyAfterIdle = _propRuntime.dirty();
 		refreshPropsIfDirty();
 		if (!_framePacingRuntime.forceUpdatePresentedDuringIdle() || propsDirtyAfterIdle)
 			_system->updateScreen();

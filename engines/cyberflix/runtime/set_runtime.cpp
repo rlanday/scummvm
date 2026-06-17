@@ -399,8 +399,8 @@ void CyberflixEngine::displaySetFramePixels(const byte *pixels, uint16 width, ui
 			drawCel(screen, *cel, r, Common::Rect(kScreenWidth, kScreenHeight));
 		}
 	}
-	_propsDirty = false;
-	_dirtyRects.clear();
+	_propRuntime.setDirty(false);
+	_propRuntime.clearDirtyRects();
 	_system->unlockScreen();
 	// SET compositing can be driven many times from scene scripts. Mark the
 	// backend upload as pending and let forceupdate()/the main loop present once;

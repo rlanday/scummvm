@@ -246,7 +246,7 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 		// visualeffect() reaches the same update/compositor path as forceupdate();
 		// it repaints pixels but native cursor state remains script-controlled.
 		renderStageNode(_stageNode, false);
-		_propsDirty = false;
+		_propRuntime.setDirty(false);
 	} else {
 		_system->updateScreen();
 	}

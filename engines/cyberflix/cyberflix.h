@@ -40,6 +40,7 @@
 #include "cyberflix/runtime/loops.h"
 #include "cyberflix/runtime/palette.h"
 #include "cyberflix/runtime/paths.h"
+#include "cyberflix/runtime/props.h"
 #include "cyberflix/runtime/puppet_runtime.h"
 #include "cyberflix/runtime/timing.h"
 #include "cyberflix/shop.h"
@@ -266,6 +267,7 @@ public:
 private:
 	friend class ActorRuntime;
 	friend class LoopRuntime;
+	friend class PropRuntime;
 	friend class PuppetRuntime;
 
 	/**
@@ -369,15 +371,7 @@ private:
 	 *  TI.EXE global DAT_00461298. */
 	Common::String _hitKind;
 
-	/**
-	 * Open shops (DATA/ .SHP files), in openshopfile order. The original keeps
-	 * ONE global prop array across all shops (DAT_0046113c/DAT_00461140), so
-	 * countprops/indextoprop and the by-name prop lookups span every open
-	 * shop here, in open order.
-	 */
-	Common::Array<Common::SharedPtr<Shop> > _shops;
-	bool _propsDirty = false; ///< Prop state changed; re-render before idling.
-	Common::Array<Common::Rect> _dirtyRects; ///< Native-style dirty screen rectangles for prop changes.
+	PropRuntime _propRuntime;
 
 	ActorRuntime _actorRuntime;
 	void refreshActorStarPositions();
