@@ -1063,6 +1063,10 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			if (args.size() >= 2)
 				return Value::makeInt(_host->calcDeg(args[0].intValue, args[1].intValue));
 			return Value::makeInt(0);
+		case Script::kMethodCalcMod: // calcmod(a, b) -> FUN_004358f0
+			if (args.size() >= 2)
+				return Value::makeInt(_host->calcMod(args[0].intValue, args[1].intValue));
+			return Value::makeInt(0);
 		case Script::kMethodResult: // result() -> FUN_004366a0: last hittest kind (DAT_00461298)
 			return Value::makeString(_host->hitTestResult());
 		case Script::kMethodMouse: // mouse() -> FUN_004368b0: current mouse point, packed

@@ -532,6 +532,9 @@ public:
 	 *  full turn from packed point @p a to packed point @p b. */
 	virtual int calcDeg(int32 a, int32 b) { return 0; }
 
+	/** calcmod(a, b) (0x4e72 FUN_004358f0): signed integer remainder. */
+	virtual int calcMod(int a, int b) { return b != 0 ? a % b : 0; }
+
 	/** savegame(signature) (0x2f2d FUN_00426620): open the save UI and persist state. */
 	virtual void saveGame(const Common::String &signature) {}
 

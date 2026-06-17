@@ -252,6 +252,7 @@ public:
 	bool stillDown() override;
 	int tick() override;
 	int calcDeg(int32 a, int32 b) override;
+	int calcMod(int a, int b) override;
 	void setCursorResource(const Common::String &resourceName) override;
 	void saveGame(const Common::String &signature) override;
 	void openGame(const Common::String &signature) override;

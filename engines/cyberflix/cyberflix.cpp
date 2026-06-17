@@ -2470,6 +2470,10 @@ int CyberflixEngine::calcDeg(int32 a, int32 b) {
 	return deg;
 }
 
+int CyberflixEngine::calcMod(int a, int b) {
+	return b != 0 ? a % b : 0;
+}
+
 // cursor(...) -> TI.EXE FUN_00446920, with the script name already resolved
 // to a PE resource name by the VM (see VMHost::setCursorResource).
 void CyberflixEngine::setCursorResource(const Common::String &resourceName) {

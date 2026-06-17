@@ -248,6 +248,7 @@ public:
 		kMethodCurrentSound     = 0x4E6D,
 		kMethodCurrentVoice     = 0x4E6E,
 		kMethodCurrentTheme     = 0x4E6F,
+		kMethodCalcMod          = 0x4E72,
 		kMethodActionFrame      = 0x4E73,
 		kMethodSendToActorFx    = 0x4E74,
 		kMethodSendToSceneFx    = 0x4E75,
