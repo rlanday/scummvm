@@ -41,7 +41,7 @@
 #include "cyberflix/detection.h"
 #include "cyberflix/set.h"
 #include "cyberflix/shop.h"
-#include "cyberflix/sound.h"
+#include "cyberflix/cbx_audio.h"
 #include "cyberflix/stage.h"
 #include "cyberflix/vm.h"
 

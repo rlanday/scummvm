@@ -60,7 +60,7 @@
 #include "cyberflix/image.h"
 #include "cyberflix/script.h"
 #include "cyberflix/set.h"
-#include "cyberflix/sound.h"
+#include "cyberflix/cbx_audio.h"
 #include "cyberflix/stage.h"
 #include "cyberflix/vm.h"
 

@@ -41,7 +41,7 @@
 #include "cyberflix/console.h"
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/image.h"
-#include "cyberflix/sound.h"
+#include "cyberflix/cbx_audio.h"
 
 namespace Cyberflix {
 

@@ -33,7 +33,7 @@
 
 #include "cyberflix/archive.h"
 #include "cyberflix/cyberflix.h"
-#include "cyberflix/sound.h"
+#include "cyberflix/cbx_audio.h"
 
 #include <math.h>
 

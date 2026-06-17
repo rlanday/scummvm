@@ -19,8 +19,8 @@
  *
  */
 
-#ifndef CYBERFLIX_SOUND_H
-#define CYBERFLIX_SOUND_H
+#ifndef CYBERFLIX_CBX_AUDIO_H
+#define CYBERFLIX_CBX_AUDIO_H
 
 #include "common/scummsys.h"
 #include "common/array.h"

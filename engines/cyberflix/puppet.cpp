@@ -28,7 +28,7 @@
 
 #include "cyberflix/image.h"
 #include "cyberflix/puppet.h"
-#include "cyberflix/sound.h" // kMasterHeaderInfoTag
+#include "cyberflix/cbx_audio.h" // kMasterHeaderInfoTag
 
 namespace Cyberflix {
 

@@ -26,7 +26,7 @@
 #include "common/path.h"
 
 #include "cyberflix/set.h"
-#include "cyberflix/sound.h" // kMasterHeaderInfoTag
+#include "cyberflix/cbx_audio.h" // kMasterHeaderInfoTag
 
 namespace Cyberflix {
 

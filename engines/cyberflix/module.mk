@@ -2,7 +2,7 @@ MODULE := engines/cyberflix
 
 MODULE_OBJS = \
 	archive.o \
-	audio.o \
+	audio_runtime.o \
 	actors.o \
 	cast.o \
 	console.o \
@@ -16,7 +16,7 @@ MODULE_OBJS = \
 	script.o \
 	set.o \
 	shop.o \
-	sound.o \
+	cbx_audio.o \
 	stage.o \
 	vm.o
 
