@@ -24,8 +24,6 @@
 
 #include "common/random.h"
 #include "common/error.h"
-#include "common/hashmap.h"
-#include "common/hash-str.h"
 #include "common/ptr.h"
 #include "common/rect.h"
 
@@ -37,6 +35,7 @@
 #include "cyberflix/detection.h"
 #include "cyberflix/image.h"
 #include "cyberflix/puppet.h"
+#include "cyberflix/runtime/cursor.h"
 #include "cyberflix/shop.h"
 #include "cyberflix/vm.h"
 
@@ -49,7 +48,6 @@ class Set;
 }
 
 namespace Common {
-class PEResources;
 struct Event;
 }
 
@@ -59,7 +57,6 @@ class SoundHandle;
 
 namespace Graphics {
 class Font;
-struct WinCursorGroup;
 }
 
 namespace Cyberflix {
@@ -280,10 +277,6 @@ private:
 	bool setGameCursor(const Common::String &name);
 	bool pumpCursorMotionEvents();
 
-	/** Lazily open the game's TI.EXE for resource access. Returns nullptr if
-	 *  it cannot be found (the game can still run without a custom cursor). */
-	Common::PEResources *gameExe();
-
 	/**
 	 * Render node @p node of the currently open stage to the screen: decode its
 	 * background frame (compositing from the nearest keyframe), apply the stage
@@ -338,10 +331,7 @@ private:
 	Common::RandomSource _rnd;
 	Console *_console; ///< Owned by the engine framework's debugger, not by us.
 
-	Common::ScopedPtr<Common::PEResources> _exe;
-	bool _exeTried = false;
-	Common::HashMap<Common::String, Common::SharedPtr<Graphics::WinCursorGroup> > _cursorCache;
-	Common::String _activeCursor;
+	CursorRuntime _cursorRuntime;
 
 	Common::SharedPtr<Stage> _stage; ///< Currently open stage (DATA/*.STG), or null.
 	bool _stageVisible = false;      ///< DAT_00461156, queried by stagevisible().

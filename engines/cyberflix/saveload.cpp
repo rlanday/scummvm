@@ -875,11 +875,11 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	}
 
 	programPalette(savedClut);
-	_activeCursor = header.activeCursor;
 	_hitKind = header.hitKind;
 	_actionFrameMask = header.actionFrameMask;
-	if (!_activeCursor.empty())
-		setGameCursor(_activeCursor);
+	_cursorRuntime.setActiveCursorName(header.activeCursor);
+	if (!_cursorRuntime.activeCursor().empty())
+		setGameCursor(_cursorRuntime.activeCursor());
 	_system->updateScreen();
 
 	return Common::kNoError;
@@ -905,7 +905,7 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		payload.writeUint32LE((uint32)getPlatform());
 		payload.writeUint32LE((uint32)getLanguage());
 		payload.writeUint32LE((uint32)getGameType());
-		writeSaveString(payload, _activeCursor);
+		writeSaveString(payload, _cursorRuntime.activeCursor());
 		writeSaveString(payload, _hitKind);
 		payload.writeUint16LE(_actionFrameMask);
 

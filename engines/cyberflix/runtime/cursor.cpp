@@ -29,6 +29,7 @@
 #include "graphics/wincursor.h"
 
 #include "cyberflix/cyberflix.h"
+#include "cyberflix/runtime/cursor.h"
 
 namespace Cyberflix {
 
@@ -37,7 +38,7 @@ namespace Cyberflix {
 // CyberFlix "Bicycle" runtime; in an installed game it lives under INSTALL/BINX
 // (or INSTALL/BIN). It is a Win32 PE whose RT_GROUP_CURSOR resources are named
 // CURS.ARROW, CURS.HAND, CURS.GOUP, ... (see files/decomp/movie-playback.md).
-Common::PEResources *CyberflixEngine::gameExe() {
+Common::PEResources *CursorRuntime::gameExe() {
 	if (_exeTried)
 		return _exe.get();
 	_exeTried = true;
@@ -66,7 +67,7 @@ Common::PEResources *CyberflixEngine::gameExe() {
 	return nullptr;
 }
 
-bool CyberflixEngine::setGameCursor(const Common::String &name) {
+bool CursorRuntime::setCursor(const Common::String &name) {
 	if (_activeCursor == name && _cursorCache.contains(name))
 		return true;
 
@@ -90,6 +91,10 @@ bool CyberflixEngine::setGameCursor(const Common::String &name) {
 	_activeCursor = name;
 	debug(1, "Cyberflix: cursor -> %s", name.c_str());
 	return true;
+}
+
+bool CyberflixEngine::setGameCursor(const Common::String &name) {
+	return _cursorRuntime.setCursor(name);
 }
 
 } // End of namespace Cyberflix
