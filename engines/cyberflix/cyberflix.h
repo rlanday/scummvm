@@ -116,6 +116,7 @@ public:
 	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
 	bool canLoadGameStateCurrently(Common::U32String *msg = nullptr) override;
 	bool canSaveGameStateCurrently(Common::U32String *msg = nullptr) override;
+	bool canSaveAutosaveCurrently() override;
 
 	int getGameType() const;
 	const char *getGameId() const;

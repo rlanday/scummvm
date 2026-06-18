@@ -138,6 +138,13 @@ static bool isLoadedReplacementStage(const Common::SharedPtr<Stage> &stage) {
 	return stage && stage->isOpen() && !stage->name().equalsIgnoreCase("main.stg");
 }
 
+static bool isTourMode(const ScriptVM &vm) {
+	Common::HashMap<Common::String, Value>::const_iterator it = vm.globalVars().find("tour");
+	return it != vm.globalVars().end() &&
+			(it->_value.type == Value::kBool || it->_value.type == Value::kInt) &&
+			it->_value.intValue != 0;
+}
+
 struct HeaderState {
 	bool seen = false;
 	Common::String signature;
@@ -904,8 +911,17 @@ static void writeEmptyCountChunk(Common::WriteStream &out, const char tag[4]) {
 }
 
 bool CyberflixEngine::canSaveGameStateCurrently(Common::U32String *msg) {
+	if (isTourMode(_vm)) {
+		if (msg)
+			*msg = _("You can't save your game during the tour.");
+		return false;
+	}
 	return (stageRuntime().stage() && stageRuntime().stage()->isOpen()) ||
 			(setRuntime().set() && setRuntime().set()->isOpen());
+}
+
+bool CyberflixEngine::canSaveAutosaveCurrently() {
+	return !isTourMode(_vm) && canSaveGameStateCurrently();
 }
 
 bool CyberflixEngine::canLoadGameStateCurrently(Common::U32String *msg) {

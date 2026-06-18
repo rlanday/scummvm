@@ -228,7 +228,10 @@ void CyberflixEngine::showAboutDialog() {
 }
 
 bool CyberflixEngine::questionDialog(const Common::String &message) {
-	GUI::MessageDialog dialog(message, "Yes", "No");
+	Common::String text = message;
+	if (text == "Are you sure you want to quit? You can't save your game during the tour.")
+		text = "Are you sure you want to quit? You can't save your game during the tour, but you can still use OPEN to load another saved game.";
+	GUI::MessageDialog dialog(text, "Yes", "No");
 	return dialog.runModal() == GUI::kMessageOK;
 }
 
