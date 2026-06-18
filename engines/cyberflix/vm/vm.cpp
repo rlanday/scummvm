@@ -609,10 +609,27 @@ Value ScriptVM::evaluateExpression(const Script &script, uint32 &pc) {
 }
 
 Value ScriptVM::evaluateExpression(const Script &script, uint32 &pc, uint8 minBindingPower) {
-	// ScummVM-only optimization of TI.EXE's expression reducer: native stores
-	// atom/operator lists and then reduces precedence classes, but using the
-	// same recovered precedence table as binding powers avoids per-expression
-	// Common::Array allocations in idle/hittest hot paths.
+	// ScummVM-only optimization of TI.EXE's expression reducer. The native
+	// interpreter uses a two-pass list reducer: it first scans the infix
+	// expression into temporary atom/operator lists, then walks the recovered
+	// precedence classes from tightest to loosest, replacing each matching
+	// "lhs op rhs" span with the computed atom. For example, "a + b * c" is
+	// stored as atoms [a, b, c] and operators [+, *]; the multiply pass
+	// collapses "b * c", then the add pass combines that result with "a".
+	//
+	// ScummVM uses the same recovered precedence table as binding powers in a
+	// precedence-climbing parser, so it can reduce while it scans. For
+	// "a + b * c", the outer call decodes "a" as lhs and sees "+". It then
+	// recurses for the right-hand side with a higher minimum binding power; that
+	// nested call decodes "b", sees that "*" binds tightly enough to stay inside
+	// the nested call, consumes "c", and returns "(b * c)". The outer call then
+	// applies "+" to produce "a + (b * c)". If the nested call saw another "+"
+	// instead, it would stop and leave that operator for the outer level,
+	// preserving the native left-to-right reduction order for equal-precedence
+	// operators.
+	//
+	// The parse result matches the native reducer, but this avoids allocating
+	// per-expression Common::Array temporaries in idle/hittest hot paths.
 	Value lhs = decodeAtom(script, pc);
 	while (pc < script.getInstructionCount()) {
 		const uint16 op = script.getInstruction(pc).opcode;
