@@ -181,7 +181,7 @@ public:
 	/** Camera/projection state copied from the active panorama record by
 	 *  TI.EXE FUN_00442e90, with viewport/focal state from FUN_00441f40. */
 	struct CameraData {
-		int16 heading = 0;       ///< record +0x26, 16-bit native camera angle units.
+		int16 heading = 0;       ///< record +0x26, 0..255 native angle units.
 		int16 cameraX = 0;       ///< record +0x20, compared with propxyz x.
 		int16 cameraY = 0;       ///< record +0x22, compared with propxyz y.
 		int16 cameraZ = 0;       ///< record +0x24.

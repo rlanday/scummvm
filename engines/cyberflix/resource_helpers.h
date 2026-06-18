@@ -87,19 +87,6 @@ inline int16 nativeTrigCos(int angle) {
 	return static_cast<int16>((v >= 0.0 ? v + 0.5 : v - 0.5));
 }
 
-// Camera headings come from SET panorama records and index TI.EXE's 16-bit
-// sine/cosine tables in FUN_00442e90. Actor/prop facing angles are the separate
-// 8-bit script-visible units handled by nativeTrigSin()/nativeTrigCos() above.
-inline int16 nativeCameraTrigSin(int heading) {
-	double v = sin(static_cast<double>(static_cast<uint16>(heading)) * 6.28318530717958647692 / 65536.0) * 16384.0;
-	return static_cast<int16>((v >= 0.0 ? v + 0.5 : v - 0.5));
-}
-
-inline int16 nativeCameraTrigCos(int heading) {
-	double v = cos(static_cast<double>(static_cast<uint16>(heading)) * 6.28318530717958647692 / 65536.0) * 16384.0;
-	return static_cast<int16>((v >= 0.0 ? v + 0.5 : v - 0.5));
-}
-
 inline int fixedShift14(int value) {
 	return (value + (value < 0 ? 0x3fff : 0)) >> 14;
 }
