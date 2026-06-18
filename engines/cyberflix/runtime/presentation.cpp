@@ -150,14 +150,14 @@ void CyberflixEngine::drawString(const Common::String &text, int32 packedPoint, 
 	if (!font)
 		return;
 
-	const int16 x = (int16)(packedPoint >> 16);
-	const int16 baselineY = (int16)(packedPoint & 0xffff);
+	const int16 x = static_cast<int16>(packedPoint >> 16);
+	const int16 baselineY = static_cast<int16>(packedPoint & 0xffff);
 	if (x >= kScreenWidth || baselineY >= kScreenHeight)
 		return;
 
 	Graphics::Surface *screen = _system->lockScreen();
 	font->drawString(screen, text, x, baselineY - font->getFontAscent(),
-			kScreenWidth - x, (uint32)CLIP(color, 0, 255));
+			kScreenWidth - x, static_cast<uint32>(CLIP(color, 0, 255)));
 	_system->unlockScreen();
 	_system->updateScreen();
 }
@@ -200,13 +200,13 @@ void CyberflixEngine::fadePaletteSteps(const byte (&from)[256 * 3], const byte (
 	for (int s = 1; s <= steps && !shouldQuit(); ++s) {
 		byte cur[256 * 3];
 		for (int i = 0; i < 256 * 3; ++i)
-			cur[i] = (byte)(from[i] + ((int)to[i] - (int)from[i]) * s / steps);
+			cur[i] = static_cast<byte>((from[i] + (static_cast<int>(to[i]) - static_cast<int>(from[i])) * s / steps));
 		programPalette(cur);
 		_system->updateScreen();
 		if (s == steps)
 			reachedFinalStep = true;
 		// One step per 60 Hz tick of the original's scaled timer.
-		uint32 deadline = startMs + (uint32)((uint64)s * 1000 / 60);
+		uint32 deadline = startMs + static_cast<uint32>((static_cast<uint64>(s) * 1000 / 60));
 		uint32 now = _system->getMillis();
 		if (now < deadline)
 			_system->delayMillis(deadline - now);

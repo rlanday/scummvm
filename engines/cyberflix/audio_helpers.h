@@ -37,7 +37,7 @@ inline Audio::SeekableAudioStream *makeOwnedRawPcmStream(const Common::Array<byt
 	if (pcm.empty())
 		return nullptr;
 
-	byte *buf = (byte *)malloc(pcm.size());
+	byte *buf = reinterpret_cast<byte *>(malloc(pcm.size()));
 	if (!buf)
 		return nullptr;
 	memcpy(buf, pcm.begin(), pcm.size());

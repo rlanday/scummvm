@@ -56,7 +56,7 @@ bool Shop::open(const Common::String &name) {
 	// an empty placeholder slot with resource id 0 ahead of the real master.
 	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
 		if (!_archive.getResource(i).empty && _archive.getResource(i).info == kMasterHeaderInfoTag) {
-			_master = (int)i;
+			_master = static_cast<int>(i);
 			break;
 		}
 	}
@@ -65,7 +65,7 @@ bool Shop::open(const Common::String &name) {
 		return false;
 	}
 
-	const byte *hdr = engineBase((uint32)_master);
+	const byte *hdr = engineBase(static_cast<uint32>(_master));
 	if (!hdr || hdr + kMasterPropTableOffset > _fileData.end()) {
 		warning("Cyberflix: shop '%s' master header truncated", name.c_str());
 		_master = -1;
@@ -76,7 +76,7 @@ bool Shop::open(const Common::String &name) {
 	uint32 scriptRes = READ_LE_UINT32(hdr + kMasterScriptOffset);
 	int scriptIdx = resourceIndexById(scriptRes);
 	if (scriptIdx >= 0) {
-		Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)scriptIdx));
+		Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource(static_cast<uint32>(scriptIdx)));
 		Common::ScopedPtr<Script> script(new Script());
 		if (s && script->parse(s.get()))
 			_script.reset(script.release());
@@ -92,7 +92,7 @@ bool Shop::open(const Common::String &name) {
 			break;
 		uint32 masterId = READ_LE_UINT32(entry);
 		int mIdx = resourceIndexById(masterId);
-		const byte *pm = mIdx >= 0 ? engineBase((uint32)mIdx) : nullptr;
+		const byte *pm = mIdx >= 0 ? engineBase(static_cast<uint32>(mIdx)) : nullptr;
 		if (!pm || pm + kPropShapeTableOffset > _fileData.end()) {
 			warning("Cyberflix: shop '%s' prop master %u missing", name.c_str(), masterId);
 			continue;
@@ -122,7 +122,7 @@ bool Shop::open(const Common::String &name) {
 
 		int sIdx = prop.scriptResId ? resourceIndexById(prop.scriptResId) : -1;
 		if (sIdx >= 0) {
-			Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)sIdx));
+			Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource(static_cast<uint32>(sIdx)));
 			Common::SharedPtr<Script> script(new Script());
 			if (s && script->parse(s.get()))
 				prop.script = script;
@@ -172,7 +172,7 @@ bool Shop::shapePoseCount(const Prop &prop, const Common::String &shape, uint16 
 		if (prop.shapes[i].name != key)
 			continue;
 		int idx = resourceIndexById(prop.shapes[i].resId);
-		const byte *sh = idx >= 0 ? engineBase((uint32)idx) : nullptr;
+		const byte *sh = idx >= 0 ? engineBase(static_cast<uint32>(idx)) : nullptr;
 		if (!sh || sh + kShapeCellTableOffset > _fileData.end())
 			return false;
 		poseCount = READ_LE_UINT16(sh + kShapePoseCountOffset);
@@ -190,13 +190,13 @@ Common::SharedPtr<CelImage> Shop::celResource(uint32 resId) const {
 	int idx = resourceIndexById(resId);
 	if (idx < 0)
 		return Common::SharedPtr<CelImage>();
-	const Archive::Resource &res = _archive.getResource((uint32)idx);
-	uint16 width = (uint16)(res.info >> 16);
-	uint16 height = (uint16)(res.info & 0xffff);
+	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(idx));
+	uint16 width = static_cast<uint16>(res.info >> 16);
+	uint16 height = static_cast<uint16>(res.info & 0xffff);
 	if (!width || !height)
 		return Common::SharedPtr<CelImage>();
 
-	Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)idx));
+	Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource(static_cast<uint32>(idx)));
 	if (!s)
 		return Common::SharedPtr<CelImage>();
 	Common::SharedPtr<CelImage> cel(new CelImage());
@@ -224,7 +224,7 @@ bool Shop::resolvePropCel(const Prop &prop, int angle, Common::SharedPtr<CelImag
 		return false;
 	}
 	int shIdx = resourceIndexById(shape->resId);
-	const byte *sh = shIdx >= 0 ? engineBase((uint32)shIdx) : nullptr;
+	const byte *sh = shIdx >= 0 ? engineBase(static_cast<uint32>(shIdx)) : nullptr;
 	if (!sh || sh + kShapeCellTableOffset > _fileData.end()) {
 		debug(1, "Cyberflix: renderProp('%s'): shape res %u missing",
 				prop.name.c_str(), shape->resId);
@@ -243,10 +243,10 @@ bool Shop::resolvePropCel(const Prop &prop, int angle, Common::SharedPtr<CelImag
 	int bestDist = 0x7fffffff;
 	const byte *cellTable = sh + kShapeCellTableOffset;
 	for (uint16 i = 0; i < cellCount; ++i) {
-		const byte *c = cellTable + (uint32)i * kShapeCellStride;
+		const byte *c = cellTable + static_cast<uint32>(i) * kShapeCellStride;
 		if (c + kShapeCellStride > _fileData.end())
 			break;
-		if (READ_LE_UINT16(c + kCellIdOffset) != (uint16)(poseId - 1))
+		if (READ_LE_UINT16(c + kCellIdOffset) != static_cast<uint16>(poseId - 1))
 			continue;
 		int dist = nativeAngleDistance(READ_LE_INT16(c + kCellAngleOffset), angle);
 		if (dist < bestDist) {
@@ -302,6 +302,9 @@ bool Shop::renderWorldProp(const Prop &prop, const WorldCamera &camera,
 
 	const int relX = prop.x - camera.cameraX;
 	const int relY = prop.y - camera.cameraY;
+	// Native 8-bit-angle yaw rotation followed by pinhole perspective
+	// projection: x' = x*f/z, y' = y*f/z. See Foley/van Dam et al.,
+	// Computer Graphics: Principles and Practice, viewing pipeline chapter.
 	const int sinH = nativeTrigSin(camera.heading);
 	const int cosH = nativeTrigCos(camera.heading);
 	const int projectedDepth = fixedShift14(relY * sinH + relX * cosH);
@@ -343,7 +346,7 @@ bool Shop::renderWorldProp(const Prop &prop, const WorldCamera &camera,
 			camera.viewportRight, camera.viewportBottom);
 	if (!rect.intersects(viewport))
 		return false;
-	depth = (int16)projectedDepth;
+	depth = static_cast<int16>(projectedDepth);
 	return true;
 }
 

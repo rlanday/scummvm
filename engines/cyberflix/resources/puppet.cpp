@@ -58,7 +58,7 @@ Common::SharedPtr<Script> Puppet::parseScriptResource(uint32 resId) const {
 	int idx = resourceIndexById(resId);
 	if (idx < 0)
 		return Common::SharedPtr<Script>();
-	Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)idx));
+	Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource(static_cast<uint32>(idx)));
 	Common::SharedPtr<Script> script(new Script());
 	if (s && script->parse(s.get()))
 		return script;
@@ -85,7 +85,7 @@ bool Puppet::open(const Common::String &name) {
 
 	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
 		if (!_archive.getResource(i).empty && _archive.getResource(i).info == kMasterHeaderInfoTag) {
-			_master = (int)i;
+			_master = static_cast<int>(i);
 			break;
 		}
 	}
@@ -94,7 +94,7 @@ bool Puppet::open(const Common::String &name) {
 		return false;
 	}
 
-	const byte *hdr = engineBase((uint32)_master);
+	const byte *hdr = engineBase(static_cast<uint32>(_master));
 	if (!hdr || hdr + kMasterBaseTableOffset > _fileData.end()) {
 		warning("Cyberflix: puppet '%s' master header truncated", name.c_str());
 		_master = -1;
@@ -108,7 +108,7 @@ bool Puppet::open(const Common::String &name) {
 		if (entry + kMasterBaseStride > _fileData.end())
 			break;
 		ActionEntry action;
-		action.baseState = (int16)READ_LE_UINT16(entry + kMasterActionBaseStateOffset);
+		action.baseState = static_cast<int16>(READ_LE_UINT16(entry + kMasterActionBaseStateOffset));
 		action.frameCount = READ_LE_UINT16(entry + kMasterActionFrameCountOffset);
 		action.audioResourceId = READ_LE_UINT32(entry + kMasterActionAudioResourceOffset);
 		action.frameResourceId = READ_LE_UINT32(entry + kMasterActionFrameResourceOffset);
@@ -128,7 +128,7 @@ bool Puppet::open(const Common::String &name) {
 	}
 
 	int baseIdx = resourceIndexById(kBaseControllerResourceId);
-	const byte *base = baseIdx >= 0 ? engineBase((uint32)baseIdx) : nullptr;
+	const byte *base = baseIdx >= 0 ? engineBase(static_cast<uint32>(baseIdx)) : nullptr;
 	if (base) {
 		for (uint32 i = 0; i < kBaseControllerStateCount; ++i)
 			_baseDisplayListResources[i] =
@@ -136,14 +136,14 @@ bool Puppet::open(const Common::String &name) {
 	}
 
 	int tableIdx = resourceIndexById(kScriptTableResourceId);
-	const byte *table = tableIdx >= 0 ? payload((uint32)tableIdx) : nullptr;
-	if (!table || _archive.getResource((uint32)tableIdx).length < kScriptTableEntriesOffset) {
+	const byte *table = tableIdx >= 0 ? payload(static_cast<uint32>(tableIdx)) : nullptr;
+	if (!table || _archive.getResource(static_cast<uint32>(tableIdx)).length < kScriptTableEntriesOffset) {
 		warning("Cyberflix: puppet '%s' script table missing", name.c_str());
 		return true;
 	}
 
 	uint32 count = READ_LE_UINT16(table + kScriptTableCountOffset);
-	uint32 tableLen = _archive.getResource((uint32)tableIdx).length;
+	uint32 tableLen = _archive.getResource(static_cast<uint32>(tableIdx)).length;
 	for (uint32 i = 0; i < count; ++i) {
 		uint32 off = kScriptTableEntriesOffset + i * kScriptEntryStride;
 		if (off + kScriptEntryStride > tableLen)
@@ -208,13 +208,13 @@ Common::SharedPtr<CelImage> Puppet::celResource(uint32 resId) const {
 	int idx = resourceIndexById(resId);
 	if (idx < 0)
 		return Common::SharedPtr<CelImage>();
-	const Archive::Resource &res = _archive.getResource((uint32)idx);
-	uint16 width = (uint16)(res.info >> 16);
-	uint16 height = (uint16)(res.info & 0xffff);
+	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(idx));
+	uint16 width = static_cast<uint16>(res.info >> 16);
+	uint16 height = static_cast<uint16>(res.info & 0xffff);
 	if (!width || !height)
 		return Common::SharedPtr<CelImage>();
 
-	Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)idx));
+	Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource(static_cast<uint32>(idx)));
 	if (!s)
 		return Common::SharedPtr<CelImage>();
 	Common::SharedPtr<CelImage> cel(new CelImage());
@@ -244,8 +244,8 @@ const Common::Array<Puppet::RenderFrame> *Puppet::cachedActionFrames(
 	int frameIdx = resourceIndexById(action.frameResourceId);
 	if (frameIdx < 0)
 		return &frames;
-	const Archive::Resource &res = _archive.getResource((uint32)frameIdx);
-	const byte *base = engineBase((uint32)frameIdx);
+	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(frameIdx));
+	const byte *base = engineBase(static_cast<uint32>(frameIdx));
 	if (!base)
 		return &frames;
 
@@ -253,7 +253,7 @@ const Common::Array<Puppet::RenderFrame> *Puppet::cachedActionFrames(
 	if (displayList == 0)
 		return &frames;
 	int displayIdx = resourceIndexById(displayList);
-	const byte *displayBase = displayIdx >= 0 ? engineBase((uint32)displayIdx) : nullptr;
+	const byte *displayBase = displayIdx >= 0 ? engineBase(static_cast<uint32>(displayIdx)) : nullptr;
 	if (!displayBase)
 		return &frames;
 
@@ -261,7 +261,7 @@ const Common::Array<Puppet::RenderFrame> *Puppet::cachedActionFrames(
 	// frame/layer/CEL pointers once per action so playback avoids repeated
 	// resource-table scans and hash lookups in the sampled inner loop.
 	const uint32 availableFrames = MIN<uint32>(action.frameCount,
-			(uint32)(((uint64)res.length + 4) / kFrameRecordStride));
+			static_cast<uint32>(((static_cast<uint64>(res.length) + 4) / kFrameRecordStride)));
 	for (uint32 frame = 0; frame < availableFrames; ++frame) {
 		const byte *record = base + frame * kFrameRecordStride;
 		if (record + kFrameRecordLayersOffset + kDisplayLayerCount * kFrameLayerStride >
@@ -269,14 +269,14 @@ const Common::Array<Puppet::RenderFrame> *Puppet::cachedActionFrames(
 			break;
 		for (uint32 layer = 0; layer < kDisplayLayerCount; ++layer) {
 			const byte *entry = record + kFrameRecordLayersOffset + layer * kFrameLayerStride;
-			int16 celIndex = (int16)READ_LE_UINT16(entry);
+			int16 celIndex = static_cast<int16>(READ_LE_UINT16(entry));
 			if (celIndex < 0)
 				continue;
 
 			uint32 off = kDisplayLayerOffset + layer * kDisplayLayerStride;
 			if (displayBase + off + 2 > _fileData.end())
 				continue;
-			int16 count = (int16)READ_LE_UINT16(displayBase + off);
+			int16 count = static_cast<int16>(READ_LE_UINT16(displayBase + off));
 			if (count < 0 || count > kDisplayLayerMaxResources || celIndex >= count)
 				continue;
 
@@ -292,9 +292,9 @@ const Common::Array<Puppet::RenderFrame> *Puppet::cachedActionFrames(
 			if (!cel)
 				continue;
 			RenderLayer cachedLayer;
-			cachedLayer.layer = (uint8)layer;
-			cachedLayer.nativeY = (int16)READ_LE_UINT16(entry + 2);
-			cachedLayer.nativeX = (int16)READ_LE_UINT16(entry + 4);
+			cachedLayer.layer = static_cast<uint8>(layer);
+			cachedLayer.nativeY = static_cast<int16>(READ_LE_UINT16(entry + 2));
+			cachedLayer.nativeX = static_cast<int16>(READ_LE_UINT16(entry + 4));
 			cachedLayer.cel = cel;
 			frames[frame].layers.push_back(cachedLayer);
 		}
@@ -335,10 +335,10 @@ bool Puppet::renderCelImage(const CelImage &cel, int16 nativeY, int16 nativeX,
 		return true;
 
 	for (int yy = 0; yy < height; ++yy) {
-		const uint row = (uint)(srcTop + yy) * cel.width + srcLeft;
+		const uint row = static_cast<uint>(srcTop + yy) * cel.width + srcLeft;
 		const byte *src = cel.pixels.begin() + row;
 		const byte *opaque = cel.opaque.begin() + row;
-		byte *dst = (byte *)screen.getBasePtr(dstLeft, dstTop + yy);
+		byte *dst = reinterpret_cast<byte *>(screen.getBasePtr(dstLeft, dstTop + yy));
 		for (int xx = 0; xx < width;) {
 			while (xx < width && !opaque[xx])
 				++xx;
@@ -353,7 +353,7 @@ bool Puppet::renderCelImage(const CelImage &cel, int16 nativeY, int16 nativeX,
 }
 
 uint32 Puppet::baseDisplayListResource(int16 baseState) const {
-	if (baseState < 0 || baseState >= (int16)kBaseControllerStateCount)
+	if (baseState < 0 || baseState >= static_cast<int16>(kBaseControllerStateCount))
 		baseState = 0;
 	uint32 resId = _baseDisplayListResources[baseState];
 	if (resId == 0 && _baseDisplayListResources[0] != 0)
@@ -368,13 +368,13 @@ uint32 Puppet::displayLayerResourceId(uint32 displayListResourceId,
 	int idx = resourceIndexById(displayListResourceId);
 	if (idx < 0)
 		return 0;
-	const byte *base = engineBase((uint32)idx);
+	const byte *base = engineBase(static_cast<uint32>(idx));
 	if (!base)
 		return 0;
 	uint32 off = kDisplayLayerOffset + layer * kDisplayLayerStride;
 	if (base + off + 2 > _fileData.end())
 		return 0;
-	int16 count = (int16)READ_LE_UINT16(base + off);
+	int16 count = static_cast<int16>(READ_LE_UINT16(base + off));
 	if (count < 0 || count > kDisplayLayerMaxResources || celIndex >= count)
 		return 0;
 	const byte *entry = base + off + kDisplayLayerResourceListOffset + celIndex * 4;
@@ -462,7 +462,7 @@ bool Puppet::decodeActionAudio(const ActionEntry &action, Common::Array<byte> &p
 	int idx = resourceIndexById(action.audioResourceId);
 	if (idx < 0)
 		return false;
-	const Archive::Resource &res = _archive.getResource((uint32)idx);
+	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(idx));
 	if (res.info != kAudioResourceInfoTag || res.dataOffset + res.length > _fileData.size())
 		return false;
 	uint32 before = pcm.size();

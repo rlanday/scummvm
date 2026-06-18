@@ -39,7 +39,7 @@ uint32 FramePacingRuntime::delayMillisUntilDeadline(int currentTick) const {
 	if (remainingTicks <= 0)
 		return 0;
 
-	uint32 delay = (uint32)((remainingTicks * 1000 + 59) / 60);
+	uint32 delay = static_cast<uint32>(((remainingTicks * 1000 + 59) / 60));
 	if (delay > 17)
 		delay = 17;
 	return delay;

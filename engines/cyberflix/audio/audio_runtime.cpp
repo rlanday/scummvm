@@ -111,7 +111,7 @@ public:
 
 			const uint32 n = MIN<uint32>(numSamples - produced, _blockValid - _blockOffset);
 			for (uint32 i = 0; i < n; ++i)
-				buffer[produced + i] = (int16)(((int)_block[_blockOffset + i] - 128) << 8);
+				buffer[produced + i] = static_cast<int16>(((static_cast<int>(_block[_blockOffset + i]) - 128) << 8));
 			_blockOffset += n;
 			produced += n;
 		}
@@ -267,8 +267,8 @@ static byte nativeDirectSoundVolumeToMixerVolume(int volume) {
 	// -1000 * ln(255 / volume) millibels. ScummVM's mixer wants linear gain.
 	const double dsMillibels = -1000.0 * log(255.0 / volume);
 	const double linear = pow(10.0, dsMillibels / 2000.0);
-	return (byte)CLIP((int)(linear * Audio::Mixer::kMaxChannelVolume + 0.5),
-			0, (int)Audio::Mixer::kMaxChannelVolume);
+	return static_cast<byte>(CLIP(static_cast<int>((linear * Audio::Mixer::kMaxChannelVolume + 0.5)),
+			0, static_cast<int>(Audio::Mixer::kMaxChannelVolume)));
 }
 
 byte AudioRuntime::effectiveAudioVolume(int baseVolume) const {
@@ -376,7 +376,7 @@ void AudioRuntime::openTrackFile(const Common::String &name) {
 		warning("Cyberflix: could not open track file '%s'", name.c_str());
 		return;
 	}
-	uint32 size = (uint32)file.size();
+	uint32 size = static_cast<uint32>(file.size());
 	track->fileData.resize(size);
 	if (file.read(track->fileData.begin(), size) != size) {
 		warning("Cyberflix: could not read track file '%s'", name.c_str());
@@ -456,8 +456,8 @@ void AudioRuntime::openTrackFile(const Common::String &name) {
 
 	_tracks.push_back(track);
 	debug(1, "Cyberflix: track '%s' open as '%s' (%u theme cues, %u sfx cues, playlist %u, loop @%u)",
-			name.c_str(), track->name.c_str(), (uint32)track->cues.size(),
-			(uint32)track->sfxCues.size(), (uint32)track->playlist.size(), track->loopIdx);
+			name.c_str(), track->name.c_str(), static_cast<uint32>(track->cues.size()),
+			static_cast<uint32>(track->sfxCues.size()), static_cast<uint32>(track->playlist.size()), track->loopIdx);
 }
 
 // closetrackfile('name.trk'): remove the named track from the open list
@@ -695,8 +695,8 @@ Common::String AudioRuntime::currentTheme(CyberflixEngine &engine, int which) {
 	if (which == 2)
 		return _themeTrackName;
 	// 8-bit mono at kAudioSampleRate: one sample per byte.
-	uint32 sample = _themeStartSample + (uint32)((uint64)engine._mixer->getSoundElapsedTime(_themeHandle) *
-			kAudioSampleRate / 1000);
+	uint32 sample = _themeStartSample + static_cast<uint32>((static_cast<uint64>(engine._mixer->getSoundElapsedTime(_themeHandle)) *
+			kAudioSampleRate / 1000));
 	if (sample >= _themeIntroSamples && _themeLoopSamples)
 		sample = _themeIntroSamples + (sample - _themeIntroSamples) % _themeLoopSamples;
 	Common::String cueName = "none";

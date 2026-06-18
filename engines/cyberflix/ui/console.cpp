@@ -77,7 +77,7 @@ bool Console::cmdDumpArchive(int argc, const char **argv) {
 			archive.getDeclaredSize());
 
 	uint32 count = archive.getResourceCount();
-	uint32 limit = (argc >= 3) ? (uint32)atoi(argv[2]) : 16;
+	uint32 limit = (argc >= 3) ? static_cast<uint32>(atoi(argv[2])): 16;
 	debugPrintf("  idx        id      length     info       data@\n");
 	for (uint32 i = 0; i < count && i < limit; ++i) {
 		const Archive::Resource &res = archive.getResource(i);
@@ -111,7 +111,7 @@ bool Console::cmdDisasm(int argc, const char **argv) {
 		return true;
 	}
 
-	uint32 idx = (uint32)atoi(argv[2]);
+	uint32 idx = static_cast<uint32>(atoi(argv[2]));
 	if (idx >= archive.getResourceCount()) {
 		debugPrintf("Resource index %u out of range (%u resources)\n",
 				idx, archive.getResourceCount());
@@ -138,7 +138,7 @@ bool Console::cmdDisasm(int argc, const char **argv) {
 	debugPrintf("%u instructions, pool@%#x, %s\n", script.getInstructionCount(),
 			script.getPoolOffset(), script.isTerminated() ? "terminated" : "UNTERMINATED");
 
-	uint32 limit = (argc >= 4) ? (uint32)atoi(argv[3]) : 40;
+	uint32 limit = (argc >= 4) ? static_cast<uint32>(atoi(argv[3])): 40;
 	for (uint32 i = 0; i < script.getInstructionCount() && i < limit; ++i) {
 		const Script::Instruction &inst = script.getInstruction(i);
 		// Symbol/string atoms encode a self-relative pool offset in operandA.
@@ -172,7 +172,7 @@ bool Console::cmdVmTrace(int argc, const char **argv) {
 		return true;
 	}
 
-	uint32 idx = (uint32)atoi(argv[2]);
+	uint32 idx = static_cast<uint32>(atoi(argv[2]));
 	if (idx >= archive.getResourceCount()) {
 		debugPrintf("Resource index %u out of range (%u resources)\n",
 				idx, archive.getResourceCount());
@@ -192,7 +192,7 @@ bool Console::cmdVmTrace(int argc, const char **argv) {
 		return true;
 	}
 
-	uint32 maxSteps = (argc >= 4) ? (uint32)atoi(argv[3]) : 200;
+	uint32 maxSteps = (argc >= 4) ? static_cast<uint32>(atoi(argv[3])): 200;
 	debugPrintf("Tracing %u instructions (max %u steps):\n",
 			script.getInstructionCount(), maxSteps);
 
@@ -222,7 +222,7 @@ bool Console::cmdVmRun(int argc, const char **argv) {
 		return true;
 	}
 
-	uint32 idx = (uint32)atoi(argv[2]);
+	uint32 idx = static_cast<uint32>(atoi(argv[2]));
 	if (idx >= archive.getResourceCount()) {
 		debugPrintf("Resource index %u out of range (%u resources)\n",
 				idx, archive.getResourceCount());
@@ -242,7 +242,7 @@ bool Console::cmdVmRun(int argc, const char **argv) {
 		return true;
 	}
 
-	uint32 maxSteps = (argc >= 4) ? (uint32)atoi(argv[3]) : 100000;
+	uint32 maxSteps = (argc >= 4) ? static_cast<uint32>(atoi(argv[3])): 100000;
 	ScriptVM vm;
 	uint32 executed = vm.runProgram(script, maxSteps);
 	debugPrintf("Executed %u statements over %u instructions.\n",
@@ -266,7 +266,7 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 
 	// Read the whole container so it can both back the archive and be scanned
 	// for the embedded palette.
-	uint32 size = (uint32)file.size();
+	uint32 size = static_cast<uint32>(file.size());
 	Common::Array<byte> fileData(size);
 	if (file.read(fileData.begin(), size) != size) {
 		debugPrintf("Could not read '%s'\n", argv[1]);
@@ -279,7 +279,7 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 		return true;
 	}
 
-	uint32 idx = (uint32)atoi(argv[2]);
+	uint32 idx = static_cast<uint32>(atoi(argv[2]));
 	if (idx >= archive.getResourceCount()) {
 		debugPrintf("Resource index %u out of range (%u resources)\n",
 				idx, archive.getResourceCount());
@@ -288,8 +288,8 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 
 	// For shapes the dimensions are packed into the resource info field.
 	const Archive::Resource &res = archive.getResource(idx);
-	uint16 width = (uint16)(res.info >> 16);
-	uint16 height = (uint16)(res.info & 0xffff);
+	uint16 width = static_cast<uint16>(res.info >> 16);
+	uint16 height = static_cast<uint16>(res.info & 0xffff);
 
 	Common::ScopedPtr<Common::SeekableReadStream> stream(archive.createReadStreamForResource(idx));
 	if (!stream) {
@@ -312,7 +312,7 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 	if (argc >= 4) {
 		Common::File palFile;
 		if (palFile.open(argv[3])) {
-			uint32 palSize = (uint32)palFile.size();
+			uint32 palSize = static_cast<uint32>(palFile.size());
 			Common::Array<byte> palData(palSize);
 			if (palFile.read(palData.begin(), palSize) == palSize)
 				havePalette = loadPalette(palData.begin(), palSize, rgb);
@@ -328,7 +328,7 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 			havePalette ? "loaded" : "MISSING (grayscale)");
 	if (!havePalette)
 		for (int i = 0; i < 256; ++i)
-			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = (byte)i;
+			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = static_cast<byte>(i);
 
 	// Blit centred on a black screen; transparent pixels show through as black.
 	Graphics::Surface *screen = g_system->lockScreen();
@@ -341,7 +341,7 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 				continue;
 			int sx = x0 + x, sy = y0 + y;
 			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*((byte *)screen->getBasePtr(sx, sy)) = cel.pixels[(uint)y * cel.width + x];
+				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = cel.pixels[static_cast<uint>(y) * cel.width + x];
 		}
 	}
 	g_system->unlockScreen();
@@ -368,7 +368,7 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 
 	// Read the whole file so it can both feed the decoder and be scanned for an
 	// embedded palette.
-	uint32 size = (uint32)file.size();
+	uint32 size = static_cast<uint32>(file.size());
 	Common::Array<byte> fileData(size);
 	if (file.read(fileData.begin(), size) != size) {
 		debugPrintf("Could not read '%s'\n", argv[1]);
@@ -376,7 +376,7 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 	}
 
 	// Parse the offset as base-0 so both decimal and 0x-hex forms work.
-	uint32 offset = (uint32)strtol(argv[2], nullptr, 0);
+	uint32 offset = static_cast<uint32>(strtol(argv[2], nullptr, 0));
 	if (offset >= size) {
 		debugPrintf("Offset %u is past end of file (%u bytes)\n", offset, size);
 		return true;
@@ -397,7 +397,7 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 	if (argc >= 4) {
 		Common::File palFile;
 		if (palFile.open(argv[3])) {
-			uint32 palSize = (uint32)palFile.size();
+			uint32 palSize = static_cast<uint32>(palFile.size());
 			Common::Array<byte> palData(palSize);
 			if (palFile.read(palData.begin(), palSize) == palSize)
 				havePalette = loadPalette(palData.begin(), palSize, rgb);
@@ -413,7 +413,7 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 			havePalette ? "loaded" : "MISSING (grayscale)");
 	if (!havePalette)
 		for (int i = 0; i < 256; ++i)
-			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = (byte)i;
+			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = static_cast<byte>(i);
 
 	// Blit centred on a black screen.
 	Graphics::Surface *screen = g_system->lockScreen();
@@ -424,7 +424,7 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 		for (int x = 0; x < frame.width; ++x) {
 			int sx = x0 + x, sy = y0 + y;
 			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
+				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = frame.pixels[static_cast<uint>(y) * frame.width + x];
 		}
 	}
 	g_system->unlockScreen();
@@ -449,7 +449,7 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 		return true;
 	}
 
-	uint32 size = (uint32)file.size();
+	uint32 size = static_cast<uint32>(file.size());
 	Common::Array<byte> fileData(size);
 	if (file.read(fileData.begin(), size) != size) {
 		debugPrintf("Could not read '%s'\n", argv[1]);
@@ -479,7 +479,7 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 
 	uint32 target = frameIndices.size() - 1;
 	if (argc >= 3) {
-		uint32 want = (uint32)atoi(argv[2]);
+		uint32 want = static_cast<uint32>(atoi(argv[2]));
 		if (want < frameIndices.size())
 			target = want;
 		else
@@ -505,7 +505,7 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 			havePalette ? "loaded" : "MISSING (grayscale)");
 	if (!havePalette)
 		for (int i = 0; i < 256; ++i)
-			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = (byte)i;
+			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = static_cast<byte>(i);
 
 	const byte *pixels = seq.pixels();
 	Graphics::Surface *screen = g_system->lockScreen();
@@ -516,7 +516,7 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 		for (int x = 0; x < seq.width(); ++x) {
 			int sx = x0 + x, sy = y0 + y;
 			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*((byte *)screen->getBasePtr(sx, sy)) = pixels[(uint)y * seq.width() + x];
+				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = pixels[static_cast<uint>(y) * seq.width() + x];
 		}
 	}
 	g_system->unlockScreen();
@@ -540,7 +540,7 @@ bool Console::cmdShowNode(int argc, const char **argv) {
 		return true;
 	}
 
-	uint32 node = (argc >= 3) ? (uint32)strtol(argv[2], nullptr, 0) : 0;
+	uint32 node = (argc >= 3) ? static_cast<uint32>(strtol(argv[2], nullptr, 0)) : 0;
 	if (node >= stage.nodeCount()) {
 		debugPrintf("Node %u out of range; '%s' has %u node(s)\n",
 				node, argv[1], stage.nodeCount());
@@ -562,7 +562,7 @@ bool Console::cmdShowNode(int argc, const char **argv) {
 			frame.width, frame.height, havePalette ? "loaded" : "MISSING (grayscale)");
 	if (!havePalette)
 		for (int i = 0; i < 256; ++i)
-			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = (byte)i;
+			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = static_cast<byte>(i);
 
 	Graphics::Surface *screen = g_system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
@@ -572,7 +572,7 @@ bool Console::cmdShowNode(int argc, const char **argv) {
 		for (int x = 0; x < frame.width; ++x) {
 			int sx = x0 + x, sy = y0 + y;
 			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
+				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = frame.pixels[static_cast<uint>(y) * frame.width + x];
 		}
 	}
 	g_system->unlockScreen();
@@ -609,14 +609,14 @@ bool Console::cmdShowSet(int argc, const char **argv) {
 	uint32 scene = 0;
 	if (argc >= 3) {
 		int byName = set.findScene(argv[2]);
-		scene = (byName >= 0) ? (uint32)byName : (uint32)strtol(argv[2], nullptr, 0);
+		scene = (byName >= 0) ? static_cast<uint32>(byName) : static_cast<uint32>(strtol(argv[2], nullptr, 0));
 	}
 	if (scene >= set.sceneCount()) {
 		debugPrintf("Scene '%s' not found\n", argc >= 3 ? argv[2] : "0");
 		return true;
 	}
-	uint32 angle = (argc >= 4) ? (uint32)strtol(argv[3], nullptr, 0) : 0;
-	uint32 table = (argc >= 5) ? (uint32)strtol(argv[4], nullptr, 0) : 0;
+	uint32 angle = (argc >= 4) ? static_cast<uint32>(strtol(argv[3], nullptr, 0)) : 0;
+	uint32 table = (argc >= 5) ? static_cast<uint32>(strtol(argv[4], nullptr, 0)) : 0;
 
 	debugPrintf("Scene %u '%s': panorama A=%u angles, B=%u angles\n", scene,
 			set.sceneName(scene).c_str(), set.angleCount(scene, 0), set.angleCount(scene, 1));
@@ -635,7 +635,7 @@ bool Console::cmdShowSet(int argc, const char **argv) {
 			frame.width, frame.height, havePalette ? "loaded" : "MISSING (grayscale)");
 	if (!havePalette)
 		for (int i = 0; i < 256; ++i)
-			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = (byte)i;
+			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = static_cast<byte>(i);
 
 	Graphics::Surface *screen = g_system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
@@ -645,7 +645,7 @@ bool Console::cmdShowSet(int argc, const char **argv) {
 		for (int x = 0; x < frame.width; ++x) {
 			int sx = x0 + x, sy = y0 + y;
 			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*((byte *)screen->getBasePtr(sx, sy)) = frame.pixels[(uint)y * frame.width + x];
+				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = frame.pixels[static_cast<uint>(y) * frame.width + x];
 		}
 	}
 	g_system->unlockScreen();

@@ -416,7 +416,7 @@ int PropRuntime::propXY(const Common::String &name, int selector) {
 	case 2:
 		return prop->y;
 	case 3:
-		return ((int32)prop->x << 16) | ((int32)prop->y & 0xffff);
+		return (static_cast<int32>(prop->x) << 16) | (static_cast<int32>(prop->y) & 0xffff);
 	default:
 		warning("Cyberflix: propxy('%s', %d): bad selector", name.c_str(), selector);
 		return 0;
@@ -437,8 +437,8 @@ void PropRuntime::setPropXY(const Common::String &name, int x, int y) {
 	prop->mode = 0;
 	if (prop->depth >= 0)
 		prop->depth = -1;
-	prop->x = (int16)x;
-	prop->y = (int16)y;
+	prop->x = static_cast<int16>(x);
+	prop->y = static_cast<int16>(y);
 	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
@@ -474,9 +474,9 @@ void PropRuntime::propXYZ(const Common::String &name, int x, int y, int z) {
 	Common::Rect oldRect;
 	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 	prop->mode = 1; // FUN_0042a140: world/SET-space placement.
-	prop->x = (int16)x;
-	prop->y = (int16)y;
-	prop->z = (int16)z;
+	prop->x = static_cast<int16>(x);
+	prop->y = static_cast<int16>(y);
+	prop->z = static_cast<int16>(z);
 	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
@@ -519,7 +519,7 @@ void PropRuntime::propDist(const Common::String &name, int dist) {
 				name.c_str(), dist, prop->depth, dist);
 		Common::Rect oldRect;
 		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
-		prop->depth = (int16)dist;
+		prop->depth = static_cast<int16>(dist);
 		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 	}
 }
@@ -531,10 +531,10 @@ int PropRuntime::propDeg(const Common::String &name, const int *newDeg) {
 		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
 		return 0;
 	}
-	if (newDeg && prop->angle != (int16)(*newDeg & 0xff)) {
+	if (newDeg && prop->angle != static_cast<int16>(*newDeg & 0xff)) {
 		Common::Rect oldRect;
 		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
-		prop->angle = (int16)(*newDeg & 0xff);
+		prop->angle = static_cast<int16>(*newDeg & 0xff);
 		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 	}
 	return prop->angle;
@@ -570,7 +570,7 @@ int PropRuntime::propValue(const Common::String &name, const int *newValue) {
 int PropRuntime::countProps() const {
 	int total = 0;
 	for (uint32 i = 0; i < _shops.size(); ++i)
-		total += (int)_shops[i]->propCount();
+		total += static_cast<int>(_shops[i]->propCount());
 	return total;
 }
 
@@ -578,9 +578,9 @@ Common::String PropRuntime::indexToProp(int index) const {
 	// 1-based index into the global prop array (FUN_0042b550).
 	int i = index - 1;
 	for (uint32 s = 0; s < _shops.size(); ++s) {
-		if (i >= 0 && i < (int)_shops[s]->propCount())
-			return _shops[s]->prop((uint32)i).name;
-		i -= (int)_shops[s]->propCount();
+		if (i >= 0 && i < static_cast<int>(_shops[s]->propCount()))
+			return _shops[s]->prop(static_cast<uint32>(i)).name;
+		i -= static_cast<int>(_shops[s]->propCount());
 	}
 	return Common::String();
 }

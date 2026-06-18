@@ -68,15 +68,15 @@ Common::String Set::pascalString(const byte *p) const {
 
 Common::SharedPtr<Script> Set::scriptByIdShared(uint32 id) const {
 	int idx = resourceIndexById(id);
-	if (idx < 0 || (uint32)idx >= _scripts.size())
+	if (idx < 0 || static_cast<uint32>(idx) >= _scripts.size())
 		return Common::SharedPtr<Script>();
-	return _scripts[(uint32)idx];
+	return _scripts[static_cast<uint32>(idx)];
 }
 
 const byte *Set::sceneRecord(uint32 scene) const {
 	if (scene >= _sceneCount || _sceneTable < 0)
 		return nullptr;
-	const byte *table = payload((uint32)_sceneTable);
+	const byte *table = payload(static_cast<uint32>(_sceneTable));
 	if (!table)
 		return nullptr;
 	const byte *rec = table + scene * kSceneRecordStride;
@@ -95,13 +95,13 @@ const byte *Set::viewRecord(uint32 scene, const Common::String &view) const {
 	int dirIdx = resourceIndexById(READ_LE_UINT32(rec + kSceneViewDirOffset));
 	if (dirIdx < 0)
 		return nullptr;
-	const byte *dir = payload((uint32)dirIdx);
+	const byte *dir = payload(static_cast<uint32>(dirIdx));
 	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
 		return nullptr;
 	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
-	if ((uint32)viewIdx >= count)
+	if (static_cast<uint32>(viewIdx) >= count)
 		return nullptr;
-	const byte *v = dir + kViewDirRecordsOffset + (uint32)viewIdx * kViewRecordStride;
+	const byte *v = dir + kViewDirRecordsOffset + static_cast<uint32>(viewIdx) * kViewRecordStride;
 	if (v + kViewRecordStride > _fileData.end())
 		return nullptr;
 	return v;
@@ -118,13 +118,13 @@ const byte *Set::paintingTable(const byte *viewRec, uint32 &count, uint32 &lengt
 	int idx = resourceIndexById(tableId);
 	if (idx < 0)
 		return nullptr;
-	const byte *table = engineBase((uint32)idx);
+	const byte *table = engineBase(static_cast<uint32>(idx));
 	if (!table || table + 8 > _fileData.end())
 		return nullptr;
-	const Archive::Resource &res = _archive.getResource((uint32)idx);
+	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(idx));
 	length = res.length + 4; // engine-base frame includes the info dword
 	uint32 c = READ_LE_UINT32(table);
-	if ((uint64)c * 0x24 + 8 > length)
+	if (static_cast<uint64>(c) * 0x24 + 8 > length)
 		return nullptr;
 	count = c;
 	return table;
@@ -139,13 +139,13 @@ const byte *Set::panoramaTable(uint32 scene, uint32 table, uint32 &count) const 
 	int idx = resourceIndexById(panoId);
 	if (idx < 0)
 		return nullptr;
-	const byte *pano = payload((uint32)idx);
+	const byte *pano = payload(static_cast<uint32>(idx));
 	if (!pano || pano + kPanoramaCountOffset + 4 > _fileData.end())
 		return nullptr;
 	uint32 c = READ_LE_UINT32(pano + kPanoramaCountOffset);
 	// Bound the record array against the resource payload.
-	uint32 len = _archive.getResource((uint32)idx).length;
-	if ((uint64)c * kPanoramaRecordStride + 4 > len)
+	uint32 len = _archive.getResource(static_cast<uint32>(idx)).length;
+	if (static_cast<uint64>(c) * kPanoramaRecordStride + 4 > len)
 		return nullptr;
 	count = c;
 	return pano;
@@ -156,12 +156,12 @@ const byte *Set::transitionTable(uint32 transitionId, uint32 &count) const {
 	int idx = resourceIndexById(transitionId);
 	if (idx < 0)
 		return nullptr;
-	const byte *transition = engineBase((uint32)idx);
+	const byte *transition = engineBase(static_cast<uint32>(idx));
 	if (!transition || transition + 0x0c > _fileData.end())
 		return nullptr;
 	uint32 c = READ_LE_UINT32(transition + 0x04);
-	const Archive::Resource &res = _archive.getResource((uint32)idx);
-	if ((uint64)c * kPanoramaRecordStride + 0x0c > res.length + 4)
+	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(idx));
+	if (static_cast<uint64>(c) * kPanoramaRecordStride + 0x0c > res.length + 4)
 		return nullptr;
 	count = c;
 	return transition;
@@ -179,10 +179,10 @@ bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq) const {
 		warning("Cyberflix: set '%s' references missing frame res %u", _name.c_str(), frameId);
 		return false;
 	}
-	const byte *frame = engineBase((uint32)idx);
+	const byte *frame = engineBase(static_cast<uint32>(idx));
 	if (!frame)
 		return false;
-	uint32 frameLen = _archive.getResource((uint32)idx).length + 4; // payload + info word
+	uint32 frameLen = _archive.getResource(static_cast<uint32>(idx)).length + 4; // payload + info word
 	if (seq.applyFrame(frame, frameLen) == 0) {
 		warning("Cyberflix: set '%s' frame %u decode failed", _name.c_str(), frameId);
 		return false;
@@ -201,7 +201,7 @@ int Set::findSceneByViewDirId(uint32 viewDirId) const {
 	for (uint32 i = 0; i < _sceneCount; ++i) {
 		const byte *rec = sceneRecord(i);
 		if (rec && READ_LE_UINT32(rec + kSceneViewDirOffset) == viewDirId)
-			return (int)i;
+			return static_cast<int>(i);
 	}
 	return -1;
 }
@@ -213,7 +213,7 @@ int Set::nearestViewForHeading(uint32 scene, int heading) const {
 	int idx = resourceIndexById(READ_LE_UINT32(rec + kSceneViewDirOffset));
 	if (idx < 0)
 		return -1;
-	const byte *dir = payload((uint32)idx);
+	const byte *dir = payload(static_cast<uint32>(idx));
 	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
 		return -1;
 	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
@@ -229,7 +229,7 @@ int Set::nearestViewForHeading(uint32 scene, int heading) const {
 		int dist = MIN(delta, 256 - delta);
 		if (dist < bestDist) {
 			bestDist = dist;
-			best = (int)i;
+			best = static_cast<int>(i);
 		}
 	}
 	return best;
@@ -238,13 +238,13 @@ int Set::nearestViewForHeading(uint32 scene, int heading) const {
 bool Set::starXYZ(const Common::String &name, int16 &x, int16 &y, int16 &z) const {
 	if (_starTable < 0)
 		return false;
-	const byte *table = engineBase((uint32)_starTable);
+	const byte *table = engineBase(static_cast<uint32>(_starTable));
 	if (!table || table + kStarTableRecordsOffset > _fileData.end())
 		return false;
-	const Archive::Resource &res = _archive.getResource((uint32)_starTable);
+	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(_starTable));
 	const uint32 length = res.length + 4;
 	const uint32 count = READ_LE_UINT32(table + kStarTableCountOffset);
-	if ((uint64)count * kStarRecordStride + kStarTableRecordsOffset > length)
+	if (static_cast<uint64>(count) * kStarRecordStride + kStarTableRecordsOffset > length)
 		return false;
 
 	const byte *record = table + kStarTableRecordsOffset;
@@ -286,7 +286,7 @@ bool Set::open(const Common::String &name) {
 
 	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
 		if (!_archive.getResource(i).empty && _archive.getResource(i).info == kMasterHeaderInfoTag) {
-			_master = (int)i;
+			_master = static_cast<int>(i);
 			break;
 		}
 	}
@@ -295,7 +295,7 @@ bool Set::open(const Common::String &name) {
 		return false;
 	}
 
-	const byte *hdr = engineBase((uint32)_master);
+	const byte *hdr = engineBase(static_cast<uint32>(_master));
 	if (!hdr || hdr + kSceneTableIdOffset + 4 > _fileData.end()) {
 		warning("Cyberflix: set '%s' master header truncated", name.c_str());
 		_master = -1;
@@ -303,8 +303,8 @@ bool Set::open(const Common::String &name) {
 	}
 	_width = READ_LE_UINT16(hdr + kMasterWidthOffset);
 	_height = READ_LE_UINT16(hdr + kMasterHeightOffset);
-	_viewLeft = (int16)READ_LE_UINT16(hdr + kMasterViewLeftOffset);
-	_viewTop = (int16)READ_LE_UINT16(hdr + kMasterViewTopOffset);
+	_viewLeft = static_cast<int16>(READ_LE_UINT16(hdr + kMasterViewLeftOffset));
+	_viewTop = static_cast<int16>(READ_LE_UINT16(hdr + kMasterViewTopOffset));
 
 	// Embedded names TI.EXE copies out of the master header (FUN_004307f0):
 	// the set's own name (what currentset() returns) and the default scene
@@ -323,7 +323,7 @@ bool Set::open(const Common::String &name) {
 		return false;
 	}
 	// The scene table is a tight array of fixed-size records, no count header.
-	_sceneCount = _archive.getResource((uint32)_sceneTable).length / kSceneRecordStride;
+	_sceneCount = _archive.getResource(static_cast<uint32>(_sceneTable)).length / kSceneRecordStride;
 
 	_scripts.resize(_archive.getResourceCount());
 	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
@@ -350,14 +350,14 @@ Common::String Set::sceneName(uint32 index) const {
 	byte len = rec[kSceneNameOffset];
 	if (len == 0 || len >= 16 || rec + kSceneNameOffset + 1 + len > _fileData.end())
 		return Common::String();
-	return Common::String((const char *)rec + kSceneNameOffset + 1, len);
+	return Common::String(reinterpret_cast<const char *>(rec ) + kSceneNameOffset + 1, len);
 }
 
 int Set::findScene(const Common::String &name) const {
 	for (uint32 i = 0; i < _sceneCount; ++i) {
 		const byte *rec = sceneRecord(i);
 		if (rec && pascalEqualsIgnoreCase(rec + kSceneNameOffset, _fileData.end(), name))
-			return (int)i;
+			return static_cast<int>(i);
 	}
 	return -1;
 }
@@ -378,7 +378,7 @@ int Set::findView(uint32 scene, const Common::String &name) const {
 	int idx = resourceIndexById(dirId);
 	if (idx < 0)
 		return -1;
-	const byte *dir = payload((uint32)idx);
+	const byte *dir = payload(static_cast<uint32>(idx));
 	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
 		return -1;
 	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
@@ -389,7 +389,7 @@ int Set::findView(uint32 scene, const Common::String &name) const {
 		byte len = v[kViewNameOffset];
 		if (len && len < 16 &&
 				pascalEqualsIgnoreCase(v + kViewNameOffset, _fileData.end(), name))
-			return (int)i;
+			return static_cast<int>(i);
 	}
 	return -1;
 }
@@ -401,7 +401,7 @@ Common::String Set::viewName(uint32 scene, uint32 index) const {
 	int idx = resourceIndexById(READ_LE_UINT32(rec + kSceneViewDirOffset));
 	if (idx < 0)
 		return Common::String();
-	const byte *dir = payload((uint32)idx);
+	const byte *dir = payload(static_cast<uint32>(idx));
 	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
 		return Common::String();
 	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
@@ -413,7 +413,7 @@ Common::String Set::viewName(uint32 scene, uint32 index) const {
 	byte len = v[kViewNameOffset];
 	if (len == 0 || len >= 16 || v + kViewNameOffset + 1 + len > _fileData.end())
 		return Common::String();
-	return Common::String((const char *)v + kViewNameOffset + 1, len);
+	return Common::String(reinterpret_cast<const char *>(v ) + kViewNameOffset + 1, len);
 }
 
 int Set::angleForView(uint32 scene, uint32 table, int viewIdx) const {
@@ -430,8 +430,8 @@ int Set::angleForView(uint32 scene, uint32 table, int viewIdx) const {
 		const byte *r = pano + 8 + i * kPanoramaRecordStride;
 		if (r + kPanoramaRecordStride > _fileData.end())
 			break;
-		if ((int32)READ_LE_UINT32(r + 0x38) == viewIdx)
-			return (int)i;
+		if (static_cast<int32>(READ_LE_UINT32(r + 0x38)) == viewIdx)
+			return static_cast<int>(i);
 	}
 	return -1;
 }
@@ -444,8 +444,8 @@ int Set::viewTagAtAngle(uint32 scene, uint32 table, uint32 angle) const {
 	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
 	if (r + kPanoramaRecordStride > _fileData.end())
 		return -1;
-	int32 tag = (int32)READ_LE_UINT32(r + 0x38);
-	return tag >= 0 ? (int)tag : -1;
+	int32 tag = static_cast<int32>(READ_LE_UINT32(r + 0x38));
+	return tag >= 0 ? static_cast<int>(tag): -1;
 }
 
 bool Set::cameraData(uint32 scene, uint32 table, uint32 angle, CameraData &camera) const {
@@ -457,7 +457,7 @@ bool Set::cameraData(uint32 scene, uint32 table, uint32 angle, CameraData &camer
 	if (r + kPanoramaRecordStride > _fileData.end())
 		return false;
 
-	const byte *hdr = _master >= 0 ? engineBase((uint32)_master) : nullptr;
+	const byte *hdr = _master >= 0 ? engineBase(static_cast<uint32>(_master)) : nullptr;
 	if (!hdr || hdr + 0xa0c > _fileData.end())
 		return false;
 
@@ -472,12 +472,15 @@ bool Set::cameraData(uint32 scene, uint32 table, uint32 angle, CameraData &camer
 	camera.farPlane = farPlane;
 	camera.viewportLeft = _viewLeft;
 	camera.viewportTop = _viewTop;
-	camera.viewportRight = _viewLeft + (int16)_width;
-	camera.viewportBottom = _viewTop + (int16)_height;
-	camera.centerX = _viewLeft + (int16)(_width / 2);
-	camera.centerY = _viewTop + (int16)(_height / 2);
-	int16 halfW = (int16)(_width / 2);
-	int16 halfH = (int16)(_height / 2);
+	camera.viewportRight = _viewLeft + static_cast<int16>(_width);
+	camera.viewportBottom = _viewTop + static_cast<int16>(_height);
+	// Focal length for the software pinhole projection used by world actors and
+	// props; see Foley/van Dam et al., Computer Graphics: Principles and
+	// Practice, perspective projection/viewing pipeline.
+	camera.centerX = _viewLeft + static_cast<int16>(_width / 2);
+	camera.centerY = _viewTop + static_cast<int16>(_height / 2);
+	int16 halfW = static_cast<int16>(_width / 2);
+	int16 halfH = static_cast<int16>(_height / 2);
 	camera.focal = MAX(halfW, halfH);
 	return true;
 }
@@ -491,7 +494,7 @@ bool Set::transitionCameraData(uint32 transitionId, uint32 frame, CameraData &ca
 	if (r + kPanoramaRecordStride > _fileData.end())
 		return false;
 
-	const byte *hdr = _master >= 0 ? engineBase((uint32)_master) : nullptr;
+	const byte *hdr = _master >= 0 ? engineBase(static_cast<uint32>(_master)) : nullptr;
 	if (!hdr || hdr + 0xa0c > _fileData.end())
 		return false;
 
@@ -506,12 +509,15 @@ bool Set::transitionCameraData(uint32 transitionId, uint32 frame, CameraData &ca
 	camera.farPlane = farPlane;
 	camera.viewportLeft = _viewLeft;
 	camera.viewportTop = _viewTop;
-	camera.viewportRight = _viewLeft + (int16)_width;
-	camera.viewportBottom = _viewTop + (int16)_height;
-	camera.centerX = _viewLeft + (int16)(_width / 2);
-	camera.centerY = _viewTop + (int16)(_height / 2);
-	int16 halfW = (int16)(_width / 2);
-	int16 halfH = (int16)(_height / 2);
+	camera.viewportRight = _viewLeft + static_cast<int16>(_width);
+	camera.viewportBottom = _viewTop + static_cast<int16>(_height);
+	// Focal length for the software pinhole projection used by world actors and
+	// props; see Foley/van Dam et al., Computer Graphics: Principles and
+	// Practice, perspective projection/viewing pipeline.
+	camera.centerX = _viewLeft + static_cast<int16>(_width / 2);
+	camera.centerY = _viewTop + static_cast<int16>(_height / 2);
+	int16 halfW = static_cast<int16>(_width / 2);
+	int16 halfH = static_cast<int16>(_height / 2);
 	camera.focal = MAX(halfW, halfH);
 	return true;
 }
@@ -521,9 +527,9 @@ int Set::nextTaggedAngle(uint32 scene, uint32 table, int startAngle) const {
 	if (startAngle < 0 || count == 0)
 		return -1;
 	for (uint32 i = 1; i <= count; ++i) {
-		uint32 angle = ((uint32)startAngle + i) % count;
+		uint32 angle = (static_cast<uint32>(startAngle) + i) % count;
 		if (viewTagAtAngle(scene, table, angle) >= 0)
-			return (int)angle;
+			return static_cast<int>(angle);
 	}
 	return -1;
 }
@@ -536,9 +542,9 @@ uint32 Set::forwardTransitionForView(uint32 scene, int viewIdx) const {
 		return 0;
 	uint32 count = 0;
 	const byte *pano = panoramaTable(scene, 0, count);
-	if (!pano || (uint32)angle >= count)
+	if (!pano || static_cast<uint32>(angle) >= count)
 		return 0;
-	const byte *r = pano + 8 + (uint32)angle * kPanoramaRecordStride;
+	const byte *r = pano + 8 + static_cast<uint32>(angle) * kPanoramaRecordStride;
 	if (r + kPanoramaRecordStride > _fileData.end())
 		return 0;
 	return READ_LE_UINT32(r + 0x34);
@@ -572,14 +578,14 @@ Common::String Set::hitTestPainting(uint32 scene, const Common::String &view, in
 	const byte *table = paintingTable(v, count, length);
 	if (!table)
 		return Common::String();
-	for (int i = (int)count - 1; i >= 0; --i) {
-		const byte *rec = table + 8 + (uint32)i * 0x24;
-		if ((uint32)(rec - table) + 0x24 > length)
+	for (int i = static_cast<int>(count) - 1; i >= 0; --i) {
+		const byte *rec = table + 8 + static_cast<uint32>(i) * 0x24;
+		if (static_cast<uint32>(rec - table) + 0x24 > length)
 			break;
-		int16 top = (int16)READ_LE_UINT16(rec + 0x08);
-		int16 left = (int16)READ_LE_UINT16(rec + 0x0a);
-		int16 bottom = (int16)READ_LE_UINT16(rec + 0x0c);
-		int16 right = (int16)READ_LE_UINT16(rec + 0x0e);
+		int16 top = static_cast<int16>(READ_LE_UINT16(rec + 0x08));
+		int16 left = static_cast<int16>(READ_LE_UINT16(rec + 0x0a));
+		int16 bottom = static_cast<int16>(READ_LE_UINT16(rec + 0x0c));
+		int16 right = static_cast<int16>(READ_LE_UINT16(rec + 0x0e));
 		if (x >= left && x < right && y >= top && y < bottom)
 			return pascalString(rec + 0x14);
 	}
@@ -599,10 +605,10 @@ bool Set::pointInPainting(uint32 scene, const Common::String &view,
 			break;
 		if (!pascalEqualsIgnoreCase(rec + 0x14, _fileData.end(), painting))
 			continue;
-		int16 top = (int16)READ_LE_UINT16(rec + 0x08);
-		int16 left = (int16)READ_LE_UINT16(rec + 0x0a);
-		int16 bottom = (int16)READ_LE_UINT16(rec + 0x0c);
-		int16 right = (int16)READ_LE_UINT16(rec + 0x0e);
+		int16 top = static_cast<int16>(READ_LE_UINT16(rec + 0x08));
+		int16 left = static_cast<int16>(READ_LE_UINT16(rec + 0x0a));
+		int16 bottom = static_cast<int16>(READ_LE_UINT16(rec + 0x0c));
+		int16 right = static_cast<int16>(READ_LE_UINT16(rec + 0x0e));
 		return x >= left && x < right && y >= top && y < bottom;
 	}
 	return false;
@@ -689,7 +695,7 @@ Common::String Set::indexToPainting(uint32 scene, const Common::String &view, ui
 	if (!table || index > count)
 		return Common::String();
 	const byte *rec = table + 8 + (index - 1) * 0x24;
-	if ((uint32)(rec - table) + 0x24 > length)
+	if (static_cast<uint32>(rec - table) + 0x24 > length)
 		return Common::String();
 	return pascalString(rec + 0x14);
 }
@@ -706,12 +712,12 @@ bool Set::transitionDestination(uint32 transitionId, uint32 &scene,
 	const byte *last = transition + 0x0c + (count - 1) * kPanoramaRecordStride;
 	if (last + kPanoramaRecordStride > _fileData.end())
 		return false;
-	int viewIdx = nearestViewForHeading((uint32)sceneIdx, READ_LE_INT16(last + 0x26));
+	int viewIdx = nearestViewForHeading(static_cast<uint32>(sceneIdx), READ_LE_INT16(last + 0x26));
 	if (viewIdx < 0)
 		return false;
-	int viewAngle = angleForView((uint32)sceneIdx, 0, viewIdx);
-	scene = (uint32)sceneIdx;
-	view = viewName((uint32)sceneIdx, (uint32)viewIdx);
+	int viewAngle = angleForView(static_cast<uint32>(sceneIdx), 0, viewIdx);
+	scene = static_cast<uint32>(sceneIdx);
+	view = viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx));
 	angle = viewAngle >= 0 ? viewAngle : 0;
 	return !view.empty();
 }

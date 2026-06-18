@@ -45,7 +45,7 @@ void PaletteRuntime::updateGammaTable() {
 		return;
 	for (int c = 0; c < 3; ++c) {
 		for (int i = 0; i < 256; ++i)
-			_gammaTable[c][i] = (byte)(pow(i / 255.0, _gamma[c]) * 255.0); // trunc, like __ftol
+			_gammaTable[c][i] = static_cast<byte>((pow(i / 255.0, _gamma[c]) * 255.0)); // trunc, like __ftol
 	}
 	_gammaTableDirty = false;
 }

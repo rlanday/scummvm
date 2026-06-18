@@ -94,9 +94,9 @@ Value CyberflixEngine::dispatchWithScopeChainValue(const Common::Array<const Scr
 	chain.reserve((_globalLib ? 1 : 0) + scopes.size());
 	if (_globalLib)
 		chain.push_back(_globalLib.get()); // "System: " tail, searched last
-	for (int i = (int)scopes.size() - 1; i >= 0; --i)
-		if (scopes[(uint32)i])
-			chain.push_back(scopes[(uint32)i]);
+	for (int i = static_cast<int>(scopes.size()) - 1; i >= 0; --i)
+		if (scopes[static_cast<uint32>(i)])
+			chain.push_back(scopes[static_cast<uint32>(i)]);
 	Common::Array<const Script *> prevChain = _vm.swapLibraries(chain);
 	_vm.setDispatchContext(self, targetProp);
 
@@ -149,7 +149,7 @@ bool CyberflixEngine::closeCurrentSceneForNavigation() {
 	Common::String openedName = _setRuntime.set()->setName();
 	uint32 openedCount = _setRuntime.set()->sceneCount();
 	Common::Array<Value> noArgs;
-	dispatchSceneMessage((uint32)_setRuntime.scene(), "closescene", noArgs);
+	dispatchSceneMessage(static_cast<uint32>(_setRuntime.scene()), "closescene", noArgs);
 	return _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.set()->setName() == openedName &&
 			_setRuntime.set()->sceneCount() == openedCount;
 }

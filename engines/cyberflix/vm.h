@@ -398,7 +398,7 @@ public:
 	virtual Value sendToActorFx(const Common::String &actor, const Common::String &message,
 			const Common::Array<Value> &args) { return Value(); }
 
-	/** countactors() / indextoactor(i): native global actor list. */
+	/** countactors()/ indextoactor(i): native global actor list. */
 	virtual int countActors() { return 0; }
 	virtual Common::String indexToActor(int index) { return Common::String(); }
 
@@ -539,7 +539,7 @@ public:
 	virtual int32 mousePoint() { return 0; }
 
 	/** makepoint(x, y) (0x4e24 FUN_00436800): pack an x/y point value. */
-	virtual int32 makePoint(int x, int y) { return ((int32)(int16)x << 16) | ((int32)y & 0xffff); }
+	virtual int32 makePoint(int x, int y) { return (static_cast<int32>(static_cast<int16>(x)) << 16) | (static_cast<int32>(y) & 0xffff); }
 
 	/** button() (0x4e25 FUN_00436880): current left mouse button state. */
 	virtual bool buttonDown() { return false; }
@@ -688,7 +688,7 @@ public:
 	/** Remove the most recent registration of @p script from the scope chain
 	 *  (used to pop temporary shop/prop dispatch scopes). */
 	void removeLibrary(const Script *script) {
-		for (int i = (int)_libraries.size() - 1; i >= 0; --i)
+		for (int i = static_cast<int>(_libraries.size()) - 1; i >= 0; --i)
 			if (_libraries[i] == script) {
 				_libraries.remove_at(i);
 				return;

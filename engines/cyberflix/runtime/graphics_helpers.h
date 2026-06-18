@@ -39,12 +39,12 @@ inline void drawScaledCel(Graphics::Surface *screen, const CelImage &cel,
 	if (paint.isEmpty())
 		return;
 	for (int y = paint.top; y < paint.bottom; ++y) {
-		int srcY = (int)((int64)(y - dest.top) * cel.height / destH);
+		int srcY = static_cast<int>(static_cast<int64>(y - dest.top) * cel.height / destH);
 		for (int x = paint.left; x < paint.right; ++x) {
-			int srcX = (int)((int64)(x - dest.left) * cel.width / destW);
+			int srcX = static_cast<int>(static_cast<int64>(x - dest.left) * cel.width / destW);
 			if (cel.isOpaque(srcX, srcY))
-				*((byte *)screen->getBasePtr(x, y)) =
-						cel.pixels[(uint)srcY * cel.width + srcX];
+				*(reinterpret_cast<byte *>(screen->getBasePtr(x, y))) =
+						cel.pixels[static_cast<uint>(srcY) * cel.width + srcX];
 		}
 	}
 }
@@ -61,9 +61,9 @@ inline void drawCel(Graphics::Surface *screen, const CelImage &cel,
 	for (int y = paint.top; y < paint.bottom; ++y) {
 		const int srcY = y - dest.top;
 		const int srcX = paint.left - dest.left;
-		const byte *src = cel.pixels.begin() + (uint)srcY * cel.width + srcX;
-		const byte *opaque = cel.opaque.begin() + (uint)srcY * cel.width + srcX;
-		byte *dst = (byte *)screen->getBasePtr(paint.left, y);
+		const byte *src = cel.pixels.begin() + static_cast<uint>(srcY) * cel.width + srcX;
+		const byte *opaque = cel.opaque.begin() + static_cast<uint>(srcY) * cel.width + srcX;
+		byte *dst = reinterpret_cast<byte *>(screen->getBasePtr(paint.left, y));
 		for (int x = 0; x < copyWidth; ++x) {
 			if (opaque[x])
 				dst[x] = src[x];
@@ -101,7 +101,7 @@ inline void copyFramePixelsToScreen(Graphics::Surface &screen, const byte *pixel
 	// avoids the per-pixel bounds checks in the SET transition hot path.
 	for (int y = 0; y < copyHeight; ++y) {
 		memcpy(screen.getBasePtr(dstX, dstY + y),
-				pixels + (uint)(srcY + y) * width + srcX, copyWidth);
+				pixels + static_cast<uint>(srcY + y) * width + srcX, copyWidth);
 	}
 }
 

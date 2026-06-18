@@ -61,7 +61,7 @@ static bool shouldLogTransitionDispatch(const Common::String &name) {
 }
 
 static int32 stringToNum(const Common::String &text) {
-	return (int32)strtol(text.c_str(), nullptr, 10);
+	return static_cast<int32>(strtol(text.c_str(), nullptr, 10));
 }
 
 static Common::String findWord(const Common::String &text, const Common::String &delimiter,
@@ -70,7 +70,7 @@ static Common::String findWord(const Common::String &text, const Common::String 
 		return Common::String();
 
 	if (delimiter.empty()) {
-		if ((uint32)wordIndex > text.size())
+		if (static_cast<uint32>(wordIndex) > text.size())
 			return Common::String();
 		return Common::String(text.c_str() + wordIndex - 1, 1);
 	}
@@ -172,7 +172,7 @@ void ScriptVM::execute(const Script &script, uint32 index) {
 	case Script::kOpPushInt:
 		// 0x0006: push the 16-bit operandA as an integer constant. Confirmed
 		// against the TI.EXE inline handler at vaddr 0x0040bc8c.
-		push(Value::makeInt((int16)inst.operandA));
+		push(Value::makeInt(static_cast<int16>(inst.operandA)));
 		break;
 
 	case Script::kOpPushSym: {
@@ -256,7 +256,7 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 	switch (inst.opcode) {
 	case Script::kOpPushInt:
 		pc++;
-		return Value::makeInt((int16)inst.operandA);
+		return Value::makeInt(static_cast<int16>(inst.operandA));
 
 	case Script::kOpTrue:
 		// 0x0fb5: boolean TRUE literal (atom decoder 0x0041a550).
@@ -311,7 +311,7 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 		// format with self-relative symbols, but it is an integer literal, so it
 		// must not touch the pool-string decoder/cache at all.
 		pc++;
-		return Value::makeInt((int32)script.getSplitOperand(pc - 1));
+		return Value::makeInt(static_cast<int32>(script.getSplitOperand(pc - 1)));
 	}
 
 	case Script::kOpPushSym:
@@ -575,7 +575,7 @@ void ScriptVM::parseCallArgs(const Script &script, uint32 &pc, Common::Array<Val
 		// whole argument (e.g. an unimplemented atom span). Resynchronise on the
 		// matching close paren so the outer statement loop stays aligned.
 		int close = script.findCloseParen(pc);
-		pc = (close >= 0) ? (uint32)close + 1 : count;
+		pc = (close >= 0) ? static_cast<uint32>(close) + 1 : count;
 		break;
 	}
 }
@@ -671,7 +671,7 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 		return result;
 	}
 
-	for (int li = (int)_libraries.size() - 1; li >= 0; --li) {
+	for (int li = static_cast<int>(_libraries.size()) - 1; li >= 0; --li) {
 		const Script *lib = _libraries[li];
 		const Script::Definition *def = lib->findDefinition(name);
 		if (!def)
@@ -796,10 +796,10 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 			} else {
 				int elseStart = script.findMatchingElse(here);
 				if (elseStart >= 0) {
-					pc = (uint32)elseStart; // enter ELSE block
+					pc = static_cast<uint32>(elseStart); // enter ELSE block
 				} else {
 					int endIf = script.findMatchingEndIf(here);
-					pc = (endIf >= 0) ? (uint32)endIf + 1 : count;
+					pc = (endIf >= 0) ? static_cast<uint32>(endIf) + 1 : count;
 				}
 			}
 			break;
@@ -808,7 +808,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 		case Script::kOpElse: {
 			// Reached only after a THEN block executed; skip the else body.
 			int endIf = script.findEndIfFrom(pc + 1);
-			pc = (endIf >= 0) ? (uint32)endIf + 1 : count;
+			pc = (endIf >= 0) ? static_cast<uint32>(endIf) + 1 : count;
 			break;
 		}
 
@@ -840,7 +840,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 					scan++;
 				} else if (sop == Script::kOpEndSwitch) {
 					if (depth == 0) {
-						target = (int)scan + 1; // no case matched: past 0xfaa
+						target = static_cast<int>(scan) + 1; // no case matched: past 0xfaa
 						break;
 					}
 					depth--;
@@ -870,7 +870,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 								break;
 							}
 						}
-						target = (int)body;
+						target = static_cast<int>(body);
 						break;
 					}
 					scan = vp; // continue scanning past the value expr
@@ -878,7 +878,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 					scan++;
 				}
 			}
-			pc = (target >= 0) ? (uint32)target : count;
+			pc = (target >= 0) ? static_cast<uint32>(target): count;
 			break;
 		}
 
@@ -887,7 +887,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 			// skip past the closing kOpEndSwitch (TI.EXE 0x0040bd7c +
 			// FUN_0040c610). No fall-through between cases.
 			int endSwitch = script.findEndSwitchFrom(pc + 1);
-			pc = (endSwitch >= 0) ? (uint32)endSwitch + 1 : count;
+			pc = (endSwitch >= 0) ? static_cast<uint32>(endSwitch) + 1 : count;
 			break;
 		}
 
@@ -907,7 +907,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 				pc = condPc; // enter body
 			} else {
 				int endWhile = script.findEndWhileFrom(condPc);
-				pc = (endWhile >= 0) ? (uint32)endWhile + 1 : count;
+				pc = (endWhile >= 0) ? static_cast<uint32>(endWhile) + 1 : count;
 			}
 			break;
 		}
@@ -970,7 +970,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 				pc = bodyStart; // enter body
 			} else {
 				int forNext = script.findForNextFrom(bodyStart);
-				pc = (forNext >= 0) ? (uint32)forNext + 1 : count;
+				pc = (forNext >= 0) ? static_cast<uint32>(forNext) + 1 : count;
 			}
 			break;
 		}

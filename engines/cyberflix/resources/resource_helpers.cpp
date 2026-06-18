@@ -36,7 +36,7 @@ bool openArchiveFile(const Common::String &name, const char *kind,
 		return false;
 	}
 
-	uint32 size = (uint32)file.size();
+	uint32 size = static_cast<uint32>(file.size());
 	fileData.resize(size);
 	if (file.read(fileData.begin(), size) != size) {
 		warning("Cyberflix: could not read %s '%s'", kind, name.c_str());

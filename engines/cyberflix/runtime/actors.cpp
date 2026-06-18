@@ -207,13 +207,13 @@ int ActorRuntime::countActors() const {
 	uint32 count = 0;
 	for (uint32 i = 0; i < _casts.size(); ++i)
 		count += _casts[i]->actorCount();
-	return (int)count;
+	return static_cast<int>(count);
 }
 
 Common::String ActorRuntime::indexToActor(int index) const {
 	if (index < 1)
 		return Common::String();
-	uint32 remaining = (uint32)index;
+	uint32 remaining = static_cast<uint32>(index);
 	for (uint32 i = 0; i < _casts.size(); ++i) {
 		if (remaining <= _casts[i]->actorCount())
 			return _casts[i]->actor(remaining - 1).name;
@@ -293,10 +293,10 @@ void ActorRuntime::actorXYZ(CyberflixEngine &engine, const Common::String &name,
 		warning("Cyberflix: actorxyz('%s'): no such actor", name.c_str());
 		return;
 	}
-	if (ref.actor->x != (int16)x || ref.actor->y != (int16)y || ref.actor->z != (int16)z) {
-		ref.actor->x = (int16)x;
-		ref.actor->y = (int16)y;
-		ref.actor->z = (int16)z;
+	if (ref.actor->x != static_cast<int16>(x) || ref.actor->y != static_cast<int16>(y) || ref.actor->z != static_cast<int16>(z)) {
+		ref.actor->x = static_cast<int16>(x);
+		ref.actor->y = static_cast<int16>(y);
+		ref.actor->z = static_cast<int16>(z);
 		engine._propRuntime.setDirty(true);
 	}
 }
@@ -327,8 +327,8 @@ int ActorRuntime::actorDeg(CyberflixEngine &engine, const Common::String &name, 
 		warning("Cyberflix: actordeg('%s'): no such actor", name.c_str());
 		return 0;
 	}
-	if (newDeg && ref.actor->angle != (int16)(*newDeg & 0xff)) {
-		ref.actor->angle = (int16)(*newDeg & 0xff);
+	if (newDeg && ref.actor->angle != static_cast<int16>(*newDeg & 0xff)) {
+		ref.actor->angle = static_cast<int16>(*newDeg & 0xff);
 		engine._propRuntime.setDirty(true);
 	}
 	return ref.actor->angle;

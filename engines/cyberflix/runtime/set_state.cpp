@@ -38,8 +38,8 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 		if (transitionType() == kSetTransitionForward && transitionResource() != 0) {
 			if (set()->transitionCameraData(transitionResource(), transitionFrame(), cameraData))
 				previousHeading = cameraData.heading;
-		} else if (set()->cameraData((uint32)this->scene(), (uint32)table(),
-				(uint32)angle(), cameraData)) {
+		} else if (set()->cameraData(static_cast<uint32>(this->scene()), static_cast<uint32>(table()),
+				static_cast<uint32>(angle()), cameraData)) {
 			previousHeading = cameraData.heading;
 		}
 	}
@@ -89,35 +89,35 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 					set()->name().c_str(), useScene.c_str(), set()->sceneName(0).c_str());
 			sceneIdx = 0;
 		}
-		Common::String actualScene = set()->sceneName((uint32)sceneIdx);
+		Common::String actualScene = set()->sceneName(static_cast<uint32>(sceneIdx));
 		// View select (TI.EXE FUN_00433960 stores the view, FUN_004425e0 aims
 		// the camera at the panorama record tagged with the view's index).
 		int angle = 0;
 		Common::String activeView;
 		if (!useView.empty()) {
-			int viewIdx = set()->findView((uint32)sceneIdx, useView);
+			int viewIdx = set()->findView(static_cast<uint32>(sceneIdx), useView);
 			if (viewIdx < 0) {
 				// FUN_00433960 preserves the requested view name, but if the
 				// selected scene lacks it, it chooses the view whose authored
 				// heading is closest to the previous camera heading before
 				// calling FUN_004425e0.
-				viewIdx = set()->nearestViewForHeading((uint32)sceneIdx, previousHeading);
+				viewIdx = set()->nearestViewForHeading(static_cast<uint32>(sceneIdx), previousHeading);
 				if (viewIdx >= 0)
 					debug(1, "Cyberflix: opensetfile view '%s' not found in scene '%s', using nearest view '%s'",
 							useView.c_str(), actualScene.c_str(),
-							set()->viewName((uint32)sceneIdx, (uint32)viewIdx).c_str());
+							set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx)).c_str());
 			}
-			int viewAngle = set()->angleForView((uint32)sceneIdx, 0, viewIdx);
+			int viewAngle = set()->angleForView(static_cast<uint32>(sceneIdx), 0, viewIdx);
 			if (viewAngle >= 0) {
 				angle = viewAngle;
-				activeView = set()->viewName((uint32)sceneIdx, (uint32)viewIdx);
+				activeView = set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx));
 			} else {
 				warning("Cyberflix: opensetfile view '%s' not found in scene '%s'",
 						useView.c_str(), actualScene.c_str());
 			}
 		}
 		renderSetScene(engine, sceneIdx, 0, angle, activeView);
-		engine.dispatchSceneMessage((uint32)sceneIdx, "openscene", noArgs);
+		engine.dispatchSceneMessage(static_cast<uint32>(sceneIdx), "openscene", noArgs);
 	}
 }
 
@@ -133,7 +133,7 @@ void SetRuntime::closeSetFile(CyberflixEngine &engine) {
 		Common::Array<Value> noArgs;
 		Common::String openedName = set()->setName();
 		if (scene() >= 0)
-			engine.dispatchSceneMessage((uint32)scene(), "closescene", noArgs);
+			engine.dispatchSceneMessage(static_cast<uint32>(scene()), "closescene", noArgs);
 		if (set() && set()->setName() == openedName)
 			engine.dispatchSetMessage("closeset", noArgs);
 	}
@@ -155,8 +155,8 @@ SetRuntime::Snapshot SetRuntime::snapshot() const {
 		state.fileName = set()->name();
 		state.setName = set()->setName();
 		state.scene = scene();
-		if (scene() >= 0 && (uint32)scene() < set()->sceneCount())
-			state.sceneName = set()->sceneName((uint32)scene());
+		if (scene() >= 0 && static_cast<uint32>(scene()) < set()->sceneCount())
+			state.sceneName = set()->sceneName(static_cast<uint32>(scene()));
 		state.table = table();
 		state.angle = angle();
 		state.view = view();
@@ -181,15 +181,15 @@ bool SetRuntime::restoreSnapshot(const Snapshot &snapshot) {
 
 	set().reset(newSet.release());
 	scene() = snapshot.scene;
-	if (scene() < 0 || (uint32)scene() >= set()->sceneCount())
+	if (scene() < 0 || static_cast<uint32>(scene()) >= set()->sceneCount())
 		scene() = set()->findScene(snapshot.sceneName);
 	table() = snapshot.table;
 	if (table() < 0 || table() > 1)
 		table() = 0;
 	angle() = snapshot.angle;
 	if (scene() >= 0) {
-		uint32 angleCount = set()->angleCount((uint32)scene(), (uint32)table());
-		if (angleCount && (uint32)angle() >= angleCount)
+		uint32 angleCount = set()->angleCount(static_cast<uint32>(scene()), static_cast<uint32>(table()));
+		if (angleCount && static_cast<uint32>(angle()) >= angleCount)
 			angle() = 0;
 	}
 	view() = snapshot.view;
@@ -237,8 +237,8 @@ Common::String SetRuntime::currentScene(CyberflixEngine &engine, const Common::S
 			if (sceneIdx >= 0) {
 				int targetAngle = 0;
 				Common::String targetView = set()->defaultView();
-				int viewIdx = set()->findView((uint32)sceneIdx, targetView);
-				int viewAngle = set()->angleForView((uint32)sceneIdx, 0, viewIdx);
+				int viewIdx = set()->findView(static_cast<uint32>(sceneIdx), targetView);
+				int viewAngle = set()->angleForView(static_cast<uint32>(sceneIdx), 0, viewIdx);
 				if (viewAngle >= 0)
 					targetAngle = viewAngle;
 				else
@@ -251,14 +251,14 @@ Common::String SetRuntime::currentScene(CyberflixEngine &engine, const Common::S
 	}
 
 	return (set() && set()->isOpen() && scene() >= 0) ?
-			set()->sceneName((uint32)scene()) : Common::String("none");
+			set()->sceneName(static_cast<uint32>(scene())) : Common::String("none");
 }
 
 int SetRuntime::countPaintings(const Common::String &scene, const Common::String &view) const {
 	if (!set() || !set()->isOpen())
 		return 0;
 	int sceneIdx = set()->findScene(scene);
-	return sceneIdx >= 0 ? (int)set()->paintingCount((uint32)sceneIdx, view) : 0;
+	return sceneIdx >= 0 ? static_cast<int>(set()->paintingCount(static_cast<uint32>(sceneIdx), view)) : 0;
 }
 
 Common::String SetRuntime::indexToPainting(const Common::String &scene,
@@ -266,7 +266,7 @@ Common::String SetRuntime::indexToPainting(const Common::String &scene,
 	if (!set() || !set()->isOpen() || index < 1)
 		return Common::String();
 	int sceneIdx = set()->findScene(scene);
-	return sceneIdx >= 0 ? set()->indexToPainting((uint32)sceneIdx, view, (uint32)index) :
+	return sceneIdx >= 0 ? set()->indexToPainting(static_cast<uint32>(sceneIdx), view, static_cast<uint32>(index)) :
 			Common::String();
 }
 
@@ -276,8 +276,8 @@ bool SetRuntime::roadAhead(const Common::String &scene, const Common::String &vi
 	int sceneIdx = set()->findScene(scene);
 	if (sceneIdx < 0)
 		return false;
-	int viewIdx = set()->findView((uint32)sceneIdx, view);
-	return set()->forwardTransitionForView((uint32)sceneIdx, viewIdx) != 0;
+	int viewIdx = set()->findView(static_cast<uint32>(sceneIdx), view);
+	return set()->forwardTransitionForView(static_cast<uint32>(sceneIdx), viewIdx) != 0;
 }
 
 bool SetRuntime::setVisible(CyberflixEngine &engine, const bool *newVisible) {

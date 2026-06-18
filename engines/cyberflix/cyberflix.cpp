@@ -145,13 +145,13 @@ static bool isReplacementStage(const Common::SharedPtr<Stage> &stage) {
 //  4. Fallback: kind "None" (DAT_00457568 — capitalised in the EXE; script
 //     compares are case-insensitive), empty name (DAT_00459c98).
 Common::String CyberflixEngine::hitTest(int32 packedPoint) {
-	const int16 x = (int16)(packedPoint >> 16);
-	const int16 y = (int16)(packedPoint & 0xffff);
+	const int16 x = static_cast<int16>(packedPoint >> 16);
+	const int16 y = static_cast<int16>(packedPoint & 0xffff);
 
 	Common::Array<const Shop::Prop *> draw;
 	Common::Array<const Shop *> drawShop;
 	propRuntime().collectScreenProps(draw, drawShop);
-	for (int i = (int)draw.size() - 1; i >= 0; --i) {
+	for (int i = static_cast<int>(draw.size()) - 1; i >= 0; --i) {
 		Common::SharedPtr<CelImage> cel;
 		Common::Rect r;
 		if (!drawShop[i]->renderProp(*draw[i], cel, r))
@@ -167,8 +167,8 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 	if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0 &&
 			_setRuntime.transitionType() == kSetTransitionNone) {
 		Set::CameraData cameraData;
-		if (_setRuntime.set()->cameraData((uint32)_setRuntime.scene(), (uint32)_setRuntime.table(),
-				(uint32)_setRuntime.angle(), cameraData)) {
+		if (_setRuntime.set()->cameraData(static_cast<uint32>(_setRuntime.scene()), static_cast<uint32>(_setRuntime.table()),
+				static_cast<uint32>(_setRuntime.angle()), cameraData)) {
 			Shop::WorldCamera camera = makeWorldCamera(cameraData);
 			Common::Array<const Shop::Prop *> worldDraw;
 			Common::Array<const Shop *> worldShop;
@@ -187,22 +187,22 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 				itemType.push_back(useActor ? 1 : 0);
 				itemIndex.push_back(useActor ? actorIndex++ : propIndex++);
 			}
-			for (int i = (int)itemType.size() - 1; i >= 0; --i) {
+			for (int i = static_cast<int>(itemType.size()) - 1; i >= 0; --i) {
 				const CelImage *cel = nullptr;
 				CelImage actorCel;
 				Common::SharedPtr<CelImage> propCel;
 				Common::Rect r;
 				int16 depth = 0;
 				Common::String name;
-				if (itemType[(uint)i]) {
-					uint32 idx = itemIndex[(uint)i];
+				if (itemType[static_cast<uint>(i)]) {
+					uint32 idx = itemIndex[static_cast<uint>(i)];
 					if (!actorCast[idx]->renderWorldActor(*actorDraw[idx], camera,
 							_setRuntime.set()->setName(), actorCel, r, depth))
 						continue;
 					cel = &actorCel;
 					name = actorDraw[idx]->name;
 				} else {
-					uint32 idx = itemIndex[(uint)i];
+					uint32 idx = itemIndex[static_cast<uint>(i)];
 					if (!worldShop[idx]->renderWorldProp(*worldDraw[idx], camera,
 							_setRuntime.set()->setName(), propCel, r, depth))
 						continue;
@@ -211,49 +211,49 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 				}
 				if (x < r.left || x >= r.right || y < r.top || y >= r.bottom)
 					continue;
-				int srcX = (int)((int64)(x - r.left) * cel->width / r.width());
-				int srcY = (int)((int64)(y - r.top) * cel->height / r.height());
+				int srcX = static_cast<int>(static_cast<int64>(x - r.left) * cel->width / r.width());
+				int srcY = static_cast<int>(static_cast<int64>(y - r.top) * cel->height / r.height());
 				if (!cel->isOpaque(srcX, srcY))
 					continue;
-				_hitKind = itemType[(uint)i] ? "actor" : "prop";
+				_hitKind = itemType[static_cast<uint>(i)] ? "actor" : "prop";
 				return name;
 			}
 		}
 	}
 
 	if (_stageRuntime.visible() && isReplacementStage(_stageRuntime.stage())) {
-		Common::String button = _stageRuntime.stage()->hitTestButton((uint32)_stageRuntime.node(), x, y);
+		Common::String button = _stageRuntime.stage()->hitTestButton(static_cast<uint32>(_stageRuntime.node()), x, y);
 		if (!button.empty()) {
 			_hitKind = "button";
 			return button;
 		}
 		_hitKind = "flat";
-		return _stageRuntime.stage()->nodeName((uint32)_stageRuntime.node());
+		return _stageRuntime.stage()->nodeName(static_cast<uint32>(_stageRuntime.node()));
 	}
 
 	if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0) {
 		const int16 vl = _setRuntime.set()->viewLeft(), vt = _setRuntime.set()->viewTop();
-		if (x >= vl && x < vl + (int)_setRuntime.set()->width() && y >= vt && y < vt + (int)_setRuntime.set()->height()) {
+		if (x >= vl && x < vl + static_cast<int>(_setRuntime.set()->width()) && y >= vt && y < vt + static_cast<int>(_setRuntime.set()->height())) {
 			if (_setRuntime.transitionType() == kSetTransitionNone) {
-				Common::String painting = _setRuntime.set()->hitTestPainting((uint32)_setRuntime.scene(), _setRuntime.view(), x, y);
+				Common::String painting = _setRuntime.set()->hitTestPainting(static_cast<uint32>(_setRuntime.scene()), _setRuntime.view(), x, y);
 				if (!painting.empty()) {
 					_hitKind = "painting";
 					return painting;
 				}
 			}
 			_hitKind = "scene";
-			return _setRuntime.set()->sceneName((uint32)_setRuntime.scene());
+			return _setRuntime.set()->sceneName(static_cast<uint32>(_setRuntime.scene()));
 		}
 	}
 
 	if (_stageRuntime.visible() && _stageRuntime.stage() && _stageRuntime.stage()->isOpen()) {
-		Common::String button = _stageRuntime.stage()->hitTestButton((uint32)_stageRuntime.node(), x, y);
+		Common::String button = _stageRuntime.stage()->hitTestButton(static_cast<uint32>(_stageRuntime.node()), x, y);
 		if (!button.empty()) {
 			_hitKind = "button";
 			return button;
 		}
 		_hitKind = "flat";
-		return _stageRuntime.stage()->nodeName((uint32)_stageRuntime.node());
+		return _stageRuntime.stage()->nodeName(static_cast<uint32>(_stageRuntime.node()));
 	}
 
 	_hitKind = "None";
@@ -272,9 +272,9 @@ bool CyberflixEngine::pointInPainting(const Common::String &scene,
 	int sceneIdx = _setRuntime.set()->findScene(scene);
 	if (sceneIdx < 0)
 		return false;
-	const int16 x = (int16)(packedPoint >> 16);
-	const int16 y = (int16)(packedPoint & 0xffff);
-	bool hit = _setRuntime.set()->pointInPainting((uint32)sceneIdx, view, painting, x, y);
+	const int16 x = static_cast<int16>(packedPoint >> 16);
+	const int16 y = static_cast<int16>(packedPoint & 0xffff);
+	bool hit = _setRuntime.set()->pointInPainting(static_cast<uint32>(sceneIdx), view, painting, x, y);
 	debug(1, "Cyberflix: pointinpainting('%s', '%s', '%s', %d,%d) -> %s",
 			scene.c_str(), view.c_str(), painting.c_str(), x, y,
 			hit ? "true" : "false");
@@ -290,11 +290,11 @@ Common::String CyberflixEngine::hitTestResult() {
 // other point value ((x << 16) | y).
 int32 CyberflixEngine::mousePoint() {
 	const Common::Point m = _eventMan->getMousePos();
-	return ((int32)(int16)m.x << 16) | ((int32)m.y & 0xffff);
+	return (static_cast<int32>(static_cast<int16>(m.x)) << 16) | (static_cast<int32>(m.y) & 0xffff);
 }
 
 int32 CyberflixEngine::makePoint(int x, int y) {
-	return ((int32)(int16)x << 16) | ((int32)y & 0xffff);
+	return (static_cast<int32>(static_cast<int16>(x)) << 16) | (static_cast<int32>(y) & 0xffff);
 }
 
 bool CyberflixEngine::buttonDown() {
@@ -321,16 +321,16 @@ bool CyberflixEngine::stillDown() {
 }
 
 int CyberflixEngine::tick() {
-	return (int)((uint64)_system->getMillis() * 60 / 1000);
+	return static_cast<int>((static_cast<uint64>(_system->getMillis()) * 60 / 1000));
 }
 
 int CyberflixEngine::calcDeg(int32 a, int32 b) {
-	const int16 ax = (int16)(a >> 16);
-	const int16 ay = (int16)(a & 0xffff);
-	const int16 bx = (int16)(b >> 16);
-	const int16 by = (int16)(b & 0xffff);
-	int deg = (int)(atan2((double)(by - ay), (double)(bx - ax)) *
-			(256.0 / 6.28318530717958647692));
+	const int16 ax = static_cast<int16>(a >> 16);
+	const int16 ay = static_cast<int16>(a & 0xffff);
+	const int16 bx = static_cast<int16>(b >> 16);
+	const int16 by = static_cast<int16>(b & 0xffff);
+	int deg = static_cast<int>((atan2(static_cast<double>(by - ay), static_cast<double>(bx - ax)) *
+			(256.0 / 6.28318530717958647692)));
 	deg %= 256;
 	if (deg < 0)
 		deg += 256;
@@ -379,7 +379,7 @@ int CyberflixEngine::randomNumber(int n) {
 	// advances the lagged-XOR table twice per draw. Use ScummVM's registered
 	// RNG for recorder/TAS replayability, but preserve the script contract
 	// from FUN_0041b060: random(n) returns 1..n inclusive.
-	return (int)_rnd.getRandomNumber((uint)n - 1) + 1;
+	return static_cast<int>(_rnd.getRandomNumber(static_cast<uint>(n) - 1)) + 1;
 }
 
 int CyberflixEngine::frameRate(const int *newRate) {
@@ -601,8 +601,8 @@ Common::Error CyberflixEngine::run() {
 	while (!shouldQuit()) {
 		while (_eventMan->pollEvent(event)) {
 			if (event.type == Common::EVENT_LBUTTONDOWN) {
-				const int32 packed = ((int32)(int16)event.mouse.x << 16) |
-						((int32)event.mouse.y & 0xffff);
+				const int32 packed = (static_cast<int32>(static_cast<int16>(event.mouse.x)) << 16) |
+						(static_cast<int32>(event.mouse.y) & 0xffff);
 				Common::Array<Value> args;
 				args.push_back(Value::makeInt(packed));
 				bool handled = false;
@@ -632,7 +632,7 @@ Common::Error CyberflixEngine::run() {
 					break;
 				default:
 					if (event.kbd.ascii > 0 && event.kbd.ascii < 256)
-						key = Common::String::format("%c", (char)event.kbd.ascii);
+						key = Common::String::format("%c", static_cast<char>(event.kbd.ascii));
 					break;
 				}
 				if (!key.empty()) {

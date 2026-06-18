@@ -71,14 +71,14 @@ void LoopRuntime::stopLoop(const Common::String &kind, const Common::String &tar
 		return;
 	const bool all = kind.equalsIgnoreCase("all");
 	const ScheduledLoop::Kind kindId = scheduledLoopKind(kind);
-	for (int i = (int)_scheduledLoops.size() - 1; i >= 0; --i) {
-		const ScheduledLoop &loop = _scheduledLoops[(uint32)i];
+	for (int i = static_cast<int>(_scheduledLoops.size()) - 1; i >= 0; --i) {
+		const ScheduledLoop &loop = _scheduledLoops[static_cast<uint32>(i)];
 		const bool kindMatches = kindId == ScheduledLoop::kUnknown
 				? loop.kind.equalsIgnoreCase(kind)
 				: loop.kindId == kindId;
 		if (all || (kindMatches &&
 				(target.empty() || loop.target.equalsIgnoreCase(target))))
-			_scheduledLoops.remove_at((uint32)i);
+			_scheduledLoops.remove_at(static_cast<uint32>(i));
 	}
 }
 
@@ -109,9 +109,9 @@ void LoopRuntime::stopCricket(const Common::String &name) {
 		_crickets.clear();
 		return;
 	}
-	for (int i = (int)_crickets.size() - 1; i >= 0; --i) {
-		if (_crickets[(uint)i].name.equalsIgnoreCase(name))
-			_crickets.remove_at((uint)i);
+	for (int i = static_cast<int>(_crickets.size()) - 1; i >= 0; --i) {
+		if (_crickets[static_cast<uint>(i)].name.equalsIgnoreCase(name))
+			_crickets.remove_at(static_cast<uint>(i));
 	}
 	debug(2, "Cyberflix: stopcricket('%s')", name.c_str());
 }

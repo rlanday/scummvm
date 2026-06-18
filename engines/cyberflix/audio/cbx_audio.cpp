@@ -52,21 +52,21 @@ static void decodeCbxBlock(const byte *src, uint32 srcLen, uint32 outSize,
 
 	uint32 i = 0, produced = 0;
 	byte b = src[i++];
-	emitCbxSample(dst, outSize, produced, (byte)(b * 2), duplicate);
+	emitCbxSample(dst, outSize, produced, static_cast<byte>(b * 2), duplicate);
 	int pred = b;
 	while (produced < outSize && i < srcLen) {
 		b = src[i++];
 		if (!(b & 0x80)) { // literal
-			emitCbxSample(dst, outSize, produced, (byte)(b * 2), duplicate);
+			emitCbxSample(dst, outSize, produced, static_cast<byte>(b * 2), duplicate);
 			pred = b;
 		} else if (!(b & 0x40)) { // 4-bit DPCM delta-run
 			uint32 n = (b & 0x3f) + 1;
 			for (uint32 j = 0; j < n && i < srcLen && produced < outSize; ++j) {
 				const byte d = src[i++];
 				const int s1 = (pred + kSignedNibble[d >> 4]) & 0xff;
-				emitCbxSample(dst, outSize, produced, (byte)(s1 * 2), duplicate);
+				emitCbxSample(dst, outSize, produced, static_cast<byte>(s1 * 2), duplicate);
 				pred = (s1 + kSignedNibble[d & 0xf]) & 0xff;
-				emitCbxSample(dst, outSize, produced, (byte)(pred * 2), duplicate);
+				emitCbxSample(dst, outSize, produced, static_cast<byte>(pred * 2), duplicate);
 			}
 		} else { // predictor repeat-run
 			uint32 n = (b & 0x3f) + 1;
@@ -74,7 +74,7 @@ static void decodeCbxBlock(const byte *src, uint32 srcLen, uint32 outSize,
 				n *= 2;
 			if (n > outSize - produced)
 				n = outSize - produced;
-			memset(dst + produced, (byte)(pred * 2), n);
+			memset(dst + produced, static_cast<byte>(pred * 2), n);
 			produced += n;
 		}
 	}

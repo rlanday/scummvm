@@ -51,7 +51,7 @@ bool Script::parse(Common::SeekableReadStream *stream) {
 	if (!stream)
 		return false;
 
-	uint32 size = (uint32)stream->size();
+	uint32 size = static_cast<uint32>(stream->size());
 	if (size < 8)
 		return false;
 
@@ -109,7 +109,7 @@ Common::String Script::getPoolString(uint32 offset) const {
 		byte c = _payload[offset + 1 + i];
 		if (c < 32 || c > 126)
 			return Common::String();
-		result += (char)c;
+		result += static_cast<char>(c);
 	}
 	return result;
 }
@@ -529,7 +529,7 @@ static const MethodName kMethodNames[] = {
 };
 
 const char *Script::methodName(uint16 opcode) {
-int lo = 0, hi = (int)(sizeof(kMethodNames) / sizeof(kMethodNames[0])) - 1;
+int lo = 0, hi = static_cast<int>((sizeof(kMethodNames) / sizeof(kMethodNames[0]))) - 1;
 while (lo <= hi) {
 int mid = (lo + hi) / 2;
 uint16 m = kMethodNames[mid].opcode;
@@ -566,7 +566,7 @@ int Script::findEndIfFrom(uint32 index) const {
 			++depth;
 		} else if (op == kOpEndIf) {
 			if (depth == 0)
-				return (int)i;
+				return static_cast<int>(i);
 			--depth;
 		}
 	}
@@ -586,7 +586,7 @@ int Script::findMatchingElse(uint32 index) const {
 				return -1;
 			--depth;
 		} else if (op == kOpElse && depth == 0) {
-			return (int)(i + 1);
+			return static_cast<int>(i + 1);
 		}
 	}
 	return -1;
@@ -602,7 +602,7 @@ int Script::findEndWhileFrom(uint32 index) const {
 			++depth;
 		} else if (op == kOpEndWhile) {
 			if (depth == 0)
-				return (int)i;
+				return static_cast<int>(i);
 			--depth;
 		}
 	}
@@ -621,7 +621,7 @@ int Script::findEndSwitchFrom(uint32 index) const {
 			++depth;
 		} else if (op == kOpEndSwitch) {
 			if (depth == 0)
-				return (int)i;
+				return static_cast<int>(i);
 			--depth;
 		}
 	}
@@ -638,7 +638,7 @@ int Script::findForNextFrom(uint32 index) const {
 			++depth;
 		} else if (op == kOpForNext) {
 			if (depth == 0)
-				return (int)i;
+				return static_cast<int>(i);
 			--depth;
 		}
 	}
@@ -658,7 +658,7 @@ int Script::findCloseParen(uint32 openIndex) const {
 		} else if (op == kOpCloseParen) {
 			--depth;
 			if (depth == 0)
-				return (int)i;
+				return static_cast<int>(i);
 		}
 	}
 	return -1;
@@ -692,9 +692,9 @@ const Common::Array<Script::Definition> &Script::definitions() const {
 			Definition def;
 			def.name = getSelfRelStringLowercase(headerAt);
 			int close = findCloseParen(headerAt + 1);
-			if (!def.name.empty() && close >= 0 && (uint32)close < next) {
+			if (!def.name.empty() && close >= 0 && static_cast<uint32>(close) < next) {
 				// Formal parameters: symbols separated by kOpArgSep.
-				for (uint32 p = headerAt + 2; p < (uint32)close; ++p) {
+				for (uint32 p = headerAt + 2; p < static_cast<uint32>(close); ++p) {
 					if (_code[p].opcode == kOpPushSym) {
 						def.params.push_back(getSelfRelStringLowercase(p));
 					}
@@ -702,7 +702,7 @@ const Common::Array<Script::Definition> &Script::definitions() const {
 				// The body starts after the header's trailing pushInt padding
 				// (the matcher 0x0040b870 skips pushInt records before the
 				// first statement).
-				uint32 body = (uint32)close + 1;
+				uint32 body = static_cast<uint32>(close) + 1;
 				while (body < next && _code[body].opcode == kOpPushInt)
 					++body;
 				def.bodyStart = body;

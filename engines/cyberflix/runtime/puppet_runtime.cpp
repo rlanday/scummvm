@@ -195,7 +195,7 @@ void PuppetRuntime::puppetBevel(CyberflixEngine &engine, const Common::String &n
 	BevelOption option;
 	option.text = name;
 	option.id = mode;
-	const int top = kScreenHeight + ((int)_bevels.size() - 5) * 24;
+	const int top = kScreenHeight + (static_cast<int>(_bevels.size()) - 5) * 24;
 	option.rect = Common::Rect(0, top, kScreenWidth, top + 24);
 	_bevels.push_back(option);
 	renderBevels(engine, true);
@@ -224,7 +224,7 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 	for (;;) {
 		if (engine.shouldQuit())
 			return -1;
-		if (timeout >= 0 && engine._system->getMillis() - start >= (uint32)timeout)
+		if (timeout >= 0 && engine._system->getMillis() - start >= static_cast<uint32>(timeout))
 			return -1;
 
 		Common::Point mouse = engine._eventMan->getMousePos();
@@ -339,8 +339,8 @@ bool PuppetRuntime::captureGrabBackdrop(CyberflixEngine &engine, Common::Array<b
 			pixels = setRuntime.frameSequence().pixels();
 			frameWidth = setRuntime.frameSequence().width();
 			frameHeight = setRuntime.frameSequence().height();
-		} else if (setRuntime.set()->renderScene((uint32)setRuntime.scene(), (uint32)setRuntime.table(),
-				(uint32)setRuntime.angle(), setRuntime.frameSequence(), frame)) {
+		} else if (setRuntime.set()->renderScene(static_cast<uint32>(setRuntime.scene()), static_cast<uint32>(setRuntime.table()),
+				static_cast<uint32>(setRuntime.angle()), setRuntime.frameSequence(), frame)) {
 			pixels = frame.pixels.begin();
 			frameWidth = frame.width;
 			frameHeight = frame.height;
@@ -364,8 +364,8 @@ bool PuppetRuntime::captureGrabBackdrop(CyberflixEngine &engine, Common::Array<b
 				for (int y = 0; y < frameHeight; ++y) {
 					const int sy = y0 + y;
 					if (sy >= 0 && sy < kScreenHeight) {
-						memcpy(backdrop.begin() + (uint)sy * kScreenWidth + left,
-								pixels + (uint)y * frameWidth + srcX,
+						memcpy(backdrop.begin() + static_cast<uint>(sy) * kScreenWidth + left,
+								pixels + static_cast<uint>(y) * frameWidth + srcX,
 								width);
 					}
 				}
@@ -376,12 +376,12 @@ bool PuppetRuntime::captureGrabBackdrop(CyberflixEngine &engine, Common::Array<b
 
 	if (engine._stageRuntime.stage() && engine._stageRuntime.stage()->isOpen()) {
 		FrameImage frame;
-		if (engine._stageRuntime.stage()->renderNode((uint32)engine._stageRuntime.node(), frame)) {
+		if (engine._stageRuntime.stage()->renderNode(static_cast<uint32>(engine._stageRuntime.node()), frame)) {
 			const int width = MIN<int>(frame.width, kScreenWidth);
 			const int height = MIN<int>(frame.height, kScreenHeight);
 			for (int y = 0; y < height; ++y) {
-				memcpy(backdrop.begin() + (uint)y * kScreenWidth,
-						frame.pixels.begin() + (uint)y * frame.width, width);
+				memcpy(backdrop.begin() + static_cast<uint>(y) * kScreenWidth,
+						frame.pixels.begin() + static_cast<uint>(y) * frame.width, width);
 			}
 		}
 	}
@@ -503,7 +503,7 @@ void PuppetRuntime::renderBevels(CyberflixEngine &engine, bool present) {
 			const int baselineY = rect.top + 0x10;
 			const int x = rect.left + _params[9];
 			font->drawString(screen, _bevels[i].text, x, baselineY - font->getFontAscent(),
-					kScreenWidth - x, (uint32)CLIP<int>(_params[2], 0, 255));
+					kScreenWidth - x, static_cast<uint32>(CLIP<int>(_params[2], 0, 255)));
 		}
 	}
 	engine._system->unlockScreen();
@@ -528,8 +528,8 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 	}
 
 	const uint32 frameCount = action.frameCount ? action.frameCount : 1;
-	uint32 lastFrame = (uint32)-1;
-	uint32 lastPresentedFrame = (uint32)-1;
+	uint32 lastFrame = static_cast<uint32>(-1);
+	uint32 lastPresentedFrame = static_cast<uint32>(-1);
 	const uint32 wallStart = engine._system->getMillis();
 	// Puppet speech redraws animation frames at native 30 fps against the same
 	// puppetgrab backdrop. Cache that grabbed SET/STG image once per action so
@@ -546,12 +546,12 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 		uint32 elapsed = engine._mixer->isSoundHandleActive(_speechHandle)
 				? engine._mixer->getSoundElapsedTime(_speechHandle)
 				: (engine._system->getMillis() - wallStart);
-		uint32 frame = (uint32)((uint64)elapsed * 60 / 1000 / 2);
+		uint32 frame = static_cast<uint32>((static_cast<uint64>(elapsed) * 60 / 1000 / 2));
 		if (frame >= frameCount)
 			frame = frameCount - 1;
 		if (frame != lastFrame) {
 			_currentFrame = frame;
-			if (lastPresentedFrame == (uint32)-1 ||
+			if (lastPresentedFrame == static_cast<uint32>(-1) ||
 					!_puppet->actionFramesVisuallyEqual(action, lastPresentedFrame, frame, _grab)) {
 				renderFrame(engine, action, frame, true, cachedBackdrop);
 				lastPresentedFrame = frame;
@@ -571,7 +571,7 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 			break;
 		if (!engine._mixer->isSoundHandleActive(_speechHandle)) {
 			if (pcm.empty() && frame + 1 < frameCount) {
-				const uint32 nextFrameMs = (uint32)(((uint64)frame + 1) * 1000 + 29) / 30;
+				const uint32 nextFrameMs = static_cast<uint32>(((static_cast<uint64>(frame) + 1) * 1000 + 29)) / 30;
 				// Silent puppet actions are clocked from wall time at the same
 				// 30 fps cadence as speech. Sleep toward the next frame boundary
 				// instead of waking the backend event pump several times per
@@ -582,7 +582,7 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 			}
 			break;
 		}
-		const uint32 nextFrameMs = (uint32)(((uint64)frame + 1) * 1000 + 29) / 30;
+		const uint32 nextFrameMs = static_cast<uint32>(((static_cast<uint64>(frame) + 1) * 1000 + 29)) / 30;
 		// Speech playback is frame-clocked from the mixer at native 30 fps.
 		// Poll Esc at that same cadence, avoiding extra SDL/Cocoa event-pump
 		// wakeups between frames when the picture cannot change.
@@ -592,7 +592,7 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 	_currentFrame = frameCount - 1;
 	// If playback timing already presented the final visual frame, avoid one
 	// redundant backend swap at the end of the action.
-	if (lastPresentedFrame == (uint32)-1 ||
+	if (lastPresentedFrame == static_cast<uint32>(-1) ||
 			!_puppet->actionFramesVisuallyEqual(action, lastPresentedFrame, _currentFrame, _grab))
 		renderFrame(engine, action, _currentFrame, true, cachedBackdrop);
 }
@@ -604,7 +604,7 @@ int PuppetRuntime::puppetParam(int selector, const int *newValue) {
 	}
 	int16 &slot = _params[selector - 1];
 	if (newValue) {
-		slot = (int16)*newValue;
+		slot = static_cast<int16>(*newValue);
 		debug(1, "Cyberflix: puppetparam(%d, %d)", selector, *newValue);
 	}
 	return slot;
@@ -615,7 +615,7 @@ int PuppetRuntime::countPuppets() const {
 		warning("Cyberflix: countpuppets(): no puppet open");
 		return 0;
 	}
-	return (int)_puppet->scriptCount();
+	return static_cast<int>(_puppet->scriptCount());
 }
 
 Common::String PuppetRuntime::indexToPuppet(int index) const {
@@ -623,11 +623,11 @@ Common::String PuppetRuntime::indexToPuppet(int index) const {
 		warning("Cyberflix: indextopuppet(%d): no puppet open", index);
 		return Common::String();
 	}
-	if (index < 1 || (uint32)index > _puppet->scriptCount()) {
+	if (index < 1 || static_cast<uint32>(index) > _puppet->scriptCount()) {
 		warning("Cyberflix: indextopuppet(%d): index out of range", index);
 		return Common::String();
 	}
-	return _puppet->scriptName((uint32)index - 1);
+	return _puppet->scriptName(static_cast<uint32>(index) - 1);
 }
 
 } // End of namespace Cyberflix

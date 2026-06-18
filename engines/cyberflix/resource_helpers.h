@@ -54,7 +54,7 @@ bool openArchiveFile(const Common::String &name, const char *kind,
 inline int resourceIndexById(const Archive &archive, uint32 id) {
 	for (uint32 i = 0; i < archive.getResourceCount(); ++i)
 		if (!archive.getResource(i).empty && archive.getResource(i).id == id)
-			return (int)i;
+			return static_cast<int>(i);
 	return -1;
 }
 
@@ -67,9 +67,9 @@ inline Common::String readPascalString(const byte *p,
 	if (s + len > fileData.end()) {
 		if (!allowTruncated)
 			return Common::String();
-		len = (uint)(fileData.end() - s);
+		len = static_cast<uint>((fileData.end() - s));
 	}
-	return Common::String((const char *)s, len);
+	return Common::String(reinterpret_cast<const char *>(s), len);
 }
 
 inline int nativeAngleDistance(int a, int b) {
@@ -78,13 +78,13 @@ inline int nativeAngleDistance(int a, int b) {
 }
 
 inline int16 nativeTrigSin(int angle) {
-	double v = sin((double)(angle & 0xff) * 6.28318530717958647692 / 256.0) * 16384.0;
-	return (int16)(v >= 0.0 ? v + 0.5 : v - 0.5);
+	double v = sin(static_cast<double>(angle & 0xff) * 6.28318530717958647692 / 256.0) * 16384.0;
+	return static_cast<int16>((v >= 0.0 ? v + 0.5 : v - 0.5));
 }
 
 inline int16 nativeTrigCos(int angle) {
-	double v = cos((double)(angle & 0xff) * 6.28318530717958647692 / 256.0) * 16384.0;
-	return (int16)(v >= 0.0 ? v + 0.5 : v - 0.5);
+	double v = cos(static_cast<double>(angle & 0xff) * 6.28318530717958647692 / 256.0) * 16384.0;
+	return static_cast<int16>((v >= 0.0 ? v + 0.5 : v - 0.5));
 }
 
 inline int fixedShift14(int value) {
@@ -92,7 +92,7 @@ inline int fixedShift14(int value) {
 }
 
 inline int nativePointAngle(int dx, int dy) {
-	int deg = (int)(atan2((double)dx, (double)dy) * (256.0 / 6.28318530717958647692));
+	int deg = static_cast<int>((atan2(static_cast<double>(dx), static_cast<double>(dy)) * (256.0 / 6.28318530717958647692)));
 	deg %= 256;
 	if (deg < 0)
 		deg += 256;

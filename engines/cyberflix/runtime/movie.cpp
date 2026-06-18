@@ -76,7 +76,7 @@ static void copyFramePixelsToScreen(Graphics::Surface &screen, const byte *pixel
 	// avoids the per-pixel bounds checks in the SET transition hot path.
 	for (int y = 0; y < copyHeight; ++y) {
 		memcpy(screen.getBasePtr(dstX, dstY + y),
-				pixels + (uint)(srcY + y) * width + srcX, copyWidth);
+				pixels + static_cast<uint>(srcY + y) * width + srcX, copyWidth);
 	}
 }
 
@@ -89,9 +89,9 @@ static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, u
 	while (track.size() < end)
 		track.push_back(0x80);
 	for (uint32 i = 0; i < sfx.size(); ++i) {
-		int v = ((int)track[atSample + i] - 0x80) + ((int)sfx[i] - 0x80);
+		int v = (static_cast<int>(track[atSample + i]) - 0x80) + (static_cast<int>(sfx[i]) - 0x80);
 		v = CLIP(v, -128, 127);
-		track[atSample + i] = (byte)(v + 0x80);
+		track[atSample + i] = static_cast<byte>(v + 0x80);
 	}
 }
 
@@ -136,7 +136,7 @@ struct MovieButton {
 static int resolveFrameName(const Common::Array<Common::String> &names, const Common::String &target) {
 	for (uint i = 0; i < names.size(); ++i)
 		if (names[i].equalsIgnoreCase(target))
-			return (int)i;
+			return static_cast<int>(i);
 	return -1;
 }
 
@@ -150,7 +150,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		return;
 	}
 
-	uint32 size = (uint32)file.size();
+	uint32 size = static_cast<uint32>(file.size());
 	// fileData is declared before archive so it outlives it: the archive owns a
 	// stream that points into this buffer, and the movie loop below reads
 	// payloads through raw pointers into it.
@@ -254,7 +254,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	int masterIdx = -1;
 	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
 		if (!archive.getResource(i).empty && archive.getResource(i).info == kMasterHeaderInfoTag) {
-			masterIdx = (int)i;
+			masterIdx = static_cast<int>(i);
 			break;
 		}
 	}
@@ -267,8 +267,8 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			movieSkippable = (hdr[0x18] & 1) != 0;
 			movieHoverCursor = (hdr[0x18] & 0x10) == 0;
 			// Dest position: rect {t,l} @+0x86c plus origin @+0x24/+0x26.
-			movieX = (int16)READ_LE_UINT16(hdr + 0x86e) + (int16)READ_LE_UINT16(hdr + 0x24);
-			movieY = (int16)READ_LE_UINT16(hdr + 0x86c) + (int16)READ_LE_UINT16(hdr + 0x26);
+			movieX = static_cast<int16>(READ_LE_UINT16(hdr + 0x86e)) + static_cast<int16>(READ_LE_UINT16(hdr + 0x24));
+			movieY = static_cast<int16>(READ_LE_UINT16(hdr + 0x86c)) + static_cast<int16>(READ_LE_UINT16(hdr + 0x26));
 			uint32 musicTableIdx = READ_LE_UINT32(hdr + 0x64); // masterHdr[0x19]
 			uint32 sfxTableIdx   = READ_LE_UINT32(hdr + 0x60); // masterHdr[0x18]
 			uint32 pfCount       = READ_LE_UINT32(hdr + 0x878);
@@ -360,10 +360,10 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 					mb.action = READ_LE_UINT16(br);
 					mb.flags  = br[2];
 					// QuickDraw rect order {t, l, b, r} (see MovieButton).
-					mb.top    = (int16)READ_LE_UINT16(br + 8);
-					mb.left   = (int16)READ_LE_UINT16(br + 10);
-					mb.bottom = (int16)READ_LE_UINT16(br + 12);
-					mb.right  = (int16)READ_LE_UINT16(br + 14);
+					mb.top    = static_cast<int16>(READ_LE_UINT16(br + 8));
+					mb.left   = static_cast<int16>(READ_LE_UINT16(br + 10));
+					mb.bottom = static_cast<int16>(READ_LE_UINT16(br + 12));
+					mb.right  = static_cast<int16>(READ_LE_UINT16(br + 14));
 					mb.target = readPascalString(br + 0x30, fileData, true);
 					buttons.push_back(mb);
 				}
@@ -373,7 +373,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				if (eb) {
 					Common::String cue = readPascalString(eb + 0x12, fileData, true);
 					if (!cue.empty()) {
-						uint32 sfxResId = (uint32)-1;
+						uint32 sfxResId = static_cast<uint32>(-1);
 						for (uint32 e = 0; e < sfxCount; ++e) {
 							const byte *ent = st + 8 + e * 0x2a;
 							if (ent + 0x2a > fileData.end())
@@ -413,7 +413,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 					if (d > units)
 						units = d;
 				}
-				uint32 holdMs = (uint32)((uint64)units * 1000 / 60);
+				uint32 holdMs = static_cast<uint32>((static_cast<uint64>(units) * 1000 / 60));
 				pfHoldMs.push_back(holdMs);
 				cumMs += holdMs;
 			}
@@ -446,7 +446,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			if (!pfFrameSfx[i] || pfFrameSfx[i]->empty())
 				continue;
 			uint32 atMs = (i < frameStartMs.size()) ? frameStartMs[i] : 0;
-			uint32 atSample = (uint32)((uint64)atMs * kAudioSampleRate / 1000);
+			uint32 atSample = static_cast<uint32>((static_cast<uint64>(atMs) * kAudioSampleRate / 1000));
 			mixSfx(pcmBuf, *pfFrameSfx[i], atSample);
 		}
 	}
@@ -511,7 +511,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 
 	debug(0, "Cyberflix: movie '%s' frames=%u audioBytes=%u frameSfxBytes=%u audioMs=%u",
 			name.c_str(), pfVideoRes.empty() ? frames.size() : pfVideoRes.size(), pcmBuf.size(), frameSfxBytes,
-			(uint32)((uint64)pcmBuf.size() * 1000 / kAudioSampleRate));
+			static_cast<uint32>((static_cast<uint64>(pcmBuf.size()) * 1000 / kAudioSampleRate)));
 
 	// Composite frames in order into a persistent surface (frames are
 	// inter-coded) and present them. Esc skips a skippable movie; quit stops.
@@ -555,9 +555,9 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		// Record action-cue hits for the actionframe() builtin. The original
 		// ORs the bits after decoding every frame it iterates (FUN_0043b800
 		// call sites 0x0040d19a/0x0040d1af), clicked-to frames included.
-		if ((int)fi == actionCue1)
+		if (static_cast<int>(fi) == actionCue1)
 			engine._actionFrameMask |= 1;
-		if ((int)fi == actionCue2)
+		if (static_cast<int>(fi) == actionCue2)
 			engine._actionFrameMask |= 2;
 		if (playFrameSfxLive && fi < pfFrameSfx.size() && pfFrameSfx[fi])
 			playMovieFrameSfx(engine._mixer, frameSfxHandles, *pfFrameSfx[fi], engine.audioRuntime().effectiveAudioVolume(255));
@@ -610,7 +610,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			if (haveMoviePal && (drawOp == 0x11 || drawOp == 0x12)) {
 				uint32 holdMs = (usePF && fi < pfHoldMs.size()) ? pfHoldMs[fi]
 						: kFallbackFrameDelayMs;
-				int steps = (int)(holdMs * 60 / 1000);
+				int steps = static_cast<int>(holdMs * 60 / 1000);
 				byte black[256 * 3];
 				memset(black, 0, sizeof(black));
 				if (drawOp == 0x12) {
@@ -676,18 +676,18 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 								continue;
 							if (mb.action == 2) { // GOTO target frame
 								int idx = resolveFrameName(pfName, mb.target);
-								nextFi = (idx >= 0) ? idx : (int32)fi;
+								nextFi = (idx >= 0) ? idx : static_cast<int32>(fi);
 							} else if (mb.action == 6) { // NEXT
-								nextFi = (fi + 1 < frameCount) ? (int32)(fi + 1) : (int32)fi;
+								nextFi = (fi + 1 < frameCount) ? static_cast<int32>(fi + 1) : static_cast<int32>(fi);
 							} else if (mb.action == 7) { // PREV
-								nextFi = (fi > 0) ? (int32)(fi - 1) : 0;
+								nextFi = (fi > 0) ? static_cast<int32>(fi - 1) : 0;
 							} else { // END / unsupported -> leave the movie
 								skip = true;
 							}
 							debug(1, "Cyberflix: movie '%s' button frame %u '%s' click (%d,%d) action %u target '%s' -> %d",
 									name.c_str(), fi,
 									(fi < pfName.size()) ? pfName[fi].c_str() : "",
-									fx, fy, mb.action, mb.target.c_str(), (int)nextFi);
+									fx, fy, mb.action, mb.target.c_str(), static_cast<int>(nextFi));
 							break;
 						}
 					}
@@ -709,7 +709,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				}
 			}
 			if (nextFi >= 0)
-				fi = (uint32)nextFi;
+				fi = static_cast<uint32>(nextFi);
 			continue;
 		}
 
@@ -746,7 +746,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				break; // END: leave this (pressed) frame on screen and return
 			if (nav == 2 && fi < pfNavTarget.size()) {
 				int idx = resolveFrameName(pfName, pfNavTarget[fi]);
-				fi = (idx >= 0) ? (uint32)idx : fi + 1;
+				fi = (idx >= 0) ? static_cast<uint32>(idx): fi + 1;
 			} else if (nav == 7) {
 				fi = fi > 0 ? fi - 1 : 0;
 			} else {
@@ -785,7 +785,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		}
 		if (nav == 2 && fi < pfNavTarget.size()) {
 			int idx = resolveFrameName(pfName, pfNavTarget[fi]);
-			fi = (idx >= 0) ? (uint32)idx : fi + 1;
+			fi = (idx >= 0) ? static_cast<uint32>(idx): fi + 1;
 		} else if (nav == 7) {
 			fi = fi > 0 ? fi - 1 : 0;
 		} else {

@@ -53,7 +53,7 @@ void SetRuntime::sendToScene(CyberflixEngine &engine, const Common::String &scen
 		return;
 	}
 	if (!message.empty())
-		engine.dispatchSceneMessage((uint32)index, message, args);
+		engine.dispatchSceneMessage(static_cast<uint32>(index), message, args);
 }
 
 Value SetRuntime::sendToSceneFx(CyberflixEngine &engine, const Common::String &scene,
@@ -68,10 +68,10 @@ Value SetRuntime::sendToSceneFx(CyberflixEngine &engine, const Common::String &s
 				set()->name().c_str(), scene.c_str());
 		return Value();
 	}
-	Common::SharedPtr<Script> sceneScript = set()->sceneScriptShared((uint32)index);
+	Common::SharedPtr<Script> sceneScript = set()->sceneScriptShared(static_cast<uint32>(index));
 	Common::SharedPtr<Script> setScript = set()->setScriptShared();
 	return engine.dispatchWithScopesValue(sceneScript.get(), setScript.get(),
-			set()->sceneName((uint32)index), Common::String(), message, args, "scenefx");
+			set()->sceneName(static_cast<uint32>(index)), Common::String(), message, args, "scenefx");
 }
 
 // sendtopainting(scene, view, painting, message): dispatch the message over the
@@ -93,7 +93,7 @@ void SetRuntime::sendToPainting(CyberflixEngine &engine, const Common::String &s
 	Common::String activeView = !viewName.empty() ? viewName : this->view();
 
 	Common::SharedPtr<Script> paintingScript, sceneScript, setScript;
-	if (!set()->paintingDispatchScripts((uint32)sceneIdx, activeView, painting,
+	if (!set()->paintingDispatchScripts(static_cast<uint32>(sceneIdx), activeView, painting,
 			paintingScript, sceneScript, setScript)) {
 		warning("Cyberflix: sendtopainting('%s'): no view '%s'",
 				painting.c_str(), activeView.c_str());
@@ -120,7 +120,7 @@ Value SetRuntime::sendToPaintingFx(CyberflixEngine &engine, const Common::String
 	Common::String activeView = !viewName.empty() ? viewName : this->view();
 
 	Common::SharedPtr<Script> paintingScript, sceneScript, setScript;
-	if (!set()->paintingDispatchScripts((uint32)sceneIdx, activeView, painting,
+	if (!set()->paintingDispatchScripts(static_cast<uint32>(sceneIdx), activeView, painting,
 			paintingScript, sceneScript, setScript)) {
 		warning("Cyberflix: sendtopaintingfx('%s'): no view '%s'",
 				painting.c_str(), activeView.c_str());
@@ -136,27 +136,27 @@ void SetRuntime::navigateSet(CyberflixEngine &engine, const Common::String &acti
 	if (transitionType() != kSetTransitionNone)
 		return;
 
-	int viewIdx = set()->findView((uint32)scene(), view());
+	int viewIdx = set()->findView(static_cast<uint32>(scene()), view());
 	if (viewIdx < 0)
-		viewIdx = set()->viewTagAtAngle((uint32)scene(), (uint32)table(), (uint32)angle());
+		viewIdx = set()->viewTagAtAngle(static_cast<uint32>(scene()), static_cast<uint32>(table()), static_cast<uint32>(angle()));
 	if (viewIdx < 0) {
 		warning("Cyberflix: cannot navigate set '%s' scene '%s': current view '%s' not found",
-				set()->name().c_str(), set()->sceneName((uint32)scene()).c_str(), view().c_str());
+				set()->name().c_str(), set()->sceneName(static_cast<uint32>(scene())).c_str(), view().c_str());
 		return;
 	}
 
 	if (action.equalsIgnoreCase("left") || action.equalsIgnoreCase("right")) {
 		const int turnTable = action.equalsIgnoreCase("left") ? 1 : 0;
-		int startAngle = set()->angleForView((uint32)scene(), (uint32)turnTable, viewIdx);
-		if (startAngle < 0 || set()->nextTaggedAngle((uint32)scene(), (uint32)turnTable, startAngle) < 0) {
+		int startAngle = set()->angleForView(static_cast<uint32>(scene()), static_cast<uint32>(turnTable), viewIdx);
+		if (startAngle < 0 || set()->nextTaggedAngle(static_cast<uint32>(scene()), static_cast<uint32>(turnTable), startAngle) < 0) {
 			warning("Cyberflix: set '%s' scene '%s' has no %s turn from view '%s'",
-					set()->name().c_str(), set()->sceneName((uint32)scene()).c_str(),
+					set()->name().c_str(), set()->sceneName(static_cast<uint32>(scene())).c_str(),
 					action.c_str(), view().c_str());
 			return;
 		}
 		if (!engine.closeCurrentSceneForNavigation())
 			return;
-		if (!set()->applyPanoramaFrame((uint32)scene(), (uint32)turnTable, (uint32)startAngle,
+		if (!set()->applyPanoramaFrame(static_cast<uint32>(scene()), static_cast<uint32>(turnTable), static_cast<uint32>(startAngle),
 				frameSequence())) {
 			warning("Cyberflix: set '%s' failed to start %s turn from view '%s'",
 					set()->name().c_str(), action.c_str(), view().c_str());
@@ -170,7 +170,7 @@ void SetRuntime::navigateSet(CyberflixEngine &engine, const Common::String &acti
 	}
 
 	if (action.equalsIgnoreCase("strait")) {
-		uint32 transitionId = set()->forwardTransitionForView((uint32)scene(), viewIdx);
+		uint32 transitionId = set()->forwardTransitionForView(static_cast<uint32>(scene()), viewIdx);
 		if (transitionId == 0)
 			return;
 		uint32 count = set()->transitionFrameCount(transitionId);
@@ -199,29 +199,29 @@ void SetRuntime::advanceSetTransition(CyberflixEngine &engine) {
 		return;
 
 	if (transitionType() == kSetTransitionTurn) {
-		uint32 count = set()->angleCount((uint32)scene(), (uint32)table());
+		uint32 count = set()->angleCount(static_cast<uint32>(scene()), static_cast<uint32>(table()));
 		if (count == 0) {
 			transitionType() = kSetTransitionNone;
 			return;
 		}
 
-		int nextAngle = (angle() + 1) % (int)count;
-		if (!set()->applyPanoramaFrame((uint32)scene(), (uint32)table(), (uint32)nextAngle,
+		int nextAngle = (angle() + 1) % static_cast<int>(count);
+		if (!set()->applyPanoramaFrame(static_cast<uint32>(scene()), static_cast<uint32>(table()), static_cast<uint32>(nextAngle),
 				frameSequence())) {
 			transitionType() = kSetTransitionNone;
 			warning("Cyberflix: failed to advance SET turn transition");
 			return;
 		}
 		angle() = nextAngle;
-		int viewIdx = set()->viewTagAtAngle((uint32)scene(), (uint32)table(), (uint32)nextAngle);
+		int viewIdx = set()->viewTagAtAngle(static_cast<uint32>(scene()), static_cast<uint32>(table()), static_cast<uint32>(nextAngle));
 		if (viewIdx >= 0)
-			view() = set()->viewName((uint32)scene(), (uint32)viewIdx);
+			view() = set()->viewName(static_cast<uint32>(scene()), static_cast<uint32>(viewIdx));
 		displaySetFrame(engine, frameSequence());
 
 		if (viewIdx >= 0) {
 			transitionType() = kSetTransitionNone;
 			Common::Array<Value> noArgs;
-			engine.dispatchSceneMessage((uint32)scene(), "openscene", noArgs);
+			engine.dispatchSceneMessage(static_cast<uint32>(scene()), "openscene", noArgs);
 		}
 		return;
 	}
@@ -254,7 +254,7 @@ void SetRuntime::advanceSetTransition(CyberflixEngine &engine) {
 				transitionType() = kSetTransitionNone;
 				return;
 			}
-			scene() = (int)destinationScene;
+			scene() = static_cast<int>(destinationScene);
 			table() = 0;
 			angle() = destinationAngle;
 			view() = destinationView;
@@ -262,7 +262,7 @@ void SetRuntime::advanceSetTransition(CyberflixEngine &engine) {
 			transitionResource() = 0;
 			transitionFrame() = 0;
 			Common::Array<Value> noArgs;
-			engine.dispatchSceneMessage((uint32)scene(), "openscene", noArgs);
+			engine.dispatchSceneMessage(static_cast<uint32>(scene()), "openscene", noArgs);
 		}
 	}
 }
@@ -273,7 +273,7 @@ void SetRuntime::renderSetScene(CyberflixEngine &engine, int sceneIdx, int table
 		return;
 	}
 
-	if (!set()->renderScene((uint32)sceneIdx, (uint32)tableIdx, (uint32)angleIdx, frameSequence()))
+	if (!set()->renderScene(static_cast<uint32>(sceneIdx), static_cast<uint32>(tableIdx), static_cast<uint32>(angleIdx), frameSequence()))
 		return;
 
 	scene() = sceneIdx;
@@ -282,9 +282,9 @@ void SetRuntime::renderSetScene(CyberflixEngine &engine, int sceneIdx, int table
 	if (!viewName.empty()) {
 		view() = viewName;
 	} else {
-		int viewIdx = set()->viewTagAtAngle((uint32)sceneIdx, (uint32)tableIdx, (uint32)angleIdx);
+		int viewIdx = set()->viewTagAtAngle(static_cast<uint32>(sceneIdx), static_cast<uint32>(tableIdx), static_cast<uint32>(angleIdx));
 		if (viewIdx >= 0)
-			view() = set()->viewName((uint32)sceneIdx, (uint32)viewIdx);
+			view() = set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx));
 	}
 
 	byte rgb[256 * 3];
@@ -298,7 +298,7 @@ void SetRuntime::renderSetScene(CyberflixEngine &engine, int sceneIdx, int table
 		displaySetFrame(engine, frameSequence());
 
 	debug(1, "Cyberflix: rendered set '%s' scene %d '%s' angle %d (%ux%u)",
-			set()->name().c_str(), sceneIdx, set()->sceneName((uint32)sceneIdx).c_str(),
+			set()->name().c_str(), sceneIdx, set()->sceneName(static_cast<uint32>(sceneIdx)).c_str(),
 			angleIdx, frameSequence().width(), frameSequence().height());
 }
 
@@ -345,8 +345,8 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		haveCamera = set()->transitionCameraData(transitionResource(),
 				transitionFrame(), cameraData);
 	} else if (scene() >= 0) {
-		haveCamera = set()->cameraData((uint32)scene(), (uint32)table(),
-				(uint32)angle(), cameraData);
+		haveCamera = set()->cameraData(static_cast<uint32>(scene()), static_cast<uint32>(table()),
+				static_cast<uint32>(angle()), cameraData);
 	}
 	if (haveCamera) {
 		Shop::WorldCamera camera = makeWorldCamera(cameraData);

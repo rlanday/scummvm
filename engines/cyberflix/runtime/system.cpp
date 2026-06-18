@@ -48,7 +48,7 @@ bool CyberflixEngine::exciseBootCdCheck(Script &script) {
 		uint16 op = script.getInstruction(i).opcode;
 		if (op == Script::kOpPush3 || op == Script::kOpPush4 || op == Script::kOpPushSym) {
 			if (script.getSelfRelString(i).equalsIgnoreCase("titanic1:")) {
-				literal = (int)i;
+				literal = static_cast<int>(i);
 				break;
 			}
 		}
@@ -61,7 +61,7 @@ bool CyberflixEngine::exciseBootCdCheck(Script &script) {
 	int ifIndex = -1;
 	int depth = 0;
 	for (int i = literal - 1; i >= 0; --i) {
-		uint16 op = script.getInstruction((uint32)i).opcode;
+		uint16 op = script.getInstruction(static_cast<uint32>(i)).opcode;
 		if (op == Script::kOpEndIf) {
 			++depth;
 		} else if (op == Script::kOpIf) {
@@ -75,11 +75,11 @@ bool CyberflixEngine::exciseBootCdCheck(Script &script) {
 	if (ifIndex < 0)
 		return false;
 
-	int endIfIndex = script.findMatchingEndIf((uint32)ifIndex);
+	int endIfIndex = script.findMatchingEndIf(static_cast<uint32>(ifIndex));
 	if (endIfIndex < 0)
 		return false;
 
-	script.neutralizeRange((uint32)ifIndex, (uint32)endIfIndex);
+	script.neutralizeRange(static_cast<uint32>(ifIndex), static_cast<uint32>(endIfIndex));
 	debug(0, "Cyberflix: excised boot CD check (instructions %d..%d)",
 			ifIndex, endIfIndex);
 	return true;

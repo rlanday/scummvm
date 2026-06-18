@@ -47,9 +47,9 @@ static bool decodeScanline(const byte *data, uint32 p, uint32 byteLen, uint16 wi
 	uint16 x = 0;
 	while (p < end && x < width) {
 		const byte c = data[p++];
-		uint16 n = (uint16)(c >> 2);
-		if (n > (uint16)(width - x))
-			n = (uint16)(width - x);
+		uint16 n = static_cast<uint16>(c >> 2);
+		if (n > static_cast<uint16>(width - x))
+			n = static_cast<uint16>(width - x);
 		switch (c & 3) {
 		case kCelFill: {
 			if (p >= end)
@@ -84,7 +84,7 @@ static bool decodeScanline(const byte *data, uint32 p, uint32 byteLen, uint16 wi
 		case kCelTransparent:
 		default:
 			// Skip: leave the pixels transparent.
-			x = (uint16)(x + n);
+			x = static_cast<uint16>(x + n);
 			break;
 		}
 	}
@@ -100,7 +100,7 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
 	const int16 originY = stream.readSint16LE();
 
 	// Slurp the remaining scanline data for random access.
-	const uint32 remain = (uint32)(stream.size() - stream.pos());
+	const uint32 remain = static_cast<uint32>((stream.size() - stream.pos()));
 	Common::Array<byte> data;
 	data.resize(remain);
 	if (remain && stream.read(data.begin(), remain) != remain)
@@ -110,8 +110,8 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
 	out.height = height;
 	out.originX = originX;
 	out.originY = originY;
-	out.pixels.resize((uint)width * height);
-	out.opaque.resize((uint)width * height);
+	out.pixels.resize(static_cast<uint>(width) * height);
+	out.opaque.resize(static_cast<uint>(width) * height);
 	for (uint i = 0; i < out.pixels.size(); ++i) {
 		out.pixels[i] = 0;
 		out.opaque[i] = 0;
@@ -121,12 +121,12 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
 	for (uint16 y = 0; y < height; ++y) {
 		if (p + 2 > remain)
 			return false;
-		const uint16 byteLen = (uint16)(data[p] | (data[p + 1] << 8));
+		const uint16 byteLen = static_cast<uint16>((data[p] | (data[p + 1] << 8)));
 		p += 2;
 		if (p + byteLen > remain)
 			return false;
-		byte *row = &out.pixels[(uint)y * width];
-		byte *rowOpaque = &out.opaque[(uint)y * width];
+		byte *row = &out.pixels[static_cast<uint>(y) * width];
+		byte *rowOpaque = &out.opaque[static_cast<uint>(y) * width];
 		const byte *prevRow = y ? row - width : nullptr;
 		const byte *prevOpaque = y ? rowOpaque - width : nullptr;
 		if (!decodeScanline(data.begin(), p, byteLen, width, row, rowOpaque, prevRow, prevOpaque))
@@ -200,14 +200,14 @@ private:
 	}
 	uint16 readWordLE() {
 		if (_s + 2 > _srcSize) { _ok = false; return 0; }
-		const uint16 v = (uint16)(_src[_s] | (_src[_s + 1] << 8));
+		const uint16 v = static_cast<uint16>((_src[_s] | (_src[_s + 1] << 8)));
 		_s += 2;
 		return v;
 	}
 	// A big-endian 16-bit word for the DPCM bit window.
 	uint16 readWordBE() {
 		const uint16 v = readWordLE();
-		return (uint16)((v << 8) | (v >> 8));
+		return static_cast<uint16>(((v << 8) | (v >> 8)));
 	}
 	// Run length: high five bits of @p c, or an extended byte + 0x20 when zero.
 	int readRunLength(byte c) {
@@ -222,7 +222,7 @@ private:
 	}
 
 	void copyFromSrc(int di, int n) {
-		if (!destRange(di, n) || _s + (uint32)n > _srcSize) { _ok = false; return; }
+		if (!destRange(di, n) || _s + static_cast<uint32>(n) > _srcSize) { _ok = false; return; }
 		memcpy(_dst + di, _src + _s, n);
 		_s += n;
 	}
@@ -294,7 +294,7 @@ private:
 				// tiny calls, while preserving the native reader's final backtrack.
 				int run = 0;
 				do {
-					const uint16 inv = (uint16)~ax;
+					const uint16 inv = static_cast<uint16>(~ax);
 					int chunk = inv ? 15 - Common::intLog2(inv) : 16;
 					if (chunk > bits)
 						chunk = bits;
@@ -304,14 +304,14 @@ private:
 					if (chunk == 16)
 						ax = dxw;
 					else
-						ax = (uint16)((ax << chunk) | (dxw >> (16 - chunk)));
+						ax = static_cast<uint16>(((ax << chunk) | (dxw >> (16 - chunk))));
 					bits -= chunk;
 					run += chunk;
 
 					if (run == budget)
 						break;
 					if (bits != 0)
-						dxw = (uint16)(dxw << chunk);
+						dxw = static_cast<uint16>(dxw << chunk);
 					else { dxw = readWordBE(); bits = 16; }
 				} while (_ok && (ax & 0x8000));
 				if (!_ok)
@@ -327,7 +327,7 @@ private:
 			}
 			if (ax < 0x0100) {
 				// Escape: predicted byte plus the low 8 bits of the window.
-				dst[di] = (byte)((ax + dst[pe]) & 0xff);
+				dst[di] = static_cast<byte>(((ax + dst[pe]) & 0xff));
 				++di; ++pe;
 				consume = 16;
 			} else {
@@ -336,7 +336,7 @@ private:
 				const int cx = Common::intLog2(ax);
 				const int mag = 15 - cx;
 				const int sign = (ax >> (cx - 1)) & 1;
-				dst[di] = (byte)((dst[pe] + (sign ? mag : -mag)) & 0xff);
+				dst[di] = static_cast<byte>(((dst[pe] + (sign ? mag : -mag)) & 0xff));
 				++di; ++pe;
 				consume = mag + 2;
 			}
@@ -346,20 +346,20 @@ private:
 			// look-ahead word and reloading it from the stream as it runs dry.
 			if (bits >= consume) {
 				if (consume > 0)
-					ax = (uint16)((ax << consume) | (dxw >> (16 - consume)));
+					ax = static_cast<uint16>(((ax << consume) | (dxw >> (16 - consume))));
 				bits -= consume;
 				if (bits == 0) { dxw = readWordBE(); bits = 16; }
-				else dxw = (uint16)(dxw << consume);
+				else dxw = static_cast<uint16>(dxw << consume);
 			} else {
 				// The symbol straddles the look-ahead boundary: take the rest of
 				// the current word, reload, then take the remaining @c rem bits.
 				const int rem = consume - bits;
 				if (bits > 0)
-					ax = (uint16)((ax << bits) | (dxw >> (16 - bits)));
+					ax = static_cast<uint16>(((ax << bits) | (dxw >> (16 - bits))));
 				dxw = readWordBE();
 				if (rem > 0)
-					ax = (uint16)((ax << rem) | (dxw >> (16 - rem)));
-				dxw = (uint16)(dxw << rem);
+					ax = static_cast<uint16>(((ax << rem) | (dxw >> (16 - rem))));
+				dxw = static_cast<uint16>(dxw << rem);
 				bits = 16 - rem;
 			}
 			if (budget == 0) break;
@@ -455,8 +455,8 @@ uint32 FrameSequence::applyFrame(const byte *src, uint32 srcSize) {
 	// The first frame fixes the dimensions and allocates the retained surface;
 	// later frames must match and decode on top of the existing contents.
 	if (empty()) {
-		_width = (uint16)width;
-		_height = (uint16)height;
+		_width = static_cast<uint16>(width);
+		_height = static_cast<uint16>(height);
 		_pitch = width;
 		// Value-initialize the retained surface and predictor padding rows once;
 		// an extra memset here showed up as bzero during SET-transition profiles.
@@ -465,7 +465,7 @@ uint32 FrameSequence::applyFrame(const byte *src, uint32 srcSize) {
 		return 0;
 	}
 
-	FrameDecoder dec(src, srcSize, _work.begin(), (int)_work.size(), _pitch);
+	FrameDecoder dec(src, srcSize, _work.begin(), static_cast<int>(_work.size()), _pitch);
 	dec.run(height, width, kPad * _pitch);
 	if (!dec.ok())
 		return 0;
@@ -481,9 +481,9 @@ const byte *FrameSequence::pixels() const {
 void FrameSequence::copyTo(FrameImage &out) const {
 	out.width = _width;
 	out.height = _height;
-	out.pixels.resize((uint)_width * _height);
+	out.pixels.resize(static_cast<uint>(_width) * _height);
 	if (!empty())
-		memcpy(out.pixels.begin(), pixels(), (uint)_width * _height);
+		memcpy(out.pixels.begin(), pixels(), static_cast<uint>(_width) * _height);
 }
 
 uint32 decodeFrame(const byte *src, uint32 srcSize, FrameImage &out) {
@@ -508,7 +508,7 @@ bool loadPalette(const byte *fileData, uint32 fileSize, byte *rgb) {
 		bool match = true;
 		for (uint32 k = 0; k < 64; ++k) {
 			const uint32 b = o + k * 8;
-			const uint16 value = (uint16)(fileData[b] | (fileData[b + 1] << 8));
+			const uint16 value = static_cast<uint16>((fileData[b] | (fileData[b + 1] << 8)));
 			if (value != k) {
 				match = false;
 				break;

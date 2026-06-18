@@ -54,19 +54,19 @@ enum {
 };
 
 static void writeSaveString(Common::WriteStream &out, const Common::String &s) {
-	out.writeUint32LE((uint32)s.size());
+	out.writeUint32LE(static_cast<uint32>(s.size()));
 	if (!s.empty())
-		out.write(s.c_str(), (uint32)s.size());
+		out.write(s.c_str(), static_cast<uint32>(s.size()));
 }
 
 static void writeSaveData(Common::WriteStream &out, const Common::Array<byte> &data) {
-	out.writeUint32LE((uint32)data.size());
+	out.writeUint32LE(static_cast<uint32>(data.size()));
 	if (!data.empty())
-		out.write(data.begin(), (uint32)data.size());
+		out.write(data.begin(), static_cast<uint32>(data.size()));
 }
 
 static void writeValue(Common::WriteStream &out, const Value &value) {
-	out.writeUint32LE((uint32)value.type);
+	out.writeUint32LE(static_cast<uint32>(value.type));
 	out.writeSint32LE(value.intValue);
 	writeSaveString(out, value.strValue);
 }
@@ -104,7 +104,7 @@ static bool readValue(Common::SeekableReadStream &in, int64 end, Value &value) {
 	uint32 type = in.readUint32LE();
 	if (type > Value::kBool)
 		return false;
-	value.type = (Value::Type)type;
+	value.type = static_cast<Value::Type>(type);
 	value.intValue = in.readSint32LE();
 	return readSaveString(in, end, value.strValue);
 }
@@ -122,9 +122,9 @@ static bool readChunkHeader(Common::SeekableReadStream &in, char tag[5], int64 &
 
 static void writeChunk(Common::WriteStream &out, const char tag[4], Common::MemoryWriteStreamDynamic &payload) {
 	out.write(tag, 4);
-	out.writeUint32LE((uint32)payload.size());
+	out.writeUint32LE(static_cast<uint32>(payload.size()));
 	if (payload.size())
-		out.write(payload.getData(), (uint32)payload.size());
+		out.write(payload.getData(), static_cast<uint32>(payload.size()));
 }
 
 static Common::String defaultSaveSignature(int gameType) {
@@ -491,7 +491,7 @@ static bool parseLoopChunk(Common::SeekableReadStream &in, int64 end,
 				in.pos() + 4 > end)
 			return false;
 		loop.kindId = LoopRuntime::scheduledLoopKind(loop.kind);
-		loop.remainingPasses = (int32)in.readUint32LE();
+		loop.remainingPasses = static_cast<int32>(in.readUint32LE());
 		loops.push_back(loop);
 	}
 	return !in.err();
@@ -607,7 +607,7 @@ static void restoreLoopState(LoopRuntime &loopRuntime, bool loopsPaused,
 }
 
 static void writeCueArray(Common::WriteStream &out, const Common::Array<ThemeTrack::Cue> &cues) {
-	out.writeUint32LE((uint32)cues.size());
+	out.writeUint32LE(static_cast<uint32>(cues.size()));
 	for (uint i = 0; i < cues.size(); ++i) {
 		writeSaveString(out, cues[i].name);
 		out.writeUint32LE(cues[i].resId);
@@ -627,7 +627,7 @@ static void writeInactiveSoundSlot(Common::WriteStream &out) {
 static void writeShopChunk(Common::WriteStream &out,
 		const Common::Array<Common::SharedPtr<Shop> > &shops) {
 	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-	payload.writeUint32LE((uint32)shops.size());
+	payload.writeUint32LE(static_cast<uint32>(shops.size()));
 	for (uint s = 0; s < shops.size(); ++s) {
 		const Shop &shop = *shops[s];
 		writeSaveString(payload, shop.name());
@@ -651,7 +651,7 @@ static void writeShopChunk(Common::WriteStream &out,
 			payload.writeSint32LE(prop.value);
 			writeSaveString(payload, prop.shapeName);
 			writeSaveString(payload, prop.owner);
-			payload.writeUint32LE((uint32)prop.shapes.size());
+			payload.writeUint32LE(static_cast<uint32>(prop.shapes.size()));
 			for (uint i = 0; i < prop.shapes.size(); ++i) {
 				payload.writeUint32LE(prop.shapes[i].resId);
 				writeSaveString(payload, prop.shapes[i].name);
@@ -664,7 +664,7 @@ static void writeShopChunk(Common::WriteStream &out,
 static void writeTrackChunk(Common::WriteStream &out,
 		const Common::Array<Common::SharedPtr<ThemeTrack> > &tracks) {
 	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-	payload.writeUint32LE((uint32)tracks.size());
+	payload.writeUint32LE(static_cast<uint32>(tracks.size()));
 	for (uint t = 0; t < tracks.size(); ++t) {
 		const ThemeTrack &track = *tracks[t];
 		writeSaveString(payload, track.sourceName);
@@ -672,7 +672,7 @@ static void writeTrackChunk(Common::WriteStream &out,
 		writeSaveData(payload, track.fileData);
 		payload.writeUint32LE(track.loopIdx);
 		payload.writeSint32LE(track.volume);
-		payload.writeUint32LE((uint32)track.playlist.size());
+		payload.writeUint32LE(static_cast<uint32>(track.playlist.size()));
 		for (uint i = 0; i < track.playlist.size(); ++i)
 			payload.writeUint16LE(track.playlist[i]);
 		writeCueArray(payload, track.cues);
@@ -706,13 +706,13 @@ static void writeAudioChunk(Common::WriteStream &out, const AudioRuntime &audioR
 			mixer->isSoundHandleActive(audioRuntime.themeHandle());
 	const uint32 themeElapsedMillis = themeActive ?
 			mixer->getSoundElapsedTime(audioRuntime.themeHandle()) +
-			(uint32)((uint64)audioRuntime.themeStartSample() * 1000 / kAudioSampleRate) : 0;
+			static_cast<uint32>((static_cast<uint64>(audioRuntime.themeStartSample()) * 1000 / kAudioSampleRate)) : 0;
 	payload.writeByte(themeActive ? 1 : 0);
 	writeSaveString(payload, themeActive ? audioRuntime.themeTrackName() : Common::String());
 	payload.writeUint32LE(themeElapsedMillis);
 	payload.writeUint32LE(audioRuntime.themeIntroSamples());
 	payload.writeUint32LE(audioRuntime.themeLoopSamples());
-	payload.writeUint32LE((uint32)audioRuntime.themeSpans().size());
+	payload.writeUint32LE(static_cast<uint32>(audioRuntime.themeSpans().size()));
 	for (uint i = 0; i < audioRuntime.themeSpans().size(); ++i) {
 		payload.writeUint32LE(audioRuntime.themeSpans()[i].startSample);
 		writeSaveString(payload, audioRuntime.themeSpans()[i].name);
@@ -732,7 +732,7 @@ static void writeVarsChunk(Common::WriteStream &out, const Common::HashMap<Commo
 	for (Common::HashMap<Common::String, Value>::const_iterator it = vars.begin(); it != vars.end(); ++it)
 		keys.push_back(it->_key);
 	Common::sort(keys.begin(), keys.end());
-	payload.writeUint32LE((uint32)keys.size());
+	payload.writeUint32LE(static_cast<uint32>(keys.size()));
 	for (uint i = 0; i < keys.size(); ++i) {
 		Common::HashMap<Common::String, Value>::const_iterator value = vars.find(keys[i]);
 		writeSaveString(payload, keys[i]);
@@ -745,13 +745,13 @@ static void writeLoopChunk(Common::WriteStream &out, const LoopRuntime &loopRunt
 	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
 	const Common::Array<LoopRuntime::ScheduledLoop> &loops = loopRuntime.scheduledLoops();
 	payload.writeByte(loopRuntime.loopsPaused() ? 1 : 0);
-	payload.writeUint32LE((uint32)loops.size());
+	payload.writeUint32LE(static_cast<uint32>(loops.size()));
 	for (uint i = 0; i < loops.size(); ++i) {
 		const LoopRuntime::ScheduledLoop &loop = loops[i];
 		writeSaveString(payload, loop.kind);
 		writeSaveString(payload, loop.target);
 		writeSaveString(payload, loop.message);
-		payload.writeUint32LE(loop.remainingPasses > 0 ? (uint32)loop.remainingPasses : 0);
+		payload.writeUint32LE(loop.remainingPasses > 0 ? static_cast<uint32>(loop.remainingPasses): 0);
 	}
 	writeChunk(out, "LOOP", payload);
 }
@@ -760,7 +760,7 @@ static void writeCricketChunk(Common::WriteStream &out, const LoopRuntime &loopR
 	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
 	const Common::Array<LoopRuntime::CricketState> &crickets = loopRuntime.crickets();
 	payload.writeByte(loopRuntime.cricketsPaused() ? 1 : 0);
-	payload.writeUint32LE((uint32)crickets.size());
+	payload.writeUint32LE(static_cast<uint32>(crickets.size()));
 	for (uint i = 0; i < crickets.size(); ++i) {
 		writeSaveString(payload, crickets[i].name);
 		payload.writeByte(crickets[i].paused ? 1 : 0);
@@ -959,7 +959,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		if (!track || track->playlist.empty())
 			return;
 
-		const uint32 startSample = (uint32)((uint64)elapsedMillis * kAudioSampleRate / 1000);
+		const uint32 startSample = static_cast<uint32>((static_cast<uint64>(elapsedMillis) * kAudioSampleRate / 1000));
 		_audioRuntime.startThemeStream(*this, track, startSample);
 	};
 
@@ -989,7 +989,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	setSnapshot.view = header.setView;
 	setSnapshot.visible = header.setVisible;
 	setSnapshot.transitionType = header.setTransitionType <= kSetTransitionForward ?
-			(SetTransitionType)header.setTransitionType : kSetTransitionNone;
+			static_cast<SetTransitionType>(header.setTransitionType): kSetTransitionNone;
 	setSnapshot.transitionResource = header.setTransitionResource;
 	setSnapshot.transitionFrame = header.setTransitionFrame;
 	setRuntime().restoreSnapshot(setSnapshot);
@@ -1031,9 +1031,9 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		writeSaveString(payload, signature);
 		writeSaveString(payload, desc);
 		writeSaveString(payload, getGameId());
-		payload.writeUint32LE((uint32)getPlatform());
-		payload.writeUint32LE((uint32)getLanguage());
-		payload.writeUint32LE((uint32)getGameType());
+		payload.writeUint32LE(static_cast<uint32>(getPlatform()));
+		payload.writeUint32LE(static_cast<uint32>(getLanguage()));
+		payload.writeUint32LE(static_cast<uint32>(getGameType()));
 		writeSaveString(payload, _cursorRuntime.activeCursor());
 		writeSaveString(payload, _hitKind);
 		payload.writeUint16LE(_actionFrameMask);
@@ -1052,7 +1052,7 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		payload.writeSint32LE(setSnapshot.angle);
 		writeSaveString(payload, setSnapshot.view);
 		payload.writeByte(setSnapshot.visible ? 1 : 0);
-		payload.writeUint32LE((uint32)setSnapshot.transitionType);
+		payload.writeUint32LE(static_cast<uint32>(setSnapshot.transitionType));
 		payload.writeUint32LE(setSnapshot.transitionResource);
 		payload.writeUint32LE(setSnapshot.transitionFrame);
 

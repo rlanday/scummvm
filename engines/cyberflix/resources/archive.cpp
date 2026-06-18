@@ -70,10 +70,10 @@ bool Archive::open(Common::SeekableReadStream *stream, const Common::String &nam
 		return false;
 	}
 
-	if (_declaredSize != (uint32)stream->size()) {
+	if (_declaredSize != static_cast<uint32>(stream->size())) {
 		// Non-fatal: warn but keep going, the header size is informational.
 		warning("Cyberflix::Archive: '%s' declared size %u != file size %d",
-				name.c_str(), _declaredSize, (int)stream->size());
+				name.c_str(), _declaredSize, static_cast<int>(stream->size()));
 	}
 
 	_stream = stream;
@@ -91,9 +91,9 @@ bool Archive::open(Common::SeekableReadStream *stream, const Common::String &nam
 }
 
 bool Archive::readDirectory() {
-	const uint32 fileSize = (uint32)_stream->size();
+	const uint32 fileSize = static_cast<uint32>(_stream->size());
 
-	if (kDirectoryOffset + (uint64)_resourceCount * 4 > fileSize)
+	if (kDirectoryOffset + static_cast<uint64>(_resourceCount) * 4 > fileSize)
 		return false;
 
 	_resources.clear();
@@ -123,7 +123,7 @@ bool Archive::readDirectory() {
 			// The final record is sometimes a few bytes short of its declared
 			// length (unpadded tail); clamp to the available bytes rather than
 			// rejecting the container.
-			if ((uint64)res.dataOffset + res.length > fileSize) {
+			if (static_cast<uint64>(res.dataOffset) + res.length > fileSize) {
 				uint32 avail = fileSize - res.dataOffset;
 				debug(2, "Cyberflix::Archive: resource %u length %u clamped to %u",
 						i, res.length, avail);

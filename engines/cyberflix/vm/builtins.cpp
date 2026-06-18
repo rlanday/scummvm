@@ -431,10 +431,10 @@ bool ScriptVM::callInputMethod(uint16 opcode, const Common::Array<Value> &args, 
 		return true;
 	}
 	case Script::kMethodPointX: // pointx(point) -> high word of packed (x << 16) | y
-		result = Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue >> 16));
+		result = Value::makeInt(args.empty() ? 0 : static_cast<int16>(args[0].intValue >> 16));
 		return true;
 	case Script::kMethodPointY: // pointy(point) -> low word of packed (x << 16) | y
-		result = Value::makeInt(args.empty() ? 0 : (int16)(args[0].intValue & 0xffff));
+		result = Value::makeInt(args.empty() ? 0 : static_cast<int16>(args[0].intValue & 0xffff));
 		return true;
 	case Script::kMethodMakePoint: // makepoint(x, y) -> packed (x << 16) | y
 		result = Value::makeInt(_interactionHost->makePoint(args.size() > 0 ? args[0].intValue : 0,

@@ -55,7 +55,7 @@ bool Cast::open(const Common::String &name) {
 
 	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
 		if (!_archive.getResource(i).empty && _archive.getResource(i).info == kMasterHeaderInfoTag) {
-			_master = (int)i;
+			_master = static_cast<int>(i);
 			break;
 		}
 	}
@@ -64,7 +64,7 @@ bool Cast::open(const Common::String &name) {
 		return false;
 	}
 
-	const byte *hdr = engineBase((uint32)_master);
+	const byte *hdr = engineBase(static_cast<uint32>(_master));
 	if (!hdr || hdr + kMasterActorTableOffset > _fileData.end()) {
 		warning("Cyberflix: cast '%s' master header truncated", name.c_str());
 		_master = -1;
@@ -74,7 +74,7 @@ bool Cast::open(const Common::String &name) {
 	uint32 scriptRes = READ_LE_UINT32(hdr + kMasterScriptOffset);
 	int scriptIdx = resourceIndexById(scriptRes);
 	if (scriptIdx >= 0) {
-		Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)scriptIdx));
+		Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource(static_cast<uint32>(scriptIdx)));
 		Common::ScopedPtr<Script> script(new Script());
 		if (s && script->parse(s.get()))
 			_script.reset(script.release());
@@ -89,7 +89,7 @@ bool Cast::open(const Common::String &name) {
 			break;
 		uint32 masterId = READ_LE_UINT32(entry);
 		int mIdx = resourceIndexById(masterId);
-		const byte *am = mIdx >= 0 ? engineBase((uint32)mIdx) : nullptr;
+		const byte *am = mIdx >= 0 ? engineBase(static_cast<uint32>(mIdx)) : nullptr;
 		if (!am || am + kActorShapeTableOffset > _fileData.end()) {
 			warning("Cyberflix: cast '%s' actor master %u missing", name.c_str(), masterId);
 			continue;
@@ -126,7 +126,7 @@ bool Cast::open(const Common::String &name) {
 
 		int sIdx = actor->scriptResId ? resourceIndexById(actor->scriptResId) : -1;
 		if (sIdx >= 0) {
-			Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource((uint32)sIdx));
+			Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource(static_cast<uint32>(sIdx)));
 			Common::SharedPtr<Script> script(new Script());
 			if (s && script->parse(s.get()))
 				actor->script = script;
@@ -168,7 +168,7 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 		return false;
 	}
 	int shIdx = resourceIndexById(shape->resId);
-	const byte *sh = shIdx >= 0 ? engineBase((uint32)shIdx) : nullptr;
+	const byte *sh = shIdx >= 0 ? engineBase(static_cast<uint32>(shIdx)) : nullptr;
 	if (!sh || sh + kShapeCellTableOffset > _fileData.end()) {
 		debug(1, "Cyberflix: renderActor('%s'): shape res %u missing",
 				actor.name.c_str(), shape->resId);
@@ -186,10 +186,10 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 	int bestDist = 0x7fffffff;
 	const byte *cellTable = sh + kShapeCellTableOffset;
 	for (uint16 i = 0; i < cellCount; ++i) {
-		const byte *c = cellTable + (uint32)i * kShapeCellStride;
+		const byte *c = cellTable + static_cast<uint32>(i) * kShapeCellStride;
 		if (c + kShapeCellStride > _fileData.end())
 			break;
-		if (READ_LE_UINT16(c + kCellIdOffset) != (uint16)(poseId - 1))
+		if (READ_LE_UINT16(c + kCellIdOffset) != static_cast<uint16>(poseId - 1))
 			continue;
 		int dist = nativeAngleDistance(READ_LE_INT16(c + kCellAngleOffset), angle);
 		if (dist < bestDist) {
@@ -207,10 +207,10 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 	int fIdx = resourceIndexById(frameRes);
 	if (fIdx < 0)
 		return false;
-	const Archive::Resource &fres = _archive.getResource((uint32)fIdx);
-	uint16 w = (uint16)(fres.info >> 16);
-	uint16 h = (uint16)(fres.info & 0xffff);
-	Common::ScopedPtr<Common::SeekableReadStream> fs(_archive.createReadStreamForResource((uint32)fIdx));
+	const Archive::Resource &fres = _archive.getResource(static_cast<uint32>(fIdx));
+	uint16 w = static_cast<uint16>(fres.info >> 16);
+	uint16 h = static_cast<uint16>(fres.info & 0xffff);
+	Common::ScopedPtr<Common::SeekableReadStream> fs(_archive.createReadStreamForResource(static_cast<uint32>(fIdx)));
 	if (!fs)
 		return false;
 	bool ok = decodeCel(*fs, w, h, cel);
@@ -238,6 +238,9 @@ bool Cast::renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
 
 	const int relX = actor.x - camera.cameraX;
 	const int relY = actor.y - camera.cameraY;
+	// Native 8-bit-angle yaw rotation followed by pinhole perspective
+	// projection: x' = x*f/z, y' = y*f/z. See Foley/van Dam et al.,
+	// Computer Graphics: Principles and Practice, viewing pipeline chapter.
 	const int sinH = nativeTrigSin(camera.heading);
 	const int cosH = nativeTrigCos(camera.heading);
 	const int projectedDepth = fixedShift14(relY * sinH + relX * cosH);
@@ -279,7 +282,7 @@ bool Cast::renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
 			camera.viewportRight, camera.viewportBottom);
 	if (!rect.intersects(viewport))
 		return false;
-	depth = (int16)projectedDepth;
+	depth = static_cast<int16>(projectedDepth);
 	return true;
 }
 

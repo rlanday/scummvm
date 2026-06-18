@@ -75,7 +75,7 @@ void StageRuntime::gotoFlat(CyberflixEngine &engine, const Value &flat) {
 	} else {
 		targetNode = stage()->findNode(flat.strValue);
 	}
-	if (targetNode < 0 || (uint32)targetNode >= stage()->nodeCount()) {
+	if (targetNode < 0 || static_cast<uint32>(targetNode) >= stage()->nodeCount()) {
 		warning("Cyberflix: gotoflat('%s') not found in stage '%s'",
 				flat.toString().c_str(), stage()->name().c_str());
 		return;
@@ -111,7 +111,7 @@ bool StageRuntime::stageVisible(const bool *newVisible) {
 
 Common::String StageRuntime::currentFlat() const {
 	if (stage() && stage()->isOpen())
-		return stage()->nodeName((uint32)node());
+		return stage()->nodeName(static_cast<uint32>(node()));
 	return "None";
 }
 
@@ -120,8 +120,8 @@ StageRuntime::Snapshot StageRuntime::snapshot() const {
 	if (stage() && stage()->isOpen()) {
 		state.stageName = stage()->name();
 		state.node = node();
-		if (node() >= 0 && (uint32)node() < stage()->nodeCount())
-			state.flatName = stage()->nodeName((uint32)node());
+		if (node() >= 0 && static_cast<uint32>(node()) < stage()->nodeCount())
+			state.flatName = stage()->nodeName(static_cast<uint32>(node()));
 		state.visible = visible();
 	}
 	return state;
@@ -141,7 +141,7 @@ bool StageRuntime::restoreSnapshot(const Snapshot &snapshot) {
 	stage() = newStage;
 	visible() = snapshot.visible;
 	node() = snapshot.node;
-	if (node() < 0 || (uint32)node() >= stage()->nodeCount()) {
+	if (node() < 0 || static_cast<uint32>(node()) >= stage()->nodeCount()) {
 		int foundNode = stage()->findNode(snapshot.flatName);
 		node() = foundNode >= 0 ? foundNode : 0;
 	}
@@ -188,13 +188,13 @@ void StageRuntime::sendToFlat(CyberflixEngine &engine, const Common::String &fla
 	}
 	Common::SharedPtr<Stage> dispatchStage = stage();
 	int dispatchNode = flat.empty() ? node() : dispatchStage->findNode(flat);
-	if (dispatchNode < 0 || (uint32)dispatchNode >= dispatchStage->nodeCount()) {
+	if (dispatchNode < 0 || static_cast<uint32>(dispatchNode) >= dispatchStage->nodeCount()) {
 		warning("Cyberflix: stage '%s' has no flat named '%s'",
 				dispatchStage->name().c_str(), flat.c_str());
 		return;
 	}
-	Common::String flatName = dispatchStage->nodeName((uint32)dispatchNode);
-	engine.dispatchWithScopes(dispatchStage->nodeScript((uint32)dispatchNode),
+	Common::String flatName = dispatchStage->nodeName(static_cast<uint32>(dispatchNode));
+	engine.dispatchWithScopes(dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)),
 			dispatchStage->stageScript(), flatName, flatName, message, args, "flat");
 	engine.propRuntime().refreshPropsIfDirty(engine);
 }
@@ -207,13 +207,13 @@ Value StageRuntime::sendToFlatFx(CyberflixEngine &engine, const Common::String &
 	}
 	Common::SharedPtr<Stage> dispatchStage = stage();
 	int dispatchNode = flat.empty() ? node() : dispatchStage->findNode(flat);
-	if (dispatchNode < 0 || (uint32)dispatchNode >= dispatchStage->nodeCount()) {
+	if (dispatchNode < 0 || static_cast<uint32>(dispatchNode) >= dispatchStage->nodeCount()) {
 		warning("Cyberflix: stage '%s' has no flat named '%s'",
 				dispatchStage->name().c_str(), flat.c_str());
 		return Value();
 	}
-	Common::String flatName = dispatchStage->nodeName((uint32)dispatchNode);
-	return engine.dispatchWithScopesValue(dispatchStage->nodeScript((uint32)dispatchNode),
+	Common::String flatName = dispatchStage->nodeName(static_cast<uint32>(dispatchNode));
+	return engine.dispatchWithScopesValue(dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)),
 			dispatchStage->stageScript(), flatName, flatName, message, args, "flatfx");
 }
 
@@ -225,22 +225,22 @@ void StageRuntime::sendToButton(CyberflixEngine &engine, const Common::String &f
 	}
 	Common::SharedPtr<Stage> dispatchStage = stage();
 	int dispatchNode = flat.empty() ? node() : dispatchStage->findNode(flat);
-	if (dispatchNode < 0 || (uint32)dispatchNode >= dispatchStage->nodeCount()) {
+	if (dispatchNode < 0 || static_cast<uint32>(dispatchNode) >= dispatchStage->nodeCount()) {
 		warning("Cyberflix: stage '%s' has no flat named '%s'",
 				dispatchStage->name().c_str(), flat.c_str());
 		return;
 	}
-	if (!dispatchStage->hasButton((uint32)dispatchNode, button)) {
+	if (!dispatchStage->hasButton(static_cast<uint32>(dispatchNode), button)) {
 		warning("Cyberflix: stage '%s' flat '%s' has no button named '%s'",
 				dispatchStage->name().c_str(), flat.c_str(), button.c_str());
 		return;
 	}
 	Common::Array<const Script *> scopes;
-	scopes.push_back(dispatchStage->buttonScript((uint32)dispatchNode, button));
-	scopes.push_back(dispatchStage->nodeScript((uint32)dispatchNode));
+	scopes.push_back(dispatchStage->buttonScript(static_cast<uint32>(dispatchNode), button));
+	scopes.push_back(dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)));
 	scopes.push_back(dispatchStage->stageScript());
 	debug(1, "Cyberflix: sendtobutton('%s', '%s') -> %s(%u args)",
-			dispatchStage->nodeName((uint32)dispatchNode).c_str(), button.c_str(),
+			dispatchStage->nodeName(static_cast<uint32>(dispatchNode)).c_str(), button.c_str(),
 			message.c_str(), args.size());
 	engine.dispatchWithScopeChain(scopes, button, button, message, args, "button");
 	engine.propRuntime().refreshPropsIfDirty(engine);
@@ -254,19 +254,19 @@ Value StageRuntime::sendToButtonFx(CyberflixEngine &engine, const Common::String
 	}
 	Common::SharedPtr<Stage> dispatchStage = stage();
 	int dispatchNode = flat.empty() ? node() : dispatchStage->findNode(flat);
-	if (dispatchNode < 0 || (uint32)dispatchNode >= dispatchStage->nodeCount()) {
+	if (dispatchNode < 0 || static_cast<uint32>(dispatchNode) >= dispatchStage->nodeCount()) {
 		warning("Cyberflix: stage '%s' has no flat named '%s'",
 				dispatchStage->name().c_str(), flat.c_str());
 		return Value();
 	}
-	if (!dispatchStage->hasButton((uint32)dispatchNode, button)) {
+	if (!dispatchStage->hasButton(static_cast<uint32>(dispatchNode), button)) {
 		warning("Cyberflix: stage '%s' flat '%s' has no button named '%s'",
 				dispatchStage->name().c_str(), flat.c_str(), button.c_str());
 		return Value();
 	}
 	Common::Array<const Script *> scopes;
-	scopes.push_back(dispatchStage->buttonScript((uint32)dispatchNode, button));
-	scopes.push_back(dispatchStage->nodeScript((uint32)dispatchNode));
+	scopes.push_back(dispatchStage->buttonScript(static_cast<uint32>(dispatchNode), button));
+	scopes.push_back(dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)));
 	scopes.push_back(dispatchStage->stageScript());
 	return engine.dispatchWithScopeChainValue(scopes, button, button, message, args, "buttonfx");
 }
@@ -279,7 +279,7 @@ void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool
 	node() = targetNode;
 
 	FrameImage frame;
-	if (!stage()->renderNode((uint32)targetNode, frame))
+	if (!stage()->renderNode(static_cast<uint32>(targetNode), frame))
 		return;
 
 	byte rgb[256 * 3];
@@ -323,7 +323,7 @@ void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
 		return;
 
 	FrameImage frame;
-	if (!stage()->renderNode((uint32)node(), frame)) {
+	if (!stage()->renderNode(static_cast<uint32>(node()), frame)) {
 		renderStageNode(engine, node(), false);
 		return;
 	}
@@ -343,9 +343,9 @@ void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
 		for (int y = dirty.top; y < dirty.bottom; ++y) {
 			for (int x = dirty.left; x < dirty.right; ++x) {
 				if (x < frame.width && y < frame.height)
-					*((byte *)screen->getBasePtr(x, y)) = frame.pixels[(uint)y * frame.width + x];
+					*(reinterpret_cast<byte *>(screen->getBasePtr(x, y))) = frame.pixels[static_cast<uint>(y) * frame.width + x];
 				else
-					*((byte *)screen->getBasePtr(x, y)) = 0;
+					*(reinterpret_cast<byte *>(screen->getBasePtr(x, y))) = 0;
 			}
 		}
 
@@ -371,13 +371,13 @@ bool StageRuntime::pointInButton(const Common::String &flat,
 	if (!stage() || !stage()->isOpen())
 		return false;
 	int targetNode = flat.empty() ? node() : stage()->findNode(flat);
-	if (targetNode < 0 || (uint32)targetNode >= stage()->nodeCount())
+	if (targetNode < 0 || static_cast<uint32>(targetNode) >= stage()->nodeCount())
 		return false;
-	const int16 x = (int16)(packedPoint >> 16);
-	const int16 y = (int16)(packedPoint & 0xffff);
-	bool hit = stage()->pointInButton((uint32)targetNode, button, x, y);
+	const int16 x = static_cast<int16>(packedPoint >> 16);
+	const int16 y = static_cast<int16>(packedPoint & 0xffff);
+	bool hit = stage()->pointInButton(static_cast<uint32>(targetNode), button, x, y);
 	debug(1, "Cyberflix: pointinbutton('%s', '%s', %d,%d) -> %s",
-			stage()->nodeName((uint32)targetNode).c_str(), button.c_str(), x, y,
+			stage()->nodeName(static_cast<uint32>(targetNode)).c_str(), button.c_str(), x, y,
 			hit ? "true" : "false");
 	return hit;
 }

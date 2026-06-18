@@ -29,10 +29,10 @@
 namespace Cyberflix {
 
 static bool pointInButtonRect(const byte *rec, int16 x, int16 y) {
-	int16 top = (int16)READ_LE_UINT16(rec + Stage::kButtonRectOffset);
-	int16 left = (int16)READ_LE_UINT16(rec + Stage::kButtonRectOffset + 2);
-	int16 bottom = (int16)READ_LE_UINT16(rec + Stage::kButtonRectOffset + 4);
-	int16 right = (int16)READ_LE_UINT16(rec + Stage::kButtonRectOffset + 6);
+	int16 top = static_cast<int16>(READ_LE_UINT16(rec + Stage::kButtonRectOffset));
+	int16 left = static_cast<int16>(READ_LE_UINT16(rec + Stage::kButtonRectOffset + 2));
+	int16 bottom = static_cast<int16>(READ_LE_UINT16(rec + Stage::kButtonRectOffset + 4));
+	int16 right = static_cast<int16>(READ_LE_UINT16(rec + Stage::kButtonRectOffset + 6));
 	return x >= left && x < right && y >= top && y < bottom;
 }
 
@@ -61,15 +61,15 @@ Common::String Stage::pascalString(const byte *p) const {
 
 const Script *Stage::scriptById(uint32 id) const {
 	int idx = resourceIndexById(id);
-	if (idx < 0 || (uint32)idx >= _scripts.size())
+	if (idx < 0 || static_cast<uint32>(idx) >= _scripts.size())
 		return nullptr;
-	return _scripts[(uint32)idx].get();
+	return _scripts[static_cast<uint32>(idx)].get();
 }
 
 const byte *Stage::nodeRecord(uint32 node) const {
 	if (node >= _nodeCount || _master < 0)
 		return nullptr;
-	const byte *hdr = engineBase((uint32)_master);
+	const byte *hdr = engineBase(static_cast<uint32>(_master));
 	if (!hdr)
 		return nullptr;
 	const byte *rec = hdr + kNodeTableOffset + node * kNodeRecordStride;
@@ -87,14 +87,14 @@ const byte *Stage::buttonTable(uint32 node, uint32 &count, uint32 &length) const
 	int idx = resourceIndexById(tableId);
 	if (idx < 0)
 		return nullptr;
-	const Archive::Resource &res = _archive.getResource((uint32)idx);
+	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(idx));
 	if (res.length < kButtonCountOffset + 4)
 		return nullptr;
-	const byte *table = payload((uint32)idx);
+	const byte *table = payload(static_cast<uint32>(idx));
 	if (!table)
 		return nullptr;
 	uint32 c = READ_LE_UINT32(table + kButtonCountOffset);
-	if (kButtonRecordsOffset + (uint64)c * kButtonRecordStride > res.length)
+	if (kButtonRecordsOffset + static_cast<uint64>(c) * kButtonRecordStride > res.length)
 		return nullptr;
 	count = c;
 	length = res.length;
@@ -124,13 +124,13 @@ Common::String Stage::nodeName(uint32 node) const {
 	uint len = *p;
 	if (len > kNodeRecordStride - kNodeNameOffset - 1)
 		len = kNodeRecordStride - kNodeNameOffset - 1;
-	return Common::String((const char *)p + 1, len);
+	return Common::String(reinterpret_cast<const char *>(p ) + 1, len);
 }
 
 int Stage::findNode(const Common::String &name) const {
 	for (uint32 i = 0; i < _nodeCount; ++i)
 		if (nodeName(i).equalsIgnoreCase(name))
-			return (int)i;
+			return static_cast<int>(i);
 	return -1;
 }
 
@@ -139,9 +139,9 @@ Common::String Stage::hitTestButton(uint32 node, int16 x, int16 y) const {
 	const byte *table = buttonTable(node, count, length);
 	if (!table)
 		return Common::String();
-	for (int i = (int)count - 1; i >= 0; --i) {
-		const byte *rec = table + kButtonRecordsOffset + (uint32)i * kButtonRecordStride;
-		if (kButtonRecordsOffset + (uint32)i * kButtonRecordStride + kButtonRecordStride > length)
+	for (int i = static_cast<int>(count) - 1; i >= 0; --i) {
+		const byte *rec = table + kButtonRecordsOffset + static_cast<uint32>(i) * kButtonRecordStride;
+		if (kButtonRecordsOffset + static_cast<uint32>(i) * kButtonRecordStride + kButtonRecordStride > length)
 			break;
 		if (pointInButtonRect(rec, x, y))
 			return pascalString(rec + kButtonNameOffset);
@@ -189,7 +189,7 @@ bool Stage::open(const Common::String &name) {
 
 	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
 		if (!_archive.getResource(i).empty && _archive.getResource(i).info == kMasterHeaderInfoTag) {
-			_master = (int)i;
+			_master = static_cast<int>(i);
 			break;
 		}
 	}
@@ -198,7 +198,7 @@ bool Stage::open(const Common::String &name) {
 		return false;
 	}
 
-	const byte *hdr = engineBase((uint32)_master);
+	const byte *hdr = engineBase(static_cast<uint32>(_master));
 	if (!hdr || hdr + kNodeTableOffset > _fileData.end()) {
 		warning("Cyberflix: stage '%s' master header truncated", name.c_str());
 		_master = -1;
@@ -210,7 +210,7 @@ bool Stage::open(const Common::String &name) {
 	_nodeCount = READ_LE_UINT32(hdr + kNodeCountOffset);
 
 	// Bound the node table against the file so a corrupt count can't run off.
-	const byte *tableEnd = hdr + kNodeTableOffset + (uint32)_nodeCount * kNodeRecordStride;
+	const byte *tableEnd = hdr + kNodeTableOffset + static_cast<uint32>(_nodeCount) * kNodeRecordStride;
 	if (tableEnd > _fileData.end()) {
 		warning("Cyberflix: stage '%s' node table overruns file (count %u)", name.c_str(), _nodeCount);
 		_nodeCount = 0;
@@ -264,10 +264,10 @@ bool Stage::renderNode(uint32 node, FrameImage &out) {
 					_name.c_str(), n, imgId);
 			return false;
 		}
-		const byte *frame = engineBase((uint32)idx);
+		const byte *frame = engineBase(static_cast<uint32>(idx));
 		if (!frame)
 			return false;
-		uint32 frameLen = _archive.getResource((uint32)idx).length + 4; // payload + info word
+		uint32 frameLen = _archive.getResource(static_cast<uint32>(idx)).length + 4; // payload + info word
 		if (seq.applyFrame(frame, frameLen) == 0) {
 			warning("Cyberflix: stage '%s' node %u frame decode failed", _name.c_str(), n);
 			return false;
