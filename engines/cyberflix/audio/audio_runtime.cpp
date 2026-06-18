@@ -25,6 +25,7 @@
 #include "common/file.h"
 #include "common/memstream.h"
 #include "common/path.h"
+#include "common/ptr.h"
 #include "common/util.h"
 
 #include "audio/audiostream.h"
@@ -331,12 +332,11 @@ bool AudioRuntime::startThemeStream(CyberflixEngine &engine, const Common::Share
 	if (_themeIntroSamples == 0 && _themeLoopSamples == 0)
 		return false;
 
-	Audio::AudioStream *stream = new ThemeAudioStream(track, startSample);
+	Common::ScopedPtr<Audio::AudioStream> stream(new ThemeAudioStream(track, startSample));
 	if (stream->endOfStream()) {
-		delete stream;
 		return false;
 	}
-	engine._mixer->playStream(Audio::Mixer::kMusicSoundType, &_themeHandle, stream);
+	engine._mixer->playStream(Audio::Mixer::kMusicSoundType, &_themeHandle, stream.release());
 	engine._mixer->setChannelVolume(_themeHandle, effectiveAudioVolume(track->volume));
 	_themeTrackName = track->name;
 	_themeStartSample = startSample;

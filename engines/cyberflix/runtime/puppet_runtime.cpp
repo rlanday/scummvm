@@ -24,6 +24,7 @@
 #include "common/debug.h"
 #include "common/events.h"
 #include "common/path.h"
+#include "common/ptr.h"
 #include "common/system.h"
 #include "common/util.h"
 
@@ -455,14 +456,16 @@ const Graphics::Font *PuppetRuntime::textFont(int size) {
 	// we use the bundled Liberation Sans fallback, as other ScummVM engines do
 	// for Arial-like text.
 	for (const char *const *name = arialNames; *name; ++name) {
-		Common::SeekableReadStream *stream = SearchMan.createReadStreamForMember(
-				Common::Path(*name, Common::Path::kNoSeparator));
+		Common::ScopedPtr<Common::SeekableReadStream> stream(SearchMan.createReadStreamForMember(
+				Common::Path(*name, Common::Path::kNoSeparator)));
 		if (!stream)
 			continue;
-		_nativeTextFont.reset(Graphics::loadTTFFont(stream, DisposeAfterUse::YES,
+		_nativeTextFont.reset(Graphics::loadTTFFont(stream.get(), DisposeAfterUse::YES,
 				size, Graphics::kTTFSizeModeCharacter, 0, 0, renderMode));
-		if (_nativeTextFont)
+		if (_nativeTextFont) {
+			stream.release();
 			return _nativeTextFont.get();
+		}
 	}
 
 	_nativeTextFont.reset(Graphics::loadTTFFontFromArchive("LiberationSans-Regular.ttf",

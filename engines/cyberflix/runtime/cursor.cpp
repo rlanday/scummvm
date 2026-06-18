@@ -22,6 +22,7 @@
 #include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/fs.h"
+#include "common/ptr.h"
 
 #include "common/formats/winexe_pe.h"
 
@@ -53,11 +54,14 @@ Common::PEResources *CursorRuntime::gameExe() {
 				.getChild(candidates[c][1]).getChild(candidates[c][2]);
 		if (!node.exists())
 			continue;
-		Common::SeekableReadStream *stream = node.createReadStream();
+		Common::ScopedPtr<Common::SeekableReadStream> stream(node.createReadStream());
 		if (!stream)
 			continue;
 		Common::ScopedPtr<Common::PEResources> exe(new Common::PEResources());
-		if (exe->loadFromEXE(stream, DisposeAfterUse::YES)) {
+		bool loaded = exe->loadFromEXE(stream.get(), DisposeAfterUse::YES);
+		stream.release();
+		if (loaded) {
+			// Keep the parsed PE resources cached for later cursor lookups.
 			_exe.reset(exe.release());
 			return _exe.get();
 		}
