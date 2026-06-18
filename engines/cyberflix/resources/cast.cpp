@@ -28,10 +28,7 @@
 
 #include "cyberflix/cast.h"
 #include "cyberflix/image.h"
-#include "cyberflix/resource_helpers.h" // kMasterHeaderInfoTag
 #include "cyberflix/resource_helpers.h"
-
-#include <math.h>
 
 namespace Cyberflix {
 
@@ -179,33 +176,6 @@ Common::SharedPtr<Cast::Actor> Cast::findActor(const Common::String &name) {
 	return Common::SharedPtr<Actor>();
 }
 
-static int angleDistance(int a, int b) {
-	int d = ABS(a - b) & 0xff;
-	return d > 128 ? 256 - d : d;
-}
-
-static int16 nativeTrigSin(int angle) {
-	double v = sin((double)(angle & 0xff) * 6.28318530717958647692 / 256.0) * 16384.0;
-	return (int16)(v >= 0.0 ? v + 0.5 : v - 0.5);
-}
-
-static int16 nativeTrigCos(int angle) {
-	double v = cos((double)(angle & 0xff) * 6.28318530717958647692 / 256.0) * 16384.0;
-	return (int16)(v >= 0.0 ? v + 0.5 : v - 0.5);
-}
-
-static int fixedShift14(int value) {
-	return (value + (value < 0 ? 0x3fff : 0)) >> 14;
-}
-
-static int nativePointAngle(int dx, int dy) {
-	int deg = (int)(atan2((double)dx, (double)dy) * (256.0 / 6.28318530717958647692));
-	deg %= 256;
-	if (deg < 0)
-		deg += 256;
-	return deg;
-}
-
 bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 		Common::Rect &cellRect, int16 &regV, int16 &regH,
 		int16 &cellScale) const {
@@ -245,7 +215,7 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 			break;
 		if (READ_LE_UINT16(c + kCellIdOffset) != (uint16)(poseId - 1))
 			continue;
-		int dist = angleDistance(READ_LE_INT16(c + kCellAngleOffset), angle);
+		int dist = nativeAngleDistance(READ_LE_INT16(c + kCellAngleOffset), angle);
 		if (dist < bestDist) {
 			bestDist = dist;
 			best = c;

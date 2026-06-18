@@ -25,8 +25,11 @@
 #include "common/array.h"
 #include "common/scummsys.h"
 #include "common/str.h"
+#include "common/util.h"
 
 #include "cyberflix/archive.h"
+
+#include <math.h>
 
 namespace Cyberflix {
 
@@ -57,6 +60,33 @@ inline Common::String readPascalString(const byte *p,
 		len = (uint)(fileData.end() - s);
 	}
 	return Common::String((const char *)s, len);
+}
+
+inline int nativeAngleDistance(int a, int b) {
+	int d = ABS(a - b) & 0xff;
+	return d > 128 ? 256 - d : d;
+}
+
+inline int16 nativeTrigSin(int angle) {
+	double v = sin((double)(angle & 0xff) * 6.28318530717958647692 / 256.0) * 16384.0;
+	return (int16)(v >= 0.0 ? v + 0.5 : v - 0.5);
+}
+
+inline int16 nativeTrigCos(int angle) {
+	double v = cos((double)(angle & 0xff) * 6.28318530717958647692 / 256.0) * 16384.0;
+	return (int16)(v >= 0.0 ? v + 0.5 : v - 0.5);
+}
+
+inline int fixedShift14(int value) {
+	return (value + (value < 0 ? 0x3fff : 0)) >> 14;
+}
+
+inline int nativePointAngle(int dx, int dy) {
+	int deg = (int)(atan2((double)dx, (double)dy) * (256.0 / 6.28318530717958647692));
+	deg %= 256;
+	if (deg < 0)
+		deg += 256;
+	return deg;
 }
 
 } // End of namespace Cyberflix
