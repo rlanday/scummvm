@@ -29,68 +29,6 @@
 
 namespace Cyberflix {
 
-static void clearEdgeConnectedMatte(CelImage &cel) {
-	if (!cel.width || !cel.height || cel.opaque.empty())
-		return;
-
-	// Actor CST frames are rectangular cels, but only the figure should be drawn.
-	//
-	// Terms:
-	// - Edge matte: the solid background area touching the cel border. It
-	//   surrounds the actor so the artwork can live in a rectangle, but it is not
-	//   part of the visible actor.
-	// - Span: a horizontal run of candidate pixels in one decoded cel row.
-	// - Sprite depth threshold: the projected distance bucket for this world
-	//   sprite. Native code computes it from the sprite's camera depth
-	//   (`zClippedDepth / nearPlane`) and passes it to the world blitter; row
-	//   spans whose stored coverage/depth byte is below that threshold are
-	//   rejected, so background/matte runs do not draw over the SET image.
-	//
-	// TI.EXE uses that span filter in FUN_0043bd60 -> FUN_0043c3a0. ScummVM does
-	// not yet preserve the native per-row span bytes, so we approximate the same
-	// visible result by clearing only the opaque component connected to the cel
-	// border. This is the standard seed-fill/connected-component algorithm; see
-	// Foley/van Dam, Computer Graphics: Principles and Practice, region filling.
-	Common::Array<uint32> queue;
-	auto enqueue = [&](uint x, uint y) {
-		uint32 idx = y * cel.width + x;
-		if (!cel.opaque[idx])
-			return;
-		cel.opaque[idx] = 2;
-		queue.push_back(idx);
-	};
-
-	for (uint x = 0; x < cel.width; ++x) {
-		enqueue(x, 0);
-		enqueue(x, cel.height - 1);
-	}
-	for (uint y = 1; y + 1 < cel.height; ++y) {
-		enqueue(0, y);
-		enqueue(cel.width - 1, y);
-	}
-
-	for (uint q = 0; q < queue.size(); ++q) {
-		const uint32 idx = queue[q];
-		const uint x = idx % cel.width;
-		const uint y = idx / cel.width;
-		if (x > 0)
-			enqueue(x - 1, y);
-		if (x + 1 < cel.width)
-			enqueue(x + 1, y);
-		if (y > 0)
-			enqueue(x, y - 1);
-		if (y + 1 < cel.height)
-			enqueue(x, y + 1);
-	}
-
-	for (uint32 i = 0; i < cel.opaque.size(); ++i) {
-		if (cel.opaque[i] == 2) {
-			cel.opaque[i] = 0;
-			cel.pixels[i] = 0;
-		}
-	}
-}
-
 const byte *Cast::engineBase(uint32 index) const {
 	if (index >= _archive.getResourceCount())
 		return nullptr;
@@ -281,7 +219,6 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 				actor.name.c_str(), frameRes);
 		return false;
 	}
-	clearEdgeConnectedMatte(cel);
 
 	cellRect.top = READ_LE_INT16(best + kCellRectOffset);
 	cellRect.left = READ_LE_INT16(best + kCellRectOffset + 2);
