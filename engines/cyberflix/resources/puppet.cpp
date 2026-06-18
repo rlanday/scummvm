@@ -21,9 +21,6 @@
 
 #include "common/debug.h"
 #include "common/endian.h"
-#include "common/file.h"
-#include "common/memstream.h"
-#include "common/path.h"
 #include "common/ptr.h"
 #include "graphics/surface.h"
 
@@ -37,10 +34,7 @@ namespace Cyberflix {
 const byte *Puppet::engineBase(uint32 index) const {
 	if (index >= _archive.getResourceCount())
 		return nullptr;
-	const Archive::Resource &res = _archive.getResource(index);
-	if (res.empty || res.dataOffset < 4 || res.dataOffset > _fileData.size())
-		return nullptr;
-	return _fileData.begin() + res.dataOffset - 4;
+	return resourceEngineBase(_fileData, _archive.getResource(index));
 }
 
 const byte *Puppet::payload(uint32 index) const {
@@ -53,10 +47,7 @@ const byte *Puppet::payload(uint32 index) const {
 }
 
 int Puppet::resourceIndexById(uint32 id) const {
-	for (uint32 i = 0; i < _archive.getResourceCount(); ++i)
-		if (!_archive.getResource(i).empty && _archive.getResource(i).id == id)
-			return (int)i;
-	return -1;
+	return Cyberflix::resourceIndexById(_archive, id);
 }
 
 Common::String Puppet::pascalString(const byte *p) const {
@@ -89,23 +80,8 @@ bool Puppet::open(const Common::String &name) {
 	_sourceName = name;
 	_sourceName.toLowercase();
 
-	Common::File file;
-	if (!file.open(Common::Path(name))) {
-		warning("Cyberflix: could not open puppet '%s'", name.c_str());
+	if (!openArchiveFile(name, "puppet", _fileData, _archive))
 		return false;
-	}
-	uint32 size = (uint32)file.size();
-	_fileData.resize(size);
-	if (file.read(_fileData.begin(), size) != size) {
-		warning("Cyberflix: could not read puppet '%s'", name.c_str());
-		return false;
-	}
-	file.close();
-
-	if (!_archive.open(new Common::MemoryReadStream(_fileData.begin(), size, DisposeAfterUse::NO), name)) {
-		warning("Cyberflix: '%s' is not a valid puppet container", name.c_str());
-		return false;
-	}
 
 	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
 		if (!_archive.getResource(i).empty && _archive.getResource(i).info == kMasterHeaderInfoTag) {

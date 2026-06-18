@@ -21,9 +21,6 @@
 
 #include "common/debug.h"
 #include "common/endian.h"
-#include "common/file.h"
-#include "common/memstream.h"
-#include "common/path.h"
 #include "common/ptr.h"
 
 #include "cyberflix/shop.h"
@@ -34,19 +31,11 @@ namespace Cyberflix {
 const byte *Shop::engineBase(uint32 index) const {
 	if (index >= _archive.getResourceCount())
 		return nullptr;
-	const Archive::Resource &res = _archive.getResource(index);
-	// All offsets are in the runtime's "record+8" frame, four bytes before the
-	// payload (== record+12). See files/decomp/stage-notes.md.
-	if (res.empty || res.dataOffset < 4 || res.dataOffset > _fileData.size())
-		return nullptr;
-	return _fileData.begin() + res.dataOffset - 4;
+	return resourceEngineBase(_fileData, _archive.getResource(index));
 }
 
 int Shop::resourceIndexById(uint32 id) const {
-	for (uint32 i = 0; i < _archive.getResourceCount(); ++i)
-		if (!_archive.getResource(i).empty && _archive.getResource(i).id == id)
-			return (int)i;
-	return -1;
+	return Cyberflix::resourceIndexById(_archive, id);
 }
 
 Common::String Shop::pascalString(const byte *p) const {
@@ -60,23 +49,8 @@ bool Shop::open(const Common::String &name) {
 	_script.reset();
 	_name = name;
 
-	Common::File file;
-	if (!file.open(Common::Path(name))) {
-		warning("Cyberflix: could not open shop '%s'", name.c_str());
+	if (!openArchiveFile(name, "shop", _fileData, _archive))
 		return false;
-	}
-	uint32 size = (uint32)file.size();
-	_fileData.resize(size);
-	if (file.read(_fileData.begin(), size) != size) {
-		warning("Cyberflix: could not read shop '%s'", name.c_str());
-		return false;
-	}
-	file.close();
-
-	if (!_archive.open(new Common::MemoryReadStream(_fileData.begin(), size, DisposeAfterUse::NO), name)) {
-		warning("Cyberflix: '%s' is not a valid shop container", name.c_str());
-		return false;
-	}
 
 	// Locate the master header by its info tag. NOT by id: HOUSE.SHP carries
 	// an empty placeholder slot with resource id 0 ahead of the real master.

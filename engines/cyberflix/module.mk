@@ -9,6 +9,7 @@ MODULE_OBJS = \
 	resources/cast.o \
 	resources/image.o \
 	resources/puppet.o \
+	resources/resource_helpers.o \
 	resources/set.o \
 	resources/shop.o \
 	resources/stage.o \

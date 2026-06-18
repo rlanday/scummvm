@@ -48,6 +48,16 @@ inline const byte *resourceEngineBase(const Common::Array<byte> &fileData,
 	return fileData.begin() + res.dataOffset - 4;
 }
 
+bool openArchiveFile(const Common::String &name, const char *kind,
+		Common::Array<byte> &fileData, Archive &archive);
+
+inline int resourceIndexById(const Archive &archive, uint32 id) {
+	for (uint32 i = 0; i < archive.getResourceCount(); ++i)
+		if (!archive.getResource(i).empty && archive.getResource(i).id == id)
+			return (int)i;
+	return -1;
+}
+
 inline Common::String readPascalString(const byte *p,
 		const Common::Array<byte> &fileData, bool allowTruncated = false) {
 	if (!p || p < fileData.begin() || p >= fileData.end())
