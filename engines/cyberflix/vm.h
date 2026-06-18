@@ -584,9 +584,10 @@ public:
 	virtual void requestQuit() {}
 };
 
-class VMHost : public VMMovieHost, public VMNavigationHost, public VMSystemHost,
-		public VMAudioHost, public VMInputHost, public VMActorHost,
-		public VMInteractionHost, public VMSaveHost {
+class VMHost : public virtual VMMovieHost, public virtual VMNavigationHost,
+		public virtual VMSystemHost, public virtual VMAudioHost,
+		public virtual VMInputHost, public virtual VMActorHost,
+		public virtual VMInteractionHost, public virtual VMSaveHost {
 public:
 	~VMHost() override {}
 };

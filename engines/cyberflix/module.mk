@@ -29,6 +29,13 @@ MODULE_OBJS = \
 	runtime/timing.o \
 	saveload.o \
 	ui/console.o \
+	vm_host.o \
+	vm_host_actor.o \
+	vm_host_audio.o \
+	vm_host_movie.o \
+	vm_host_props.o \
+	vm_host_puppet.o \
+	vm_host_set_stage.o \
 	vm/builtins.o \
 	vm/script.o \
 	vm/vm.o
