@@ -28,6 +28,8 @@
 #include "graphics/paletteman.h"
 #include "graphics/surface.h"
 
+#include "gui/message.h"
+
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/puppet.h"
 #include "cyberflix/set.h"
@@ -138,6 +140,10 @@ void CyberflixEngine::blackScreen() {
 
 void CyberflixEngine::message(const Common::String &text) {
 	debug(1, "Cyberflix message: %s", text.c_str());
+	if (!text.empty()) {
+		GUI::MessageDialog dialog(text);
+		dialog.runModal();
+	}
 }
 
 void CyberflixEngine::flushEvents() {
