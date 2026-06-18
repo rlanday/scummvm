@@ -238,11 +238,13 @@ bool Cast::renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
 
 	const int relX = actor.x - camera.cameraX;
 	const int relY = actor.y - camera.cameraY;
-	// Native 8-bit-angle yaw rotation followed by pinhole perspective
-	// projection: x' = x*f/z, y' = y*f/z. See Foley/van Dam et al.,
-	// Computer Graphics: Principles and Practice, viewing pipeline chapter.
-	const int sinH = nativeTrigSin(camera.heading);
-	const int cosH = nativeTrigCos(camera.heading);
+	// Native yaw rotation followed by pinhole perspective projection:
+	// x' = x*f/z, y' = y*f/z. The SET camera heading is a 16-bit table angle
+	// (TI.EXE FUN_00442e90 loads DAT_00486744/DAT_00486754 from sin/cos tables),
+	// not the 8-bit actor-facing angle used by actordeg(). See Foley/van Dam
+	// et al., Computer Graphics: Principles and Practice, viewing pipeline chapter.
+	const int sinH = nativeCameraTrigSin(camera.heading);
+	const int cosH = nativeCameraTrigCos(camera.heading);
 	const int projectedDepth = fixedShift14(relY * sinH + relX * cosH);
 	if (projectedDepth < 1)
 		return false;
