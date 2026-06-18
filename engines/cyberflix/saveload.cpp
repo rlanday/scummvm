@@ -653,6 +653,18 @@ static void restoreCastState(ActorRuntime &actorRuntime, const Common::Array<Cas
 	}
 }
 
+static void restoreTitanicLegacyCastState(CyberflixEngine &engine) {
+	// Early ScummVM CyberFlix saves wrote an empty CAST chunk. Native Titanic
+	// keeps GANG.CST open after boot (`opencastfile("gang.cst")`, then
+	// `sendtocast("gang.cst", initactors())`), and room scripts such as
+	// GYM.SET's openset() assume sendtoactor("penny", ...) can find that global
+	// actor table. Recreate that boot-time cast state only for those legacy saves;
+	// modern saves with real CAST contents restore exact per-actor runtime fields.
+	engine.actorRuntime().openCastFile(engine, "gang.cst");
+	Common::Array<Value> noArgs;
+	engine.actorRuntime().sendToCast(engine, "gang.cst", "initactors", noArgs);
+}
+
 static void restoreTrackState(AudioRuntime &audioRuntime, const Common::Array<TrackState> &trackStates) {
 	for (uint i = 0; i < trackStates.size(); ++i) {
 		Common::SharedPtr<ThemeTrack> track(new ThemeTrack());
@@ -1143,6 +1155,13 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	setSnapshot.transitionResource = header.setTransitionResource;
 	setSnapshot.transitionFrame = header.setTransitionFrame;
 	setRuntime().restoreSnapshot(setSnapshot);
+
+	if (castStates.empty() && getGameType() == GType_Titanic) {
+		restoreTitanicLegacyCastState(*this);
+		Common::Array<Value> noArgs;
+		if (setRuntime().set() && setRuntime().set()->isOpen())
+			dispatchSetMessage("openset", noArgs);
+	}
 
 	if (setRuntime().visible() && setRuntime().set() && setRuntime().set()->isOpen() && setRuntime().scene() >= 0 &&
 			!isLoadedReplacementStage(stageRuntime().stage())) {
