@@ -32,6 +32,7 @@
 
 namespace Cyberflix {
 
+/** Copy @p pcm into a malloc-owned buffer and transfer it to makeRawStream(). */
 inline Audio::SeekableAudioStream *makeOwnedRawPcmStream(const Common::Array<byte> &pcm) {
 	if (pcm.empty())
 		return nullptr;
