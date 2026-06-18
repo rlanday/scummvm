@@ -415,6 +415,7 @@ public:
 	virtual void actorSpeed(const Common::String &name, int speed) {}
 	virtual void actorScale(const Common::String &name, int scale) {}
 	virtual void actorTurn(const Common::String &name, int turn) {}
+	virtual void turnToDeg(const Common::String &name, int deg) {}
 	virtual int starXYZ(const Common::String &name, int selector) { return 0; }
 };
 

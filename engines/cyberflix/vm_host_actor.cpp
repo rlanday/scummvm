@@ -112,6 +112,10 @@ void CyberflixActorVMHost::actorTurn(const Common::String &name, int turn) {
 	engine().actorRuntime().actorTurn(name, turn);
 }
 
+void CyberflixActorVMHost::turnToDeg(const Common::String &name, int deg) {
+	engine().actorRuntime().turnToDeg(engine(), name, deg);
+}
+
 int CyberflixActorVMHost::starXYZ(const Common::String &name, int selector) {
 	return engine().actorRuntime().starXYZ(engine(), name, selector);
 }

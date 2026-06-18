@@ -73,6 +73,7 @@ public:
 	void actorSpeed(const Common::String &name, int speed);
 	void actorScale(CyberflixEngine &engine, const Common::String &name, int scale);
 	void actorTurn(const Common::String &name, int turn);
+	void turnToDeg(CyberflixEngine &engine, const Common::String &name, int deg);
 	int starXYZ(CyberflixEngine &engine, const Common::String &name, int selector) const;
 
 	Common::Array<Common::SharedPtr<Cast> > &casts() { return _casts; }

@@ -170,6 +170,10 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 		if (args.size() >= 2)
 			_actorHost->actorTurn(args[0].strValue, args[1].intValue);
 		return true;
+	case Script::kMethodTurnToDeg: // turntodeg(actor, deg): native queues a turn; apply current target angle.
+		if (args.size() >= 2)
+			_actorHost->turnToDeg(args[0].strValue, args[1].intValue);
+		return true;
 	case Script::kMethodActorOwner: // actorowner(name[, owner]) -> FUN_00422210
 		if (args.size() >= 2)
 			result = Value::makeString(_actorHost->actorOwner(args[0].strValue, &args[1].strValue));

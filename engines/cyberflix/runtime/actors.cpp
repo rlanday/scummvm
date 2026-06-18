@@ -403,6 +403,19 @@ void ActorRuntime::actorTurn(const Common::String &name, int turn) {
 	ref.actor->turn = turn;
 }
 
+void ActorRuntime::turnToDeg(CyberflixEngine &engine, const Common::String &name, int deg) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: turntodeg('%s'): no such actor", name.c_str());
+		return;
+	}
+	const int16 newAngle = static_cast<int16>(deg & 0xff);
+	if (ref.actor->angle != newAngle) {
+		ref.actor->angle = newAngle;
+		engine._propRuntime.setDirty(true);
+	}
+}
+
 int ActorRuntime::starXYZ(CyberflixEngine &engine, const Common::String &name, int selector) const {
 	if (!engine._setRuntime.set() || !engine._setRuntime.set()->isOpen())
 		return 0;

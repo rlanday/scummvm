@@ -167,6 +167,7 @@ public:
 		kMethodSendToFlat       = 0x2F25,
 		kMethodSendToStage      = 0x2F26,
 		kMethodQuit             = 0x2F27,
+		kMethodTurnToDeg        = 0x2F28,
 		kMethodFlushEvents      = 0x2F29,
 		kMethodPuppetGrab       = 0x2F2A,
 		kMethodPropInstance     = 0x2F2C,

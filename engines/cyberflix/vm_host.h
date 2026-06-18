@@ -155,6 +155,7 @@ public:
 	void actorSpeed(const Common::String &name, int speed) override;
 	void actorScale(const Common::String &name, int scale) override;
 	void actorTurn(const Common::String &name, int turn) override;
+	void turnToDeg(const Common::String &name, int deg) override;
 	int starXYZ(const Common::String &name, int selector) override;
 
 private:
