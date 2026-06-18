@@ -284,8 +284,9 @@ static bool parseHeaderChunk(Common::SeekableReadStream &in, int64 end, HeaderSt
 	return !in.err();
 }
 
-static bool parsePathChunk(Common::SeekableReadStream &in, int64 end, Common::String (&pathSlots)[9]) {
-	for (uint i = 0; i < 9; ++i)
+static bool parsePathChunk(Common::SeekableReadStream &in, int64 end,
+		Common::String (&pathSlots)[PathRuntime::kPathSlotCount]) {
+	for (uint i = 0; i < PathRuntime::kPathSlotCount; ++i)
 		if (!readSaveString(in, end, pathSlots[i]))
 			return false;
 	return !in.err();
@@ -513,6 +514,266 @@ static bool parseCricketChunk(Common::SeekableReadStream &in, int64 end,
 	return !in.err();
 }
 
+static void restoreShopState(PropRuntime &propRuntime, const Common::Array<ShopState> &shopStates) {
+	for (uint i = 0; i < shopStates.size(); ++i) {
+		Common::SharedPtr<Shop> shop(new Shop());
+		if (!shop->open(shopStates[i].name)) {
+			warning("Cyberflix: load could not reopen shop '%s'", shopStates[i].name.c_str());
+			continue;
+		}
+		for (uint p = 0; p < shopStates[i].props.size(); ++p) {
+			const PropState &state = shopStates[i].props[p];
+			Shop::Prop *prop = shop->findProp(state.name);
+			if (!prop) {
+				warning("Cyberflix: load shop '%s' missing prop '%s'",
+						shopStates[i].name.c_str(), state.name.c_str());
+				continue;
+			}
+			prop->setName = state.setName;
+			prop->sceneName = state.sceneName;
+			prop->visible = state.visible;
+			prop->mode = state.mode;
+			prop->y = state.y;
+			prop->x = state.x;
+			prop->z = state.z;
+			prop->angle = state.angle;
+			prop->depth = state.depth;
+			prop->scale = state.scale;
+			prop->zClip = state.zClip;
+			prop->value = state.value;
+			prop->shapeName = state.shapeName;
+			prop->owner = state.owner;
+		}
+		propRuntime.shops().push_back(shop);
+	}
+}
+
+static void restoreTrackState(AudioRuntime &audioRuntime, const Common::Array<TrackState> &trackStates) {
+	for (uint i = 0; i < trackStates.size(); ++i) {
+		Common::SharedPtr<ThemeTrack> track(new ThemeTrack());
+		track->sourceName = trackStates[i].sourceName;
+		track->name = trackStates[i].name;
+		track->fileData = trackStates[i].fileData;
+		track->playlist = trackStates[i].playlist;
+		track->loopIdx = trackStates[i].loopIdx;
+		track->volume = trackStates[i].volume;
+		for (uint c = 0; c < trackStates[i].cues.size(); ++c) {
+			ThemeTrack::Cue cue;
+			cue.name = trackStates[i].cues[c].name;
+			cue.resId = trackStates[i].cues[c].resId;
+			cue.flags = trackStates[i].cues[c].flags;
+			cue.dataOffset = trackStates[i].cues[c].dataOffset;
+			cue.length = trackStates[i].cues[c].length;
+			track->cues.push_back(cue);
+		}
+		for (uint c = 0; c < trackStates[i].sfxCues.size(); ++c) {
+			ThemeTrack::Cue cue;
+			cue.name = trackStates[i].sfxCues[c].name;
+			cue.resId = trackStates[i].sfxCues[c].resId;
+			cue.flags = trackStates[i].sfxCues[c].flags;
+			cue.dataOffset = trackStates[i].sfxCues[c].dataOffset;
+			cue.length = trackStates[i].sfxCues[c].length;
+			track->sfxCues.push_back(cue);
+		}
+		audioRuntime.tracks().push_back(track);
+	}
+}
+
+static void restoreCueVolumes(AudioRuntime &audioRuntime, const Common::Array<CueVolumeState> &cueVolumeStates) {
+	for (uint i = 0; i < cueVolumeStates.size(); ++i) {
+		for (uint t = 0; t < audioRuntime.tracks().size(); ++t) {
+			if (!cueVolumeStates[i].trackName.empty() &&
+					!audioRuntime.tracks()[t]->name.equalsIgnoreCase(cueVolumeStates[i].trackName) &&
+					!audioRuntime.tracks()[t]->sourceName.equalsIgnoreCase(cueVolumeStates[i].trackName))
+				continue;
+			for (uint c = 0; c < audioRuntime.tracks()[t]->sfxCues.size(); ++c) {
+				if (audioRuntime.tracks()[t]->sfxCues[c].name.equalsIgnoreCase(cueVolumeStates[i].cueName))
+					audioRuntime.tracks()[t]->sfxCues[c].volume = CLIP(cueVolumeStates[i].volume, 0, 255);
+			}
+		}
+	}
+}
+
+static void restoreLoopState(LoopRuntime &loopRuntime, bool loopsPaused,
+		const Common::Array<LoopRuntime::ScheduledLoop> &loopStates,
+		bool cricketsPaused, const Common::Array<LoopRuntime::CricketState> &cricketStates) {
+	loopRuntime.setLoopsPaused(loopsPaused);
+	for (uint i = 0; i < loopStates.size(); ++i)
+		loopRuntime.restoreLoop(loopStates[i]);
+
+	loopRuntime.setCricketsPaused(cricketsPaused);
+	for (uint i = 0; i < cricketStates.size(); ++i)
+		loopRuntime.restoreCricket(cricketStates[i]);
+}
+
+static void writeCueArray(Common::WriteStream &out, const Common::Array<ThemeTrack::Cue> &cues) {
+	out.writeUint32LE((uint32)cues.size());
+	for (uint i = 0; i < cues.size(); ++i) {
+		writeSaveString(out, cues[i].name);
+		out.writeUint32LE(cues[i].resId);
+		out.writeByte(cues[i].flags);
+		out.writeUint32LE(cues[i].dataOffset);
+		out.writeUint32LE(cues[i].length);
+	}
+}
+
+static void writeInactiveSoundSlot(Common::WriteStream &out) {
+	out.writeByte(0);
+	writeSaveString(out, Common::String());
+	out.writeUint32LE(0);
+	out.writeUint32LE(0);
+}
+
+static void writeShopChunk(Common::WriteStream &out,
+		const Common::Array<Common::SharedPtr<Shop> > &shops) {
+	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
+	payload.writeUint32LE((uint32)shops.size());
+	for (uint s = 0; s < shops.size(); ++s) {
+		const Shop &shop = *shops[s];
+		writeSaveString(payload, shop.name());
+		payload.writeUint32LE(shop.propCount());
+		for (uint p = 0; p < shop.propCount(); ++p) {
+			const Shop::Prop &prop = shop.prop(p);
+			writeSaveString(payload, prop.name);
+			writeSaveString(payload, prop.setName);
+			writeSaveString(payload, prop.sceneName);
+			payload.writeUint32LE(prop.masterResId);
+			payload.writeUint32LE(prop.scriptResId);
+			payload.writeByte(prop.visible ? 1 : 0);
+			payload.writeUint16LE(prop.mode);
+			payload.writeSint16LE(prop.y);
+			payload.writeSint16LE(prop.x);
+			payload.writeSint16LE(prop.z);
+			payload.writeSint16LE(prop.angle);
+			payload.writeSint16LE(prop.depth);
+			payload.writeSint32LE(prop.scale);
+			payload.writeSint32LE(prop.zClip);
+			payload.writeSint32LE(prop.value);
+			writeSaveString(payload, prop.shapeName);
+			writeSaveString(payload, prop.owner);
+			payload.writeUint32LE((uint32)prop.shapes.size());
+			for (uint i = 0; i < prop.shapes.size(); ++i) {
+				payload.writeUint32LE(prop.shapes[i].resId);
+				writeSaveString(payload, prop.shapes[i].name);
+			}
+		}
+	}
+	writeChunk(out, "SHOP", payload);
+}
+
+static void writeTrackChunk(Common::WriteStream &out,
+		const Common::Array<Common::SharedPtr<ThemeTrack> > &tracks) {
+	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
+	payload.writeUint32LE((uint32)tracks.size());
+	for (uint t = 0; t < tracks.size(); ++t) {
+		const ThemeTrack &track = *tracks[t];
+		writeSaveString(payload, track.sourceName);
+		writeSaveString(payload, track.name);
+		writeSaveData(payload, track.fileData);
+		payload.writeUint32LE(track.loopIdx);
+		payload.writeSint32LE(track.volume);
+		payload.writeUint32LE((uint32)track.playlist.size());
+		for (uint i = 0; i < track.playlist.size(); ++i)
+			payload.writeUint16LE(track.playlist[i]);
+		writeCueArray(payload, track.cues);
+		writeCueArray(payload, track.sfxCues);
+	}
+	writeChunk(out, "TRAK", payload);
+}
+
+static void writeCueVolumeChunk(Common::WriteStream &out,
+		const Common::Array<Common::SharedPtr<ThemeTrack> > &tracks) {
+	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
+	uint32 count = 0;
+	for (uint t = 0; t < tracks.size(); ++t)
+		count += tracks[t]->sfxCues.size();
+	payload.writeUint32LE(count);
+	for (uint t = 0; t < tracks.size(); ++t) {
+		const ThemeTrack &track = *tracks[t];
+		for (uint c = 0; c < track.sfxCues.size(); ++c) {
+			writeSaveString(payload, track.name);
+			writeSaveString(payload, track.sfxCues[c].name);
+			payload.writeSint32LE(track.sfxCues[c].volume);
+		}
+	}
+	writeChunk(out, "SVOL", payload);
+}
+
+static void writeAudioChunk(Common::WriteStream &out, const AudioRuntime &audioRuntime,
+		Audio::Mixer *mixer) {
+	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
+	const bool themeActive = !audioRuntime.themeTrackName().empty() &&
+			mixer->isSoundHandleActive(audioRuntime.themeHandle());
+	const uint32 themeElapsedMillis = themeActive ?
+			mixer->getSoundElapsedTime(audioRuntime.themeHandle()) +
+			(uint32)((uint64)audioRuntime.themeStartSample() * 1000 / kAudioSampleRate) : 0;
+	payload.writeByte(themeActive ? 1 : 0);
+	writeSaveString(payload, themeActive ? audioRuntime.themeTrackName() : Common::String());
+	payload.writeUint32LE(themeElapsedMillis);
+	payload.writeUint32LE(audioRuntime.themeIntroSamples());
+	payload.writeUint32LE(audioRuntime.themeLoopSamples());
+	payload.writeUint32LE((uint32)audioRuntime.themeSpans().size());
+	for (uint i = 0; i < audioRuntime.themeSpans().size(); ++i) {
+		payload.writeUint32LE(audioRuntime.themeSpans()[i].startSample);
+		writeSaveString(payload, audioRuntime.themeSpans()[i].name);
+	}
+	// Keep the chunk fields stable, but match native persistence: live
+	// one-shot SFX/voice channels are not part of the durable save graph.
+	writeInactiveSoundSlot(payload);
+	writeInactiveSoundSlot(payload);
+	writeInactiveSoundSlot(payload);
+
+	writeChunk(out, "AUDI", payload);
+}
+
+static void writeVarsChunk(Common::WriteStream &out, const Common::HashMap<Common::String, Value> &vars) {
+	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
+	Common::Array<Common::String> keys;
+	for (Common::HashMap<Common::String, Value>::const_iterator it = vars.begin(); it != vars.end(); ++it)
+		keys.push_back(it->_key);
+	Common::sort(keys.begin(), keys.end());
+	payload.writeUint32LE((uint32)keys.size());
+	for (uint i = 0; i < keys.size(); ++i) {
+		Common::HashMap<Common::String, Value>::const_iterator value = vars.find(keys[i]);
+		writeSaveString(payload, keys[i]);
+		writeValue(payload, value->_value);
+	}
+	writeChunk(out, "VARS", payload);
+}
+
+static void writeLoopChunk(Common::WriteStream &out, const LoopRuntime &loopRuntime) {
+	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
+	const Common::Array<LoopRuntime::ScheduledLoop> &loops = loopRuntime.scheduledLoops();
+	payload.writeByte(loopRuntime.loopsPaused() ? 1 : 0);
+	payload.writeUint32LE((uint32)loops.size());
+	for (uint i = 0; i < loops.size(); ++i) {
+		const LoopRuntime::ScheduledLoop &loop = loops[i];
+		writeSaveString(payload, loop.kind);
+		writeSaveString(payload, loop.target);
+		writeSaveString(payload, loop.message);
+		payload.writeUint32LE(loop.remainingPasses > 0 ? (uint32)loop.remainingPasses : 0);
+	}
+	writeChunk(out, "LOOP", payload);
+}
+
+static void writeCricketChunk(Common::WriteStream &out, const LoopRuntime &loopRuntime) {
+	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
+	const Common::Array<LoopRuntime::CricketState> &crickets = loopRuntime.crickets();
+	payload.writeByte(loopRuntime.cricketsPaused() ? 1 : 0);
+	payload.writeUint32LE((uint32)crickets.size());
+	for (uint i = 0; i < crickets.size(); ++i) {
+		writeSaveString(payload, crickets[i].name);
+		payload.writeByte(crickets[i].paused ? 1 : 0);
+	}
+	writeChunk(out, "CRIK", payload);
+}
+
+static void writeEmptyCountChunk(Common::WriteStream &out, const char tag[4]) {
+	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
+	payload.writeUint32LE(0);
+	writeChunk(out, tag, payload);
+}
+
 bool CyberflixEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 	return (stageRuntime().stage() && stageRuntime().stage()->isOpen()) ||
 			(setRuntime().set() && setRuntime().set()->isOpen());
@@ -586,7 +847,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		return Common::Error(Common::kReadingFailed, "Unsupported CyberFlix save version");
 
 	HeaderState header;
-	Common::String pathSlots[9];
+	Common::String pathSlots[PathRuntime::kPathSlotCount];
 	byte savedClut[256 * 3] = {};
 	double savedGamma[3] = { 0.65, 0.65, 0.65 };
 	Common::Array<ShopState> shopStates;
@@ -633,7 +894,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		} else if (!strcmp(tag, "CRIK")) {
 			ok = parseCricketChunk(*saveFile, end, cricketsPaused, cricketStates);
 		} else if (!strcmp(tag, "CAST") || !strcmp(tag, "PUPP")) {
-			// Native save buckets retained for subsystems not modelled yet.
+			// Native save buckets retained for subsystems not modeled yet.
 		} else if (!strcmp(tag, "END ")) {
 			sawEnd = true;
 		}
@@ -680,66 +941,8 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 			_vm.globalVars()[it->_key] = it->_value;
 	}
 
-	for (uint i = 0; i < shopStates.size(); ++i) {
-		Common::SharedPtr<Shop> shop(new Shop());
-		if (!shop->open(shopStates[i].name)) {
-			warning("Cyberflix: load could not reopen shop '%s'", shopStates[i].name.c_str());
-			continue;
-		}
-		for (uint p = 0; p < shopStates[i].props.size(); ++p) {
-			const PropState &state = shopStates[i].props[p];
-			Shop::Prop *prop = shop->findProp(state.name);
-			if (!prop) {
-				warning("Cyberflix: load shop '%s' missing prop '%s'",
-						shopStates[i].name.c_str(), state.name.c_str());
-				continue;
-			}
-			prop->setName = state.setName;
-			prop->sceneName = state.sceneName;
-			prop->visible = state.visible;
-			prop->mode = state.mode;
-			prop->y = state.y;
-			prop->x = state.x;
-			prop->z = state.z;
-			prop->angle = state.angle;
-			prop->depth = state.depth;
-			prop->scale = state.scale;
-			prop->zClip = state.zClip;
-			prop->value = state.value;
-			prop->shapeName = state.shapeName;
-			prop->owner = state.owner;
-		}
-		_propRuntime.shops().push_back(shop);
-	}
-
-	for (uint i = 0; i < trackStates.size(); ++i) {
-		Common::SharedPtr<ThemeTrack> track(new ThemeTrack());
-		track->sourceName = trackStates[i].sourceName;
-		track->name = trackStates[i].name;
-		track->fileData = trackStates[i].fileData;
-		track->playlist = trackStates[i].playlist;
-		track->loopIdx = trackStates[i].loopIdx;
-		track->volume = trackStates[i].volume;
-		for (uint c = 0; c < trackStates[i].cues.size(); ++c) {
-			ThemeTrack::Cue cue;
-			cue.name = trackStates[i].cues[c].name;
-			cue.resId = trackStates[i].cues[c].resId;
-			cue.flags = trackStates[i].cues[c].flags;
-			cue.dataOffset = trackStates[i].cues[c].dataOffset;
-			cue.length = trackStates[i].cues[c].length;
-			track->cues.push_back(cue);
-		}
-		for (uint c = 0; c < trackStates[i].sfxCues.size(); ++c) {
-			ThemeTrack::Cue cue;
-			cue.name = trackStates[i].sfxCues[c].name;
-			cue.resId = trackStates[i].sfxCues[c].resId;
-			cue.flags = trackStates[i].sfxCues[c].flags;
-			cue.dataOffset = trackStates[i].sfxCues[c].dataOffset;
-			cue.length = trackStates[i].sfxCues[c].length;
-			track->sfxCues.push_back(cue);
-		}
-		_audioRuntime.tracks().push_back(track);
-	}
+	restoreShopState(_propRuntime, shopStates);
+	restoreTrackState(_audioRuntime, trackStates);
 
 	if (settingsState.seen) {
 		_audioRuntime.setWaveVolumeLevel(settingsState.waveVolumeLevel);
@@ -749,18 +952,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		_keyAborts = false;
 	}
 
-	for (uint i = 0; i < cueVolumeStates.size(); ++i) {
-		for (uint t = 0; t < _audioRuntime.tracks().size(); ++t) {
-			if (!cueVolumeStates[i].trackName.empty() &&
-					!_audioRuntime.tracks()[t]->name.equalsIgnoreCase(cueVolumeStates[i].trackName) &&
-					!_audioRuntime.tracks()[t]->sourceName.equalsIgnoreCase(cueVolumeStates[i].trackName))
-				continue;
-			for (uint c = 0; c < _audioRuntime.tracks()[t]->sfxCues.size(); ++c) {
-				if (_audioRuntime.tracks()[t]->sfxCues[c].name.equalsIgnoreCase(cueVolumeStates[i].cueName))
-					_audioRuntime.tracks()[t]->sfxCues[c].volume = CLIP(cueVolumeStates[i].volume, 0, 255);
-			}
-		}
-	}
+	restoreCueVolumes(_audioRuntime, cueVolumeStates);
 
 	auto restoreTheme = [&](const Common::String &name, uint32 elapsedMillis) {
 		Common::SharedPtr<ThemeTrack> track = _audioRuntime.findTrackRef(name);
@@ -778,15 +970,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		// transient one-shot SFX or voice playback buffers.
 	}
 
-	_loopRuntime.setLoopsPaused(loopsPaused);
-	for (uint i = 0; i < loopStates.size(); ++i) {
-		_loopRuntime.restoreLoop(loopStates[i]);
-	}
-
-	_loopRuntime.setCricketsPaused(cricketsPaused);
-	for (uint i = 0; i < cricketStates.size(); ++i) {
-		_loopRuntime.restoreCricket(cricketStates[i]);
-	}
+	restoreLoopState(_loopRuntime, loopsPaused, loopStates, cricketsPaused, cricketStates);
 
 	StageRuntime::Snapshot stageSnapshot;
 	stageSnapshot.stageName = header.stageName;
@@ -899,176 +1083,15 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		writeChunk(*saveFile, "SETT", payload);
 	}
 
-	{
-		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		payload.writeUint32LE((uint32)_propRuntime.shops().size());
-		for (uint s = 0; s < _propRuntime.shops().size(); ++s) {
-			const Shop &shop = *_propRuntime.shops()[s];
-			writeSaveString(payload, shop.name());
-			payload.writeUint32LE(shop.propCount());
-			for (uint p = 0; p < shop.propCount(); ++p) {
-				const Shop::Prop &prop = shop.prop(p);
-				writeSaveString(payload, prop.name);
-				writeSaveString(payload, prop.setName);
-				writeSaveString(payload, prop.sceneName);
-				payload.writeUint32LE(prop.masterResId);
-				payload.writeUint32LE(prop.scriptResId);
-				payload.writeByte(prop.visible ? 1 : 0);
-				payload.writeUint16LE(prop.mode);
-				payload.writeSint16LE(prop.y);
-				payload.writeSint16LE(prop.x);
-				payload.writeSint16LE(prop.z);
-				payload.writeSint16LE(prop.angle);
-				payload.writeSint16LE(prop.depth);
-				payload.writeSint32LE(prop.scale);
-				payload.writeSint32LE(prop.zClip);
-				payload.writeSint32LE(prop.value);
-				writeSaveString(payload, prop.shapeName);
-				writeSaveString(payload, prop.owner);
-				payload.writeUint32LE((uint32)prop.shapes.size());
-				for (uint i = 0; i < prop.shapes.size(); ++i) {
-					payload.writeUint32LE(prop.shapes[i].resId);
-					writeSaveString(payload, prop.shapes[i].name);
-				}
-			}
-		}
-		writeChunk(*saveFile, "SHOP", payload);
-	}
-
-	{
-		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		auto writeCueArray = [&](const Common::Array<ThemeTrack::Cue> &cues) {
-			payload.writeUint32LE((uint32)cues.size());
-			for (uint i = 0; i < cues.size(); ++i) {
-				writeSaveString(payload, cues[i].name);
-				payload.writeUint32LE(cues[i].resId);
-				payload.writeByte(cues[i].flags);
-				payload.writeUint32LE(cues[i].dataOffset);
-				payload.writeUint32LE(cues[i].length);
-			}
-		};
-
-		payload.writeUint32LE((uint32)_audioRuntime.tracks().size());
-		for (uint t = 0; t < _audioRuntime.tracks().size(); ++t) {
-			const ThemeTrack &track = *_audioRuntime.tracks()[t];
-			writeSaveString(payload, track.sourceName);
-			writeSaveString(payload, track.name);
-			writeSaveData(payload, track.fileData);
-			payload.writeUint32LE(track.loopIdx);
-			payload.writeSint32LE(track.volume);
-			payload.writeUint32LE((uint32)track.playlist.size());
-			for (uint i = 0; i < track.playlist.size(); ++i)
-				payload.writeUint16LE(track.playlist[i]);
-			writeCueArray(track.cues);
-			writeCueArray(track.sfxCues);
-		}
-		writeChunk(*saveFile, "TRAK", payload);
-	}
-
-	{
-		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		uint32 count = 0;
-		for (uint t = 0; t < _audioRuntime.tracks().size(); ++t)
-			count += _audioRuntime.tracks()[t]->sfxCues.size();
-		payload.writeUint32LE(count);
-		for (uint t = 0; t < _audioRuntime.tracks().size(); ++t) {
-			const ThemeTrack &track = *_audioRuntime.tracks()[t];
-			for (uint c = 0; c < track.sfxCues.size(); ++c) {
-				writeSaveString(payload, track.name);
-				writeSaveString(payload, track.sfxCues[c].name);
-				payload.writeSint32LE(track.sfxCues[c].volume);
-			}
-		}
-		writeChunk(*saveFile, "SVOL", payload);
-	}
-
-	{
-		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		// Keep the chunk fields stable, but match native persistence: live
-		// one-shot SFX/voice channels are not part of the durable save graph.
-		auto writeInactiveSoundSlot = [&]() {
-			payload.writeByte(0);
-			writeSaveString(payload, Common::String());
-			payload.writeUint32LE(0);
-			payload.writeUint32LE(0);
-		};
-
-		const bool themeActive = !_audioRuntime.themeTrackName().empty() &&
-				_mixer->isSoundHandleActive(_audioRuntime.themeHandle());
-		const uint32 themeElapsedMillis = themeActive ?
-				_mixer->getSoundElapsedTime(_audioRuntime.themeHandle()) +
-				(uint32)((uint64)_audioRuntime.themeStartSample() * 1000 / kAudioSampleRate) : 0;
-		payload.writeByte(themeActive ? 1 : 0);
-		writeSaveString(payload, themeActive ? _audioRuntime.themeTrackName() : Common::String());
-		payload.writeUint32LE(themeElapsedMillis);
-		payload.writeUint32LE(_audioRuntime.themeIntroSamples());
-		payload.writeUint32LE(_audioRuntime.themeLoopSamples());
-		payload.writeUint32LE((uint32)_audioRuntime.themeSpans().size());
-		for (uint i = 0; i < _audioRuntime.themeSpans().size(); ++i) {
-			payload.writeUint32LE(_audioRuntime.themeSpans()[i].startSample);
-			writeSaveString(payload, _audioRuntime.themeSpans()[i].name);
-		}
-		writeInactiveSoundSlot();
-		writeInactiveSoundSlot();
-		writeInactiveSoundSlot();
-
-		writeChunk(*saveFile, "AUDI", payload);
-	}
-
-	{
-		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		const Common::HashMap<Common::String, Value> &vars = _vm.globalVars();
-		Common::Array<Common::String> keys;
-		for (Common::HashMap<Common::String, Value>::const_iterator it = vars.begin(); it != vars.end(); ++it)
-			keys.push_back(it->_key);
-		Common::sort(keys.begin(), keys.end());
-		payload.writeUint32LE((uint32)keys.size());
-		for (uint i = 0; i < keys.size(); ++i) {
-			Common::HashMap<Common::String, Value>::const_iterator value = vars.find(keys[i]);
-			writeSaveString(payload, keys[i]);
-			writeValue(payload, value->_value);
-		}
-		writeChunk(*saveFile, "VARS", payload);
-	}
-
-	{
-		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		const Common::Array<LoopRuntime::ScheduledLoop> &loops = _loopRuntime.scheduledLoops();
-		payload.writeByte(_loopRuntime.loopsPaused() ? 1 : 0);
-		payload.writeUint32LE((uint32)loops.size());
-		for (uint i = 0; i < loops.size(); ++i) {
-			const LoopRuntime::ScheduledLoop &loop = loops[i];
-			writeSaveString(payload, loop.kind);
-			writeSaveString(payload, loop.target);
-			writeSaveString(payload, loop.message);
-			payload.writeUint32LE(loop.remainingPasses > 0 ? (uint32)loop.remainingPasses : 0);
-		}
-		writeChunk(*saveFile, "LOOP", payload);
-	}
-
-	{
-		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		const Common::Array<LoopRuntime::CricketState> &crickets = _loopRuntime.crickets();
-		payload.writeByte(_loopRuntime.cricketsPaused() ? 1 : 0);
-		payload.writeUint32LE((uint32)crickets.size());
-		for (uint i = 0; i < crickets.size(); ++i) {
-			writeSaveString(payload, crickets[i].name);
-			payload.writeByte(crickets[i].paused ? 1 : 0);
-		}
-		writeChunk(*saveFile, "CRIK", payload);
-	}
-
-	{
-		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		payload.writeUint32LE(0); // Cast/actor objects are not modelled yet; native save bucket retained.
-		writeChunk(*saveFile, "CAST", payload);
-	}
-
-	{
-		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		payload.writeUint32LE(0); // Puppet objects are not modelled yet; native save bucket retained.
-		writeChunk(*saveFile, "PUPP", payload);
-	}
+	writeShopChunk(*saveFile, _propRuntime.shops());
+	writeTrackChunk(*saveFile, _audioRuntime.tracks());
+	writeCueVolumeChunk(*saveFile, _audioRuntime.tracks());
+	writeAudioChunk(*saveFile, _audioRuntime, _mixer);
+	writeVarsChunk(*saveFile, _vm.globalVars());
+	writeLoopChunk(*saveFile, _loopRuntime);
+	writeCricketChunk(*saveFile, _loopRuntime);
+	writeEmptyCountChunk(*saveFile, "CAST"); // Cast/actor native save bucket retained until fully modeled.
+	writeEmptyCountChunk(*saveFile, "PUPP"); // Puppet native save bucket retained until fully modeled.
 
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
