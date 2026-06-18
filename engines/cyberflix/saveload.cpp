@@ -40,6 +40,7 @@
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/detection.h"
 #include "cyberflix/set.h"
+#include "cyberflix/cast.h"
 #include "cyberflix/shop.h"
 #include "cyberflix/audio/cbx_audio.h"
 #include "cyberflix/stage.h"
@@ -187,6 +188,31 @@ struct PropState {
 struct ShopState {
 	Common::String name;
 	Common::Array<PropState> props;
+};
+
+struct ActorState {
+	Common::String name;
+	Common::String setName;
+	Common::String sceneName;
+	Common::String shapeName;
+	Common::String owner;
+	uint32 masterResId = 0;
+	uint32 scriptResId = 0;
+	bool visible = false;
+	int16 x = 0;
+	int16 y = 0;
+	int16 z = 0;
+	int16 angle = 0;
+	int32 scale = 1000;
+	int32 zClip = 0;
+	int32 speed = 0;
+	int32 turn = 0;
+	int32 value = 0;
+};
+
+struct CastState {
+	Common::String name;
+	Common::Array<ActorState> actors;
 };
 
 struct CueState {
@@ -348,6 +374,44 @@ static bool parseShopChunk(Common::SeekableReadStream &in, int64 end, Common::Ar
 			shop.props.push_back(prop);
 		}
 		shops.push_back(shop);
+	}
+	return !in.err();
+}
+
+static bool parseCastChunk(Common::SeekableReadStream &in, int64 end, Common::Array<CastState> &casts) {
+	if (in.pos() + 4 > end)
+		return false;
+	uint32 castCount = in.readUint32LE();
+	casts.clear();
+	for (uint32 c = 0; c < castCount; ++c) {
+		CastState cast;
+		if (!readSaveString(in, end, cast.name) || in.pos() + 4 > end)
+			return false;
+		uint32 actorCount = in.readUint32LE();
+		for (uint32 a = 0; a < actorCount; ++a) {
+			ActorState actor;
+			if (!readSaveString(in, end, actor.name) ||
+					!readSaveString(in, end, actor.setName) ||
+					!readSaveString(in, end, actor.sceneName) ||
+					!readSaveString(in, end, actor.shapeName) ||
+					!readSaveString(in, end, actor.owner) ||
+					in.pos() + 35 > end)
+				return false;
+			actor.masterResId = in.readUint32LE();
+			actor.scriptResId = in.readUint32LE();
+			actor.visible = in.readByte() != 0;
+			actor.x = in.readSint16LE();
+			actor.y = in.readSint16LE();
+			actor.z = in.readSint16LE();
+			actor.angle = in.readSint16LE();
+			actor.scale = in.readSint32LE();
+			actor.zClip = in.readSint32LE();
+			actor.speed = in.readSint32LE();
+			actor.turn = in.readSint32LE();
+			actor.value = in.readSint32LE();
+			cast.actors.push_back(actor);
+		}
+		casts.push_back(cast);
 	}
 	return !in.err();
 }
@@ -548,6 +612,40 @@ static void restoreShopState(PropRuntime &propRuntime, const Common::Array<ShopS
 	}
 }
 
+static void restoreCastState(ActorRuntime &actorRuntime, const Common::Array<CastState> &castStates) {
+	for (uint i = 0; i < castStates.size(); ++i) {
+		Common::SharedPtr<Cast> cast(new Cast());
+		if (!cast->open(castStates[i].name)) {
+			warning("Cyberflix: load could not reopen cast '%s'", castStates[i].name.c_str());
+			continue;
+		}
+		for (uint a = 0; a < castStates[i].actors.size(); ++a) {
+			const ActorState &state = castStates[i].actors[a];
+			Common::SharedPtr<Cast::Actor> actor = cast->findActor(state.name);
+			if (!actor) {
+				warning("Cyberflix: load cast '%s' missing actor '%s'",
+						castStates[i].name.c_str(), state.name.c_str());
+				continue;
+			}
+			actor->setName = state.setName;
+			actor->sceneName = state.sceneName;
+			actor->shapeName = state.shapeName;
+			actor->owner = state.owner;
+			actor->visible = state.visible;
+			actor->x = state.x;
+			actor->y = state.y;
+			actor->z = state.z;
+			actor->angle = state.angle;
+			actor->scale = state.scale;
+			actor->zClip = state.zClip;
+			actor->speed = state.speed;
+			actor->turn = state.turn;
+			actor->value = state.value;
+		}
+		actorRuntime.casts().push_back(cast);
+	}
+}
+
 static void restoreTrackState(AudioRuntime &audioRuntime, const Common::Array<TrackState> &trackStates) {
 	for (uint i = 0; i < trackStates.size(); ++i) {
 		Common::SharedPtr<ThemeTrack> track(new ThemeTrack());
@@ -659,6 +757,37 @@ static void writeShopChunk(Common::WriteStream &out,
 		}
 	}
 	writeChunk(out, "SHOP", payload);
+}
+
+static void writeCastChunk(Common::WriteStream &out,
+		const Common::Array<Common::SharedPtr<Cast> > &casts) {
+	Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
+	payload.writeUint32LE(static_cast<uint32>(casts.size()));
+	for (uint c = 0; c < casts.size(); ++c) {
+		writeSaveString(payload, casts[c]->name());
+		payload.writeUint32LE(casts[c]->actorCount());
+		for (uint a = 0; a < casts[c]->actorCount(); ++a) {
+			const Cast::Actor &actor = casts[c]->actor(a);
+			writeSaveString(payload, actor.name);
+			writeSaveString(payload, actor.setName);
+			writeSaveString(payload, actor.sceneName);
+			writeSaveString(payload, actor.shapeName);
+			writeSaveString(payload, actor.owner);
+			payload.writeUint32LE(actor.masterResId);
+			payload.writeUint32LE(actor.scriptResId);
+			payload.writeByte(actor.visible ? 1 : 0);
+			payload.writeSint16LE(actor.x);
+			payload.writeSint16LE(actor.y);
+			payload.writeSint16LE(actor.z);
+			payload.writeSint16LE(actor.angle);
+			payload.writeSint32LE(actor.scale);
+			payload.writeSint32LE(actor.zClip);
+			payload.writeSint32LE(actor.speed);
+			payload.writeSint32LE(actor.turn);
+			payload.writeSint32LE(actor.value);
+		}
+	}
+	writeChunk(out, "CAST", payload);
 }
 
 static void writeTrackChunk(Common::WriteStream &out,
@@ -851,6 +980,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	byte savedClut[256 * 3] = {};
 	double savedGamma[3] = { 0.65, 0.65, 0.65 };
 	Common::Array<ShopState> shopStates;
+	Common::Array<CastState> castStates;
 	Common::Array<TrackState> trackStates;
 	AudioState audioState;
 	RuntimeSettingsState settingsState;
@@ -878,6 +1008,8 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 			ok = parsePaletteChunk(*saveFile, end, savedClut, savedGamma);
 		} else if (!strcmp(tag, "SHOP")) {
 			ok = parseShopChunk(*saveFile, end, shopStates);
+		} else if (!strcmp(tag, "CAST")) {
+			ok = parseCastChunk(*saveFile, end, castStates);
 		} else if (!strcmp(tag, "TRAK")) {
 			ok = parseTrackChunk(*saveFile, end, trackStates);
 		} else if (!strcmp(tag, "AUDI")) {
@@ -893,7 +1025,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 			ok = parseLoopChunk(*saveFile, end, loopsPaused, loopStates);
 		} else if (!strcmp(tag, "CRIK")) {
 			ok = parseCricketChunk(*saveFile, end, cricketsPaused, cricketStates);
-		} else if (!strcmp(tag, "CAST") || !strcmp(tag, "PUPP")) {
+		} else if (!strcmp(tag, "PUPP")) {
 			// Native save buckets retained for subsystems not modeled yet.
 		} else if (!strcmp(tag, "END ")) {
 			sawEnd = true;
@@ -919,6 +1051,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	haltVoice();
 	_audioRuntime.clearTracks();
 	_propRuntime.clear();
+	_actorRuntime.casts().clear();
 	_loopRuntime.clear();
 	stageRuntime().reset();
 	setRuntime().reset();
@@ -942,6 +1075,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	}
 
 	restoreShopState(_propRuntime, shopStates);
+	restoreCastState(_actorRuntime, castStates);
 	restoreTrackState(_audioRuntime, trackStates);
 
 	if (settingsState.seen) {
@@ -1084,13 +1218,13 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 	}
 
 	writeShopChunk(*saveFile, _propRuntime.shops());
+	writeCastChunk(*saveFile, _actorRuntime.casts());
 	writeTrackChunk(*saveFile, _audioRuntime.tracks());
 	writeCueVolumeChunk(*saveFile, _audioRuntime.tracks());
 	writeAudioChunk(*saveFile, _audioRuntime, _mixer);
 	writeVarsChunk(*saveFile, _vm.globalVars());
 	writeLoopChunk(*saveFile, _loopRuntime);
 	writeCricketChunk(*saveFile, _loopRuntime);
-	writeEmptyCountChunk(*saveFile, "CAST"); // Cast/actor native save bucket retained until fully modeled.
 	writeEmptyCountChunk(*saveFile, "PUPP"); // Puppet native save bucket retained until fully modeled.
 
 	{
