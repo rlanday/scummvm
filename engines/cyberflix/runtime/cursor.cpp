@@ -98,7 +98,11 @@ bool CursorRuntime::setCursor(const Common::String &name) {
 }
 
 bool CyberflixEngine::setGameCursor(const Common::String &name) {
-	return _cursorRuntime.setCursor(name);
+	const Common::String oldCursor = _cursorRuntime.activeCursor();
+	const bool ok = _cursorRuntime.setCursor(name);
+	if (ok && (oldCursor != _cursorRuntime.activeCursor() || !CursorMan.isVisible()))
+		_cursorPresentationDirty = true;
+	return ok;
 }
 
 } // End of namespace Cyberflix

@@ -201,6 +201,7 @@ private:
 	 */
 	bool setGameCursor(const Common::String &name);
 	bool pumpCursorMotionEvents();
+	void presentCursorIfDirty();
 
 	/**
 	 * Process the global/movie keyboard shortcuts that the original handles
@@ -225,6 +226,7 @@ private:
 	Console *_console; ///< Owned by the engine framework's debugger, not by us.
 
 	CursorRuntime _cursorRuntime;
+	bool _cursorPresentationDirty = false;
 
 	StageRuntime _stageRuntime;
 	SetRuntime _setRuntime;

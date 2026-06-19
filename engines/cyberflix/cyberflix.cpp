@@ -442,7 +442,17 @@ bool CyberflixEngine::pumpCursorMotionEvents() {
 		_eventMan->pushEvent(deferred[i]);
 
 	const Common::Point newMouse = _eventMan->getMousePos();
-	return oldMouse.x != newMouse.x || oldMouse.y != newMouse.y;
+	const bool moved = oldMouse.x != newMouse.x || oldMouse.y != newMouse.y;
+	if (moved)
+		_cursorPresentationDirty = true;
+	return moved;
+}
+
+void CyberflixEngine::presentCursorIfDirty() {
+	if (!_cursorPresentationDirty)
+		return;
+	_system->updateScreen();
+	_cursorPresentationDirty = false;
 }
 
 void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String &target,
@@ -502,19 +512,28 @@ void CyberflixEngine::forceUpdate() {
 		presented = setRuntime().presentPendingScreenUpdate(*this);
 		_framePacingRuntime.noteForceUpdatePresented(presented);
 	}
+	if (presented)
+		_cursorPresentationDirty = false;
 	if (cursorMoved && !presented) {
 		// Native uses the Win32 cursor, which moves independently while script
 		// wait loops call forceupdate(). ScummVM's cursor is software-drawn, so
 		// after pumping mouse-motion events above we need a cursor-only present
 		// if the compositor did not upload any pixels this pass.
-		_system->updateScreen();
+		presentCursorIfDirty();
 		_framePacingRuntime.noteForceUpdatePresented(true);
 	}
 	while (!shouldQuit()) {
 		const uint32 delay = _framePacingRuntime.delayMillisUntilDeadline(tick());
 		if (delay == 0)
 			break;
-		_system->delayMillis(delay);
+		// Keep software-cursor motion responsive while preserving native frame
+		// pacing. updateScreen() is cheap here on OpenGL: it redraws the cursor
+		// over the already-uploaded game texture, and vsync caps the cadence.
+		_system->delayMillis(MIN<uint32>(delay, 5));
+		if (pumpCursorMotionEvents()) {
+			presentCursorIfDirty();
+			_framePacingRuntime.noteForceUpdatePresented(true);
+		}
 	}
 	_framePacingRuntime.noteFrameTick(tick());
 	debug(2, "Cyberflix: forceupdate()");
@@ -621,14 +640,20 @@ Common::Error CyberflixEngine::run() {
 	// The boot handlers route the hits onward (sendtoprop(name, mousedown)...).
 	Common::Event event;
 	while (!shouldQuit()) {
+		bool scriptEventHandled = false;
 		while (_eventMan->pollEvent(event)) {
-			if (event.type == Common::EVENT_LBUTTONDOWN) {
+			if (event.type == Common::EVENT_MOUSEMOVE) {
+				_cursorPresentationDirty = true;
+			} else if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
+				quitGame();
+			} else if (event.type == Common::EVENT_LBUTTONDOWN) {
 				const int32 packed = (static_cast<int32>(static_cast<int16>(event.mouse.x)) << 16) |
 						(static_cast<int32>(event.mouse.y) & 0xffff);
 				Common::Array<Value> args;
 				args.push_back(Value::makeInt(packed));
 				bool handled = false;
 				_vm.callFunction("mousedown", args, &handled);
+				scriptEventHandled = true;
 				if (!handled)
 					warning("Cyberflix: boot script has no mousedown handler");
 			} else if (event.type == Common::EVENT_KEYDOWN) {
@@ -662,6 +687,7 @@ Common::Error CyberflixEngine::run() {
 					args.push_back(Value::makeString(key));
 					bool handled = false;
 					_vm.callFunction(event.kbdRepeat ? "keyrepeat" : "keydown", args, &handled);
+					scriptEventHandled = true;
 					if (!handled)
 						warning("Cyberflix: boot script has no %s handler",
 								event.kbdRepeat ? "keyrepeat" : "keydown");
@@ -669,6 +695,11 @@ Common::Error CyberflixEngine::run() {
 				}
 			}
 		}
+		// Present mouse motion immediately when no script event needs to repaint
+		// first; idle() below may still change the cursor shape and request
+		// another cursor-only present.
+		if (!scriptEventHandled)
+			presentCursorIfDirty();
 		if (processPendingLoad())
 			continue;
 		bool handled = false;
@@ -676,8 +707,10 @@ Common::Error CyberflixEngine::run() {
 		_vm.callFunction("idle", Common::Array<Value>(), &handled);
 		const bool propsDirtyAfterIdle = _propRuntime.dirty();
 		propRuntime().refreshPropsIfDirty(*this);
-		if (!_framePacingRuntime.forceUpdatePresentedDuringIdle() || propsDirtyAfterIdle)
+		if (scriptEventHandled || propsDirtyAfterIdle || _cursorPresentationDirty) {
 			_system->updateScreen();
+			_cursorPresentationDirty = false;
+		}
 		if (_framePacingRuntime.frameRate() == 0 && _setRuntime.transitionType() == kSetTransitionNone)
 			_system->delayMillis(10);
 	}
