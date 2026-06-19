@@ -201,8 +201,10 @@ private:
 	 * decoded cursor groups are cached for reuse. Returns true on success.
 	 */
 	bool setGameCursor(const Common::String &name);
+	bool pollInputStateEvents();
 	bool pumpCursorMotionEvents();
 	void presentCursorIfDirty();
+	bool delayMillisWithCursorUpdates(uint32 delayMillis);
 
 	/**
 	 * Process the global/movie keyboard shortcuts that the original handles

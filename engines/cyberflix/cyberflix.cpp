@@ -71,6 +71,8 @@
 
 namespace Cyberflix {
 
+static const uint32 kCursorPollIntervalMs = 2;
+
 CyberflixEngine::CyberflixEngine(OSystem *syst, const CyberflixGameDescription *gameDesc) :
 		Engine(syst), _gameDescription(gameDesc), _rnd("cyberflix"), _console(nullptr) {
 }
@@ -302,24 +304,14 @@ int32 CyberflixEngine::makePoint(int x, int y) {
 }
 
 bool CyberflixEngine::buttonDown() {
-	Common::Event event;
-	while (_eventMan->pollEvent(event)) {
-		if (event.type == Common::EVENT_QUIT) {
-			quitGame();
-			return false;
-		}
-	}
+	if (!pollInputStateEvents())
+		return false;
 	return (_eventMan->getButtonState() & Common::EventManager::LBUTTON) != 0;
 }
 
 bool CyberflixEngine::stillDown() {
-	Common::Event event;
-	while (_eventMan->pollEvent(event)) {
-		if (event.type == Common::EVENT_QUIT) {
-			quitGame();
-			return false;
-		}
-	}
+	if (!pollInputStateEvents())
+		return false;
 	return (_eventMan->getButtonState() &
 			(Common::EventManager::LBUTTON | Common::EventManager::RBUTTON)) != 0;
 }
@@ -423,6 +415,25 @@ bool CyberflixEngine::optionKey() {
 	return (_eventMan->getModifierState() & Common::KBD_SHIFT) != 0;
 }
 
+bool CyberflixEngine::pollInputStateEvents() {
+	const Common::Point oldMouse = _eventMan->getMousePos();
+	Common::Event event;
+
+	while (_eventMan->pollEvent(event)) {
+		if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
+			quitGame();
+			return false;
+		}
+	}
+
+	const Common::Point newMouse = _eventMan->getMousePos();
+	if (oldMouse.x != newMouse.x || oldMouse.y != newMouse.y) {
+		_cursorPresentationDirty = true;
+		presentCursorIfDirty();
+	}
+	return true;
+}
+
 bool CyberflixEngine::pumpCursorMotionEvents() {
 	const Common::Point oldMouse = _eventMan->getMousePos();
 	Common::Array<Common::Event> deferred;
@@ -457,6 +468,22 @@ void CyberflixEngine::presentCursorIfDirty() {
 		return;
 	_system->updateScreen();
 	_cursorPresentationDirty = false;
+}
+
+bool CyberflixEngine::delayMillisWithCursorUpdates(uint32 delayMillis) {
+	bool presented = false;
+	const uint32 start = _system->getMillis();
+	while (!shouldQuit()) {
+		const uint32 elapsed = _system->getMillis() - start;
+		if (elapsed >= delayMillis)
+			break;
+		_system->delayMillis(MIN<uint32>(delayMillis - elapsed, kCursorPollIntervalMs));
+		if (pumpCursorMotionEvents()) {
+			presentCursorIfDirty();
+			presented = true;
+		}
+	}
+	return presented;
 }
 
 void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String &target,
@@ -534,11 +561,8 @@ void CyberflixEngine::forceUpdate() {
 		// Keep software-cursor motion responsive while preserving native frame
 		// pacing. updateScreen() is cheap here on OpenGL: it redraws the cursor
 		// over the already-uploaded game texture, and vsync caps the cadence.
-		_system->delayMillis(MIN<uint32>(delay, 5));
-		if (pumpCursorMotionEvents()) {
-			presentCursorIfDirty();
+		if (delayMillisWithCursorUpdates(delay))
 			_framePacingRuntime.noteForceUpdatePresented(true);
-		}
 	}
 	_framePacingRuntime.noteFrameTick(tick());
 	debug(2, "Cyberflix: forceupdate()");
@@ -717,7 +741,7 @@ Common::Error CyberflixEngine::run() {
 			_cursorPresentationDirty = false;
 		}
 		if (_framePacingRuntime.frameRate() == 0 && _setRuntime.transitionType() == kSetTransitionNone)
-			_system->delayMillis(10);
+			delayMillisWithCursorUpdates(10);
 	}
 
 	return Common::kNoError;
