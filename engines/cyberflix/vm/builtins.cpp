@@ -403,9 +403,11 @@ bool ScriptVM::callStageSetMethod(uint16 opcode, const Common::Array<Value> &arg
 	case Script::kMethodCurrentFlat: // currentflat() -> current stage node name or native 'None'
 		result = Value::makeString(_navigationHost->currentFlat());
 		return true;
-	case Script::kMethodCurrentView: // currentview() -> current SET view name
-		result = Value::makeString(_navigationHost->currentView());
+	case Script::kMethodCurrentView: { // currentview([name]) -> current SET view name
+		const Common::String *target = args.empty() ? nullptr : &args[0].strValue;
+		result = Value::makeString(_navigationHost->currentView(target));
 		return true;
+	}
 	case Script::kMethodCurrentDeg: // currentdeg() -> DAT_004611ac
 		result = Value::makeInt(_navigationHost->currentDeg());
 		return true;

@@ -59,7 +59,7 @@ public:
 			const Common::String &view = Common::String()) override;
 	void closeSetFile() override;
 	Common::String currentSet() override;
-	Common::String currentView() override;
+	Common::String currentView(const Common::String *target = nullptr) override;
 	int currentDeg() override;
 	Common::String currentScene(const Common::String *target) override;
 	bool setVisible(const bool *newVisible) override;

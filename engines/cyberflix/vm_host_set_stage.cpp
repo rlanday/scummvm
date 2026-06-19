@@ -36,8 +36,8 @@ Common::String CyberflixStageSetVMHost::currentSet() {
 	return engine().setRuntime().currentSet();
 }
 
-Common::String CyberflixStageSetVMHost::currentView() {
-	return engine().setRuntime().currentView();
+Common::String CyberflixStageSetVMHost::currentView(const Common::String *target) {
+	return engine().setRuntime().currentView(engine(), target);
 }
 
 int CyberflixStageSetVMHost::currentDeg() {

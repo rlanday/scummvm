@@ -153,8 +153,11 @@ public:
 	virtual Value sendToSetFx(const Common::String &message,
 			const Common::Array<Value> &args) { return Value(); }
 
-	/** currentview() (0x3e8b): current SET view name, "Moving", or "none". */
-	virtual Common::String currentView() { return "none"; }
+	/**
+	 * currentview([name]) (0x3e8b): current SET view name, "Moving", or "none";
+	 * with a name, switch the current scene to that view.
+	 */
+	virtual Common::String currentView(const Common::String *target = nullptr) { return "none"; }
 
 	/** currentdeg() (0x3e9f FUN_00431d50): current SET heading, or -1. */
 	virtual int currentDeg() { return -1; }

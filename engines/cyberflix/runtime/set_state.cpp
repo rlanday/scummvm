@@ -233,6 +233,81 @@ static bool activeSetCameraData(const SetRuntime &runtime, Set::CameraData &came
 			static_cast<uint32>(runtime.table()), static_cast<uint32>(runtime.angle()), camera);
 }
 
+static int currentSetHeading(const SetRuntime &runtime) {
+	Set::CameraData camera;
+	return activeSetCameraData(runtime, camera) ? camera.heading : 0;
+}
+
+static bool chooseSceneView(const SetRuntime &runtime, int sceneIdx, const Common::String &requestedView,
+		int previousHeading, bool fallbackToNearest, int &targetAngle, Common::String &targetView,
+		const char *operation) {
+	targetAngle = 0;
+	targetView.clear();
+	if (!runtime.set() || !runtime.set()->isOpen() || sceneIdx < 0)
+		return false;
+
+	int viewIdx = requestedView.empty() ? -1 :
+			runtime.set()->findView(static_cast<uint32>(sceneIdx), requestedView);
+	if (viewIdx < 0 && fallbackToNearest) {
+		viewIdx = runtime.set()->nearestViewForHeading(static_cast<uint32>(sceneIdx), previousHeading);
+		if (viewIdx >= 0 && !requestedView.empty())
+			debug(1, "Cyberflix: %s view '%s' not found in scene '%s', using nearest view '%s'",
+					operation, requestedView.c_str(),
+					runtime.set()->sceneName(static_cast<uint32>(sceneIdx)).c_str(),
+					runtime.set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx)).c_str());
+	}
+	if (viewIdx < 0) {
+		if (!requestedView.empty())
+			warning("Cyberflix: %s view '%s' not found in scene '%s'",
+					operation, requestedView.c_str(),
+					runtime.set()->sceneName(static_cast<uint32>(sceneIdx)).c_str());
+		return false;
+	}
+
+	int viewAngle = runtime.set()->angleForView(static_cast<uint32>(sceneIdx), 0, viewIdx);
+	if (viewAngle < 0) {
+		warning("Cyberflix: %s view '%s' has no panorama angle in scene '%s'",
+				operation,
+				runtime.set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx)).c_str(),
+				runtime.set()->sceneName(static_cast<uint32>(sceneIdx)).c_str());
+		return false;
+	}
+	targetAngle = viewAngle;
+	targetView = runtime.set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx));
+	return !targetView.empty();
+}
+
+// currentview(name): native dispatch B reaches TI.EXE FUN_00431940. It validates
+// the requested view against the current scene (FUN_00433b30), closes the old
+// scene (FUN_00430f30), copies DAT_004611dc, normalizes the camera
+// (FUN_00433960/FUN_004425e0), then sends openscene via FUN_00430ec0.
+Common::String SetRuntime::currentView(CyberflixEngine &engine, const Common::String *target) {
+	if (!target || target->empty())
+		return currentView();
+	if (!set() || !set()->isOpen() || scene() < 0)
+		return currentView();
+	if (transitionType() != kSetTransitionNone)
+		return currentView();
+	if (view().equalsIgnoreCase(*target))
+		return currentView();
+
+	const int savedScene = scene();
+	int targetAngle = 0;
+	Common::String targetView;
+	if (!chooseSceneView(*this, savedScene, *target, currentSetHeading(*this), false,
+			targetAngle, targetView, "currentview"))
+		return currentView();
+	if (!engine.closeCurrentSceneForNavigation())
+		return currentView();
+	if (!set() || !set()->isOpen())
+		return "none";
+
+	renderSetScene(engine, savedScene, 0, targetAngle, targetView);
+	Common::Array<Value> noArgs;
+	engine.dispatchSceneMessage(static_cast<uint32>(savedScene), "openscene", noArgs);
+	return currentView();
+}
+
 static int selectXYZ(int selector, int x, int y, int z) {
 	switch (selector) {
 	case 1:
