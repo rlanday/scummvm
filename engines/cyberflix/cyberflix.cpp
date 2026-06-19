@@ -57,6 +57,7 @@
 #include "cyberflix/archive.h"
 #include "cyberflix/console.h"
 #include "cyberflix/image.h"
+#include "cyberflix/resource_helpers.h"
 #include "cyberflix/runtime/graphics_helpers.h"
 #include "cyberflix/runtime/paths.h"
 #include "cyberflix/runtime/set_helpers.h"
@@ -337,6 +338,24 @@ int CyberflixEngine::calcDeg(int32 a, int32 b) {
 	if (deg >= 128)
 		deg -= 256;
 	return deg;
+}
+
+int CyberflixEngine::calcVectX(int deg, int dist) {
+	return fixedShift14(nativeTrigSin(deg) * dist);
+}
+
+int CyberflixEngine::calcVectY(int deg, int dist) {
+	return fixedShift14(nativeTrigCos(deg) * dist);
+}
+
+int CyberflixEngine::calcDist(int32 a, int32 b) {
+	const int16 ax = static_cast<int16>(a >> 16);
+	const int16 ay = static_cast<int16>(a & 0xffff);
+	const int16 bx = static_cast<int16>(b >> 16);
+	const int16 by = static_cast<int16>(b & 0xffff);
+	const int64 dx = static_cast<int>(ax) - static_cast<int>(bx);
+	const int64 dy = static_cast<int>(ay) - static_cast<int>(by);
+	return static_cast<int>(sqrt(static_cast<double>(dx * dx + dy * dy)));
 }
 
 int CyberflixEngine::calcMod(int a, int b) {

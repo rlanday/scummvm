@@ -60,6 +60,7 @@ public:
 	void closeSetFile() override;
 	Common::String currentSet() override;
 	Common::String currentView() override;
+	int currentDeg() override;
 	Common::String currentScene(const Common::String *target) override;
 	bool setVisible(const bool *newVisible) override;
 	void sendToScene(const Common::String &scene,
@@ -77,6 +78,8 @@ public:
 	Common::String indexToPainting(const Common::String &scene,
 			const Common::String &view, int index) override;
 	bool roadAhead(const Common::String &scene, const Common::String &view) override;
+	int cameraXYZ(int selector) override;
+	int playerXYZ(int selector) override;
 
 private:
 	CyberflixEngine &engine();

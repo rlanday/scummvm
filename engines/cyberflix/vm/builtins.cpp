@@ -393,6 +393,9 @@ bool ScriptVM::callStageSetMethod(uint16 opcode, const Common::Array<Value> &arg
 	case Script::kMethodCurrentView: // currentview() -> current SET view name
 		result = Value::makeString(_navigationHost->currentView());
 		return true;
+	case Script::kMethodCurrentDeg: // currentdeg() -> DAT_004611ac
+		result = Value::makeInt(_navigationHost->currentDeg());
+		return true;
 	case Script::kMethodCurrentScene: { // currentscene([name|left|right|strait])
 		const Common::String *target = args.empty() ? nullptr : &args[0].strValue;
 		result = Value::makeString(_navigationHost->currentScene(target));
@@ -418,6 +421,12 @@ bool ScriptVM::callStageSetMethod(uint16 opcode, const Common::Array<Value> &arg
 		result = args.size() >= 2 ?
 				Value::makeBool(_navigationHost->roadAhead(args[0].strValue, args[1].strValue)) :
 				Value::makeBool(false);
+		return true;
+	case Script::kMethodCameraXYZ: // cameraxyz(selector) -> FUN_00437870
+		result = Value::makeInt(_navigationHost->cameraXYZ(args.empty() ? 0 : args[0].intValue));
+		return true;
+	case Script::kMethodPlayerXYZ: // playerxyz(selector) -> FUN_00437950
+		result = Value::makeInt(_navigationHost->playerXYZ(args.empty() ? 0 : args[0].intValue));
 		return true;
 	default:
 		return false;
@@ -482,9 +491,24 @@ bool ScriptVM::callInputMethod(uint16 opcode, const Common::Array<Value> &args, 
 				Value::makeInt(_interactionHost->calcDeg(args[0].intValue, args[1].intValue)) :
 				Value::makeInt(0);
 		return true;
+	case Script::kMethodCalcVectX: // calcvectx(deg, dist) -> FUN_00437770/FUN_004432e0
+		result = args.size() >= 2 ?
+				Value::makeInt(_interactionHost->calcVectX(args[0].intValue, args[1].intValue)) :
+				Value::makeInt(0);
+		return true;
+	case Script::kMethodCalcVectY: // calcvecty(deg, dist) -> FUN_004377f0/FUN_00443310
+		result = args.size() >= 2 ?
+				Value::makeInt(_interactionHost->calcVectY(args[0].intValue, args[1].intValue)) :
+				Value::makeInt(0);
+		return true;
 	case Script::kMethodStarXYZ: // starxyz(name, selector) -> FUN_00435a60/FUN_00432fc0
 		result = args.size() >= 2 ?
 				Value::makeInt(_actorHost->starXYZ(args[0].strValue, args[1].intValue)) :
+				Value::makeInt(0);
+		return true;
+	case Script::kMethodCalcDist: // calcdist(pointA, pointB) -> FUN_00435d20
+		result = args.size() >= 2 ?
+				Value::makeInt(_interactionHost->calcDist(args[0].intValue, args[1].intValue)) :
 				Value::makeInt(0);
 		return true;
 	case Script::kMethodCalcMod: // calcmod(a, b) -> FUN_004358f0

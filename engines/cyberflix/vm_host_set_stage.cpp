@@ -40,6 +40,10 @@ Common::String CyberflixStageSetVMHost::currentView() {
 	return engine().setRuntime().currentView();
 }
 
+int CyberflixStageSetVMHost::currentDeg() {
+	return engine().setRuntime().currentDeg();
+}
+
 Common::String CyberflixStageSetVMHost::currentScene(const Common::String *target) {
 	return engine().setRuntime().currentScene(engine(), target);
 }
@@ -81,6 +85,14 @@ Common::String CyberflixStageSetVMHost::indexToPainting(const Common::String &sc
 
 bool CyberflixStageSetVMHost::roadAhead(const Common::String &scene, const Common::String &view) {
 	return engine().setRuntime().roadAhead(scene, view);
+}
+
+int CyberflixStageSetVMHost::cameraXYZ(int selector) {
+	return engine().setRuntime().cameraXYZ(selector);
+}
+
+int CyberflixStageSetVMHost::playerXYZ(int selector) {
+	return engine().setRuntime().playerXYZ(selector);
 }
 
 

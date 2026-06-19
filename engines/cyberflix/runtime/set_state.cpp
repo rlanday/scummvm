@@ -22,6 +22,7 @@
 #include "common/debug.h"
 
 #include "cyberflix/cyberflix.h"
+#include "cyberflix/resource_helpers.h"
 #include "cyberflix/set.h"
 #include "cyberflix/stage.h"
 
@@ -219,6 +220,63 @@ Common::String SetRuntime::currentView() const {
 	if (set() && set()->isOpen() && !view().empty())
 		return view();
 	return "none";
+}
+
+static bool activeSetCameraData(const SetRuntime &runtime, Set::CameraData &camera) {
+	if (!runtime.set() || !runtime.set()->isOpen())
+		return false;
+	if (runtime.transitionType() == kSetTransitionForward)
+		return runtime.set()->transitionCameraData(runtime.transitionResource(), runtime.transitionFrame(), camera);
+	if (runtime.scene() < 0)
+		return false;
+	return runtime.set()->cameraData(static_cast<uint32>(runtime.scene()),
+			static_cast<uint32>(runtime.table()), static_cast<uint32>(runtime.angle()), camera);
+}
+
+static int selectXYZ(int selector, int x, int y, int z) {
+	switch (selector) {
+	case 1:
+		return x;
+	case 2:
+		return y;
+	case 3:
+		return z;
+	case 4:
+		return (static_cast<int32>(static_cast<int16>(x)) << 16) |
+				(static_cast<int32>(static_cast<int16>(y)) & 0xffff);
+	default:
+		return 0;
+	}
+}
+
+int SetRuntime::currentDeg() const {
+	Set::CameraData camera;
+	if (!activeSetCameraData(*this, camera))
+		return -1;
+	return camera.heading;
+}
+
+int SetRuntime::cameraXYZ(int selector) const {
+	Set::CameraData camera;
+	if (!activeSetCameraData(*this, camera))
+		return 0;
+	return selectXYZ(selector, camera.cameraX, camera.cameraY, camera.cameraZ);
+}
+
+int SetRuntime::playerXYZ(int selector) const {
+	Set::CameraData camera;
+	if (!activeSetCameraData(*this, camera))
+		return 0;
+
+	// FUN_00442e90 computes the player point from the camera point by stepping
+	// backward along the heading by DAT_00461196. The retail EXE initializes
+	// that distance global to zero and no Titanic script writes it yet.
+	const int kPlayerCameraDistance = 0;
+	const int x = camera.cameraX -
+			fixedShift14(nativeTrigSin(camera.heading) * kPlayerCameraDistance);
+	const int y = camera.cameraY -
+			fixedShift14(nativeTrigCos(camera.heading) * kPlayerCameraDistance);
+	return selectXYZ(selector, x, y, camera.cameraZ);
 }
 
 // currentscene([arg]): no-arg reads DAT_004611cc. With "left"/"right"/"strait",

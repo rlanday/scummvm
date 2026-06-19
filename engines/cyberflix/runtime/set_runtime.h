@@ -85,6 +85,9 @@ public:
 	void closeSetFile(CyberflixEngine &engine);
 	Common::String currentSet() const;
 	Common::String currentView() const;
+	int currentDeg() const;
+	int cameraXYZ(int selector) const;
+	int playerXYZ(int selector) const;
 	Common::String currentScene(CyberflixEngine &engine, const Common::String *target);
 	bool setVisible(CyberflixEngine &engine, const bool *newVisible);
 

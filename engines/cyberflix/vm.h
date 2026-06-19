@@ -156,6 +156,9 @@ public:
 	/** currentview() (0x3e8b): current SET view name, "Moving", or "none". */
 	virtual Common::String currentView() { return "none"; }
 
+	/** currentdeg() (0x3e9f FUN_00431d50): current SET heading, or -1. */
+	virtual int currentDeg() { return -1; }
+
 	/**
 	 * currentscene([name|left|right|strait]) (0x3e9d): no arg reads the current
 	 * SET scene name; an arg switches scene or starts the native navigation
@@ -220,6 +223,14 @@ public:
 
 	/** roadahead(scene, view) (0x4e94): whether the view has a forward transition. */
 	virtual bool roadAhead(const Common::String &scene, const Common::String &view) { return false; }
+
+	/** cameraxyz(selector) (0x4e5f FUN_00437870): selector 1/2/3 = x/y/z,
+	 *  4 = packed x/y point for the active SET camera. */
+	virtual int cameraXYZ(int selector) { return 0; }
+
+	/** playerxyz(selector) (0x4e60 FUN_00437950): selector 1/2/3 = x/y/z,
+	 *  4 = packed x/y point for the active SET player point. */
+	virtual int playerXYZ(int selector) { return 0; }
 };
 
 class VMSystemHost {
@@ -573,6 +584,14 @@ public:
 	/** calcdeg(a, b) (0x4e67 FUN_00435c70): signed 8-bit angle in 256ths of a
 	 *  full turn from packed point @p a to packed point @p b. */
 	virtual int calcDeg(int32 a, int32 b) { return 0; }
+
+	/** calcvectx/y(deg, dist) (0x4e5d/0x4e5e FUN_00437770/004377f0):
+	 *  fixed-point trig vector components in native 256-unit angles. */
+	virtual int calcVectX(int deg, int dist) { return 0; }
+	virtual int calcVectY(int deg, int dist) { return 0; }
+
+	/** calcdist(pointA, pointB) (0x4e71 FUN_00435d20): integer Euclidean distance. */
+	virtual int calcDist(int32 a, int32 b) { return 0; }
 
 	/** calcmod(a, b) (0x4e72 FUN_004358f0): signed integer remainder. */
 	virtual int calcMod(int a, int b) { return b != 0 ? a % b : 0; }
