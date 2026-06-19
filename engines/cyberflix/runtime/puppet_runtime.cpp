@@ -240,7 +240,12 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 			hoverState = hover;
 		}
 
+		bool cursorDirty = false;
 		while (engine._eventMan->pollEvent(event)) {
+			if (event.type == Common::EVENT_MOUSEMOVE) {
+				cursorDirty = true;
+				continue;
+			}
 			if (event.type == Common::EVENT_KEYDOWN &&
 					event.kbd.keycode == Common::KEYCODE_ESCAPE)
 				return -1;
@@ -258,8 +263,10 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 				return id;
 			}
 		}
-		engine._system->updateScreen();
-		engine._system->delayMillis(10);
+		if (cursorDirty)
+			engine._cursorPresentationDirty = true;
+		engine.presentCursorIfDirty();
+		engine.delayMillisWithCursorUpdates(10);
 	}
 }
 
@@ -559,7 +566,12 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 			lastFrame = frame;
 		}
 		bool aborted = false;
+		bool cursorDirty = false;
 		while (engine._eventMan->pollEvent(event)) {
+			if (event.type == Common::EVENT_MOUSEMOVE) {
+				cursorDirty = true;
+				continue;
+			}
 			if (event.type == Common::EVENT_KEYDOWN &&
 					event.kbd.keycode == Common::KEYCODE_ESCAPE) {
 				engine._mixer->stopHandle(_speechHandle);
@@ -569,14 +581,17 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 		}
 		if (aborted)
 			break;
+		if (cursorDirty)
+			engine._cursorPresentationDirty = true;
+		engine.presentCursorIfDirty();
 		if (!engine._mixer->isSoundHandleActive(_speechHandle)) {
 			if (pcm.empty() && frame + 1 < frameCount) {
 				const uint32 nextFrameMs = static_cast<uint32>(((static_cast<uint64>(frame) + 1) * 1000 + 29)) / 30;
 				// Silent puppet actions are clocked from wall time at the same
 				// 30 fps cadence as speech. Sleep toward the next frame boundary
-				// instead of waking the backend event pump several times per
-				// frame; there is no cursor tracking during action playback.
-				engine._system->delayMillis(nextFrameMs > elapsed ?
+				// while keeping ScummVM's software cursor responsive between
+				// puppet animation frames.
+				engine.delayMillisWithCursorUpdates(nextFrameMs > elapsed ?
 						MIN<uint32>(nextFrameMs - elapsed, kPuppetActionPollCapMs) : 1);
 				continue;
 			}
@@ -584,9 +599,10 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 		}
 		const uint32 nextFrameMs = static_cast<uint32>(((static_cast<uint64>(frame) + 1) * 1000 + 29)) / 30;
 		// Speech playback is frame-clocked from the mixer at native 30 fps.
-		// Poll Esc at that same cadence, avoiding extra SDL/Cocoa event-pump
-		// wakeups between frames when the picture cannot change.
-		engine._system->delayMillis(nextFrameMs > elapsed ?
+		// The picture only changes on those frames, but the software cursor must
+		// still be pumped/presented between them to approximate native Win32
+		// cursor movement.
+		engine.delayMillisWithCursorUpdates(nextFrameMs > elapsed ?
 				MIN<uint32>(nextFrameMs - elapsed, kPuppetActionPollCapMs) : 1);
 	}
 	_currentFrame = frameCount - 1;
