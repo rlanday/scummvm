@@ -74,14 +74,27 @@ public:
 	void actorScale(CyberflixEngine &engine, const Common::String &name, int scale);
 	void actorTurn(const Common::String &name, int turn);
 	void turnToDeg(CyberflixEngine &engine, const Common::String &name, int deg);
+	void walkToStar(CyberflixEngine &engine, const Common::String &name, const Common::String &star);
+	void stopWalk(const Common::String &name);
+	bool isWalk(const Common::String &name) const;
+	Common::String walkDest(const Common::String &name) const;
 	int starXYZ(CyberflixEngine &engine, const Common::String &name, int selector) const;
 
 	Common::Array<Common::SharedPtr<Cast> > &casts() { return _casts; }
 	const Common::Array<Common::SharedPtr<Cast> > &casts() const { return _casts; }
 
 private:
+	struct WalkRecord {
+		Common::String actorName;
+		Common::String destName;
+	};
+
+	int findWalkRecord(const Common::String &name) const;
+	void clearWalkRecord(const Common::String &name);
+
 	/** Open cast files and the global actor list they contribute. */
 	Common::Array<Common::SharedPtr<Cast> > _casts;
+	Common::Array<WalkRecord> _walks;
 };
 
 } // End of namespace Cyberflix

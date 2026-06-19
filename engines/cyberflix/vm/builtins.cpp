@@ -99,6 +99,19 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 	case Script::kMethodCloseCastFile: // closecastfile('name.cst') -> FUN_004211b0
 		_actorHost->closeCastFile(args.empty() ? Common::String() : args[0].strValue);
 		return true;
+	case Script::kMethodWalkToStar: // walktostar(actor, star) -> FUN_00424410
+		if (args.size() >= 2)
+			_actorHost->walkToStar(args[0].strValue, args[1].strValue);
+		return true;
+	case Script::kMethodStopWalk: // stopwalk(actor|'all') -> FUN_00423b50
+		_actorHost->stopWalk(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodIsWalk: // iswalk(actor) -> FUN_00423cf0
+		result = Value::makeBool(!args.empty() && _actorHost->isWalk(args[0].strValue));
+		return true;
+	case Script::kMethodWalkDest: // walkdest(actor) -> FUN_00423df0; "None" if no queued walk
+		result = Value::makeString(!args.empty() ? _actorHost->walkDest(args[0].strValue) : "None");
+		return true;
 	case Script::kMethodCountActors: // countactors() -> FUN_00420a70
 		result = Value::makeInt(_actorHost->countActors());
 		return true;

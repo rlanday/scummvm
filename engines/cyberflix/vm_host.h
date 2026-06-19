@@ -159,6 +159,10 @@ public:
 	void actorScale(const Common::String &name, int scale) override;
 	void actorTurn(const Common::String &name, int turn) override;
 	void turnToDeg(const Common::String &name, int deg) override;
+	void walkToStar(const Common::String &name, const Common::String &star) override;
+	void stopWalk(const Common::String &name) override;
+	bool isWalk(const Common::String &name) override;
+	Common::String walkDest(const Common::String &name) override;
 	int starXYZ(const Common::String &name, int selector) override;
 
 private:

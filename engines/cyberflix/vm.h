@@ -437,6 +437,10 @@ public:
 	virtual void actorScale(const Common::String &name, int scale) {}
 	virtual void actorTurn(const Common::String &name, int turn) {}
 	virtual void turnToDeg(const Common::String &name, int deg) {}
+	virtual void walkToStar(const Common::String &name, const Common::String &star) {}
+	virtual void stopWalk(const Common::String &name) {}
+	virtual bool isWalk(const Common::String &name) { return false; }
+	virtual Common::String walkDest(const Common::String &name) { return "None"; }
 	virtual int starXYZ(const Common::String &name, int selector) { return 0; }
 };
 

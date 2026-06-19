@@ -116,6 +116,22 @@ void CyberflixActorVMHost::turnToDeg(const Common::String &name, int deg) {
 	engine().actorRuntime().turnToDeg(engine(), name, deg);
 }
 
+void CyberflixActorVMHost::walkToStar(const Common::String &name, const Common::String &star) {
+	engine().actorRuntime().walkToStar(engine(), name, star);
+}
+
+void CyberflixActorVMHost::stopWalk(const Common::String &name) {
+	engine().actorRuntime().stopWalk(name);
+}
+
+bool CyberflixActorVMHost::isWalk(const Common::String &name) {
+	return engine().actorRuntime().isWalk(name);
+}
+
+Common::String CyberflixActorVMHost::walkDest(const Common::String &name) {
+	return engine().actorRuntime().walkDest(name);
+}
+
 int CyberflixActorVMHost::starXYZ(const Common::String &name, int selector) {
 	return engine().actorRuntime().starXYZ(engine(), name, selector);
 }

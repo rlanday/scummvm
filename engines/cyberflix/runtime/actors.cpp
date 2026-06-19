@@ -29,6 +29,27 @@
 
 namespace Cyberflix {
 
+int ActorRuntime::findWalkRecord(const Common::String &name) const {
+	Common::String key = name;
+	key.toLowercase();
+	for (uint32 i = 0; i < _walks.size(); ++i)
+		if (_walks[i].actorName == key)
+			return static_cast<int>(i);
+	return -1;
+}
+
+void ActorRuntime::clearWalkRecord(const Common::String &name) {
+	Common::String key = name;
+	key.toLowercase();
+	if (key == "all") {
+		_walks.clear();
+		return;
+	}
+	int index = findWalkRecord(key);
+	if (index >= 0)
+		_walks.remove_at(static_cast<uint32>(index));
+}
+
 Common::SharedPtr<Cast> ActorRuntime::findCastShared(const Common::String &name) const {
 	Common::String key = name;
 	key.toLowercase();
@@ -415,6 +436,37 @@ void ActorRuntime::turnToDeg(CyberflixEngine &engine, const Common::String &name
 		ref.actor->angle = newAngle;
 		engine._propRuntime.setDirty(true);
 	}
+}
+
+void ActorRuntime::walkToStar(CyberflixEngine &engine, const Common::String &name, const Common::String &star) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: walktostar('%s'): no such actor", name.c_str());
+		return;
+	}
+
+	// Native queues a 16-slot actor walk record (FUN_00424410 -> FUN_004243b0)
+	// and movement service FUN_004250b0 later advances it. Until the full path
+	// system exists, resolve the destination immediately so authored scripts do
+	// not block forever in while(iswalk(actor)) wait loops.
+	clearWalkRecord(name);
+	Common::String dest = star;
+	actorStar(engine, name, &dest);
+}
+
+void ActorRuntime::stopWalk(const Common::String &name) {
+	clearWalkRecord(name.empty() ? Common::String("all") : name);
+}
+
+bool ActorRuntime::isWalk(const Common::String &name) const {
+	return findWalkRecord(name) >= 0;
+}
+
+Common::String ActorRuntime::walkDest(const Common::String &name) const {
+	int index = findWalkRecord(name);
+	if (index < 0)
+		return "None";
+	return _walks[static_cast<uint32>(index)].destName;
 }
 
 int ActorRuntime::starXYZ(CyberflixEngine &engine, const Common::String &name, int selector) const {

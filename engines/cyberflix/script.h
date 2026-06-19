@@ -119,8 +119,10 @@ public:
 	enum MethodOpcode {
 		kMethodMessage          = 0x2EE1,
 		kMethodMakeLoop         = 0x2EE5,
+		kMethodWalkToStar       = 0x2EE6,
 		kMethodMakeCricket      = 0x2EE7,
 		kMethodVisualEffect     = 0x2EE9,
+		kMethodStopWalk         = 0x2EEA,
 		kMethodStopLoop         = 0x2EEB,
 		kMethodStopCricket      = 0x2EEC,
 		kMethodOpenCastFile     = 0x2EED,
@@ -225,6 +227,7 @@ public:
 		kMethodMouse            = 0x4E26,
 		kMethodStillDown        = 0x4E27,
 		kMethodTick             = 0x4E28,
+		kMethodIsWalk           = 0x4E29,
 		kMethodCountActors      = 0x4E2C,
 		kMethodIndexToActor     = 0x4E2D,
 		kMethodPointInPainting  = 0x4E31,
@@ -271,6 +274,7 @@ public:
 		kMethodSendToFlatFx     = 0x4E7D,
 		kMethodSendToStageFx    = 0x4E7E,
 		kMethodSendToBootFx     = 0x4E7F,
+		kMethodWalkDest         = 0x4E83,
 		kMethodRoadAhead        = 0x4E94
 	};
 
