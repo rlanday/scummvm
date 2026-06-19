@@ -603,13 +603,17 @@ void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine) {
 		// SET prop dirtiness queued until the puppet is hidden or closed.
 		return;
 	}
-	if (!engine._setRuntime.visible() || isReplacementStageForProps(engine._stageRuntime.stage())) {
+	const bool replacementStage = isReplacementStageForProps(engine._stageRuntime.stage());
+	if (!engine._setRuntime.visible() || replacementStage) {
 		if (engine._stageRuntime.stage() && engine._stageRuntime.stage()->isOpen()) {
-			if (!_dirtyRects.empty())
+			const bool fullAnimatedStagePass = replacementStage && hasAnimatedScreenProps();
+			if (!_dirtyRects.empty() && !fullAnimatedStagePass) {
 				engine.stageRuntime().repaintDirtyStageRects(engine);
-			else {
+			} else {
 				// Prop refresh without dirty bounds is still a compositor repaint,
 				// not navigation to a new flat, so keep the current script cursor.
+				// Animated screen props need the same full pass because their
+				// next pose can touch pixels outside the queued state-change rects.
 				engine.stageRuntime().renderStageNode(engine, engine.stageRuntime().node(), false);
 			}
 		}
