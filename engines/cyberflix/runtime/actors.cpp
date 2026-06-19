@@ -281,6 +281,7 @@ Common::String ActorRuntime::actorPose(CyberflixEngine &engine, const Common::St
 		key.toLowercase();
 		if (ref.actor->shapeName != key) {
 			ref.actor->shapeName = key;
+			ref.actor->poseIndex = 0;
 			engine._propRuntime.setDirty(true);
 		}
 	}

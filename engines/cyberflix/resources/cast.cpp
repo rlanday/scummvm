@@ -179,7 +179,7 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 	uint16 cellCount = READ_LE_UINT16(sh + kShapeCellCountOffset);
 	if (!poseCount || !cellCount)
 		return false;
-	uint16 poseIdx = poseCount - 1;
+	uint16 poseIdx = actor.poseIndex < poseCount ? actor.poseIndex : 0;
 	uint16 poseId = READ_LE_UINT16(sh + kShapePoseTableOffset + poseIdx * 2);
 
 	const byte *best = nullptr;

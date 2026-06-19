@@ -69,6 +69,7 @@ public:
 		int32 speed = 0;
 		int32 turn = 0;
 		int32 value = 0;
+		uint16 poseIndex = 0;
 		Common::Array<Shape> shapes;
 	};
 
