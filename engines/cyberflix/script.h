@@ -256,6 +256,7 @@ public:
 		kMethodHitTest          = 0x4E66,
 		kMethodCalcDeg          = 0x4E67,
 		kMethodStarXYZ          = 0x4E69,
+		kMethodFrame            = 0x4E6A,
 		kMethodCurrentSound     = 0x4E6D,
 		kMethodCurrentVoice     = 0x4E6E,
 		kMethodCurrentTheme     = 0x4E6F,

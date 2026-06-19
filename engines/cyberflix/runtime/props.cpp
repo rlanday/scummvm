@@ -593,6 +593,10 @@ void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine) {
 	// props are picked up by the next renderSetScene.
 	if (!_propsDirty)
 		return;
+	// Native loop callbacks run before the single display pass; repainting
+	// inside each callback would advance animated prop poses too often.
+	if (engine.loopRuntime().processingScheduledLoops())
+		return;
 	if (engine._puppetRuntime.isVisible()) {
 		// Native sendtoprop/sendtoshop dispatch does not repaint immediately.
 		// The next forceupdate() takes the puppet compositor branch, so keep

@@ -328,6 +328,10 @@ int CyberflixEngine::tick() {
 	return static_cast<int>((static_cast<uint64>(_system->getMillis()) * 60 / 1000));
 }
 
+int CyberflixEngine::frameCounter() {
+	return _frameCounter;
+}
+
 int CyberflixEngine::calcDeg(int32 a, int32 b) {
 	const int16 ax = static_cast<int16>(a >> 16);
 	const int16 ay = static_cast<int16>(a & 0xffff);
@@ -491,6 +495,7 @@ void CyberflixEngine::forceUpdate() {
 	const bool cursorMoved = pumpCursorMotionEvents();
 	bool presented = false;
 	processScheduledLoops();
+	_frameCounter++;
 	if (!_propRuntime.dirty() && isReplacementStage(_stageRuntime.stage()) && propRuntime().hasAnimatedScreenProps())
 		_propRuntime.setDirty(true);
 	propRuntime().refreshPropsIfDirty(*this);

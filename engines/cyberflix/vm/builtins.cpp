@@ -640,6 +640,9 @@ bool ScriptVM::callRuntimeMethod(uint16 opcode, const Common::Array<Value> &args
 		result = Value::makeInt(_systemHost->frameRate(newRate));
 		return true;
 	}
+	case Script::kMethodFrame: // frame() -> FUN_00435a30: DAT_00461122 compositor counter
+		result = Value::makeInt(_systemHost->frameCounter());
+		return true;
 	case Script::kMethodPath: { // path(slot[, value]) -> FUN_004462a0/FUN_00438450
 		int slot = args.empty() ? 0 : args[0].intValue;
 		const Common::String *newPath = args.size() >= 2 ? &args[1].strValue : nullptr;

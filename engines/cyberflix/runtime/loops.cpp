@@ -175,7 +175,6 @@ void LoopRuntime::processScheduledLoops(CyberflixEngine &engine) {
 		default:
 			debug(1, "Cyberflix: makeloop kind '%s' unhandled", loop.kind.c_str());
 		}
-		engine.propRuntime().refreshPropsIfDirty(engine);
 	}
 	_processingScheduledLoops = false;
 }

@@ -249,6 +249,9 @@ public:
 	/** framerate([n]) (0x3e96): native compositor pacing in 60 Hz timer units. */
 	virtual int frameRate(const int *newRate) { return 3; }
 
+	/** frame() (0x4e6a FUN_00435a30): native compositor pass counter. */
+	virtual int frameCounter() { return 0; }
+
 	/**
 	 * clut(name): snap the hardware palette to the named CLUT instantly
 	 * (TI.EXE 0x2f06 FUN_00446500 -> FUN_0041ba80). Built-in names include

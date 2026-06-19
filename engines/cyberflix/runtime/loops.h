@@ -80,6 +80,7 @@ public:
 	void restoreCricket(const CricketState &cricket) { _crickets.push_back(cricket); }
 
 	bool loopsPaused() const { return _loopsPaused; }
+	bool processingScheduledLoops() const { return _processingScheduledLoops; }
 	bool cricketsPaused() const { return _cricketsPaused; }
 	const Common::Array<ScheduledLoop> &scheduledLoops() const { return _scheduledLoops; }
 	const Common::Array<CricketState> &crickets() const { return _crickets; }

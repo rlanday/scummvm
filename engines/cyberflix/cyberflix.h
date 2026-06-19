@@ -162,6 +162,7 @@ public:
 	bool buttonDown() override;
 	bool stillDown() override;
 	int tick() override;
+	int frameCounter() override;
 	int calcDeg(int32 a, int32 b) override;
 	int calcVectX(int deg, int dist) override;
 	int calcVectY(int deg, int dist) override;
@@ -297,6 +298,7 @@ private:
 	MovieRuntime _movieRuntime;
 	void processScheduledLoops();
 	FramePacingRuntime _framePacingRuntime;
+	int _frameCounter = 0;
 
 	PathRuntime _pathRuntime;
 
