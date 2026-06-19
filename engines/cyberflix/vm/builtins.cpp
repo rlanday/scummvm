@@ -249,7 +249,7 @@ bool ScriptVM::callPropMethod(uint16 opcode, const Common::Array<Value> &args, V
 			_interactionHost->propXYZ(args[0].strValue, args[1].intValue,
 					args[2].intValue, args[3].intValue);
 		return true;
-	case Script::kMethodPropXY: // propxy(name, x, y) -> FUN_0042a370 (mode=0, depth=-1)
+	case Script::kMethodPropXY: // propxy(name, x, y) -> FUN_0042a370 (mode=0; depth=-1 if >=0)
 		if (args.size() >= 3)
 			_interactionHost->setPropXY(args[0].strValue, args[1].intValue, args[2].intValue);
 		if (args.size() == 2)

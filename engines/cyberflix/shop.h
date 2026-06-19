@@ -74,8 +74,9 @@ public:
 
 	/**
 	 * A prop and its runtime state, mirroring the original's 0x9e-byte record
-	 * (offsets in files/renderer-notes.md). Props start hidden; scripts place
-	 * them via propxy/propvisible/propview.
+	 * (offsets in files/renderer-notes.md). Props start hidden in screen mode;
+	 * scripts place/show them via propxy/propvisible/propview or switch them to
+	 * world mode with propset/propxyz.
 	 */
 	struct Prop {
 		Common::String name;        ///< record +0x4a (lowercased for lookup)
@@ -86,14 +87,14 @@ public:
 		Common::Array<Shape> shapes;
 
 		bool visible = false;       ///< +0x00; FUN_00428750 inits 0
-		uint16 mode = 1;            ///< +0x12; 0 = screen space (set by propxy)
+		uint16 mode = 0;            ///< +0x12; 0 = screen space (native init/propxy)
 		int16 y = 0;                ///< +0x14 anchor V
 		int16 x = 0;                ///< +0x16 anchor H
 		int16 z = 0;                ///< propxyz world Z (world props pending)
 		int16 angle = 0;            ///< +0x18 (propdeg)
 		uint16 poseIndex = 0;       ///< +0x20 current pose-table index
 		uint16 poseCount = 0;       ///< +0x22 pose count for current shape
-		int16 depth = 0;            ///< +0x26 (negative = screen-clipped item)
+		int16 depth = -1;           ///< +0x26 (negative = screen-clipped item)
 		int32 scale = 1000;         ///< +0x28
 		int32 zClip = 0;            ///< propzclip distance (world props pending)
 		int32 value = 0;            ///< +0x46 (propvalue)

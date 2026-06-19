@@ -503,7 +503,7 @@ public:
 	virtual int propXY(const Common::String &name, int selector) { return 0; }
 
 	/** propxy(name, x, y) (0x3e92 FUN_0042a370): screen-space placement —
-	 *  sets mode=0 and depth=-1 alongside the anchor point. */
+	 *  sets mode=0 and changes non-negative depths to -1 alongside the anchor point. */
 	virtual void setPropXY(const Common::String &name, int x, int y) {}
 
 	/** propscale(name, scale) (0x3e9c FUN_00429870): non-negative world scale. */
