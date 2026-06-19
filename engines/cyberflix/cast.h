@@ -121,7 +121,7 @@ public:
 
 	bool renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
 			const Common::String &setName, CelImage &cel, Common::Rect &rect,
-			int16 &depth) const;
+			int16 &depth, int16 &depthBucket) const;
 
 private:
 	const byte *engineBase(uint32 index) const;

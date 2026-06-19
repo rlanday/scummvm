@@ -184,6 +184,7 @@ public:
 	bool empty() const { return _width == 0 || _height == 0; }
 	void clear() {
 		_work.clear();
+		_depthMap.clear();
 		_pitch = 0;
 		_width = _height = 0;
 	}
@@ -194,12 +195,21 @@ public:
 	/** Copy the current frame out as a standalone @ref FrameImage. */
 	void copyTo(FrameImage &out) const;
 
+	/** True when the last applied SET/MOV frame carried native row-depth spans. */
+	bool hasDepthMap() const { return !_depthMap.empty(); }
+
+	/** Native world-sprite visibility test: draw when the frame span depth is at least @p depth. */
+	bool depthVisibleAt(int x, int y, int depth) const;
+
 private:
 	// Reference rows reach up to four lines past the frame, so the working
 	// surface is padded by this many rows top and bottom.
 	static const int kPad = 8;
 
+	bool updateDepthMap(const byte *src, uint32 srcSize, uint32 consumed);
+
 	Common::Array<byte> _work; ///< Padded persistent surface (stride == width).
+	Common::Array<byte> _depthMap; ///< width*height native foreground depth buckets.
 	int _pitch = 0;
 	uint16 _width = 0;
 	uint16 _height = 0;

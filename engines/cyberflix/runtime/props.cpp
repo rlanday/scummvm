@@ -132,7 +132,8 @@ void PropRuntime::collectWorldProps(CyberflixEngine &engine, Common::Array<const
 			Common::SharedPtr<CelImage> cel;
 			Common::Rect rect;
 			int16 depth = 0;
-			if (!_shops[s]->renderWorldProp(p, camera, setName, cel, rect, depth))
+			int16 depthBucket = 0;
+			if (!_shops[s]->renderWorldProp(p, camera, setName, cel, rect, depth, depthBucket))
 				continue;
 			draw.push_back(&p);
 			drawShop.push_back(_shops[s].get());

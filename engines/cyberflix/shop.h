@@ -186,7 +186,7 @@ public:
 	bool renderProp(const Prop &prop, Common::SharedPtr<CelImage> &cel, Common::Rect &rect) const;
 	bool renderWorldProp(const Prop &prop, const WorldCamera &camera,
 			const Common::String &setName, Common::SharedPtr<CelImage> &cel,
-			Common::Rect &rect, int16 &depth) const;
+			Common::Rect &rect, int16 &depth, int16 &depthBucket) const;
 
 private:
 	const byte *engineBase(uint32 index) const;

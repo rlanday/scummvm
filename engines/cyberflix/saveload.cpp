@@ -199,13 +199,14 @@ static void logTitanicGymLoadDiagnostics(CyberflixEngine &engine) {
 			CelImage cel;
 			Common::Rect rect;
 			int16 depth = 0;
-			bool rendered = penny.cast->renderWorldActor(*penny.actor, camera, set->setName(), cel, rect, depth);
-			warning("Cyberflix: GYM load diagnostics: penny visible=%d set='%s' star='%s' shape='%s' pos=(%d,%d,%d) angle=%d scale=%d zclip=%d rendered=%d rect=(%d,%d)-(%d,%d) depth=%d cel=%ux%u",
+			int16 depthBucket = 0;
+			bool rendered = penny.cast->renderWorldActor(*penny.actor, camera, set->setName(), cel, rect, depth, depthBucket);
+			warning("Cyberflix: GYM load diagnostics: penny visible=%d set='%s' star='%s' shape='%s' pos=(%d,%d,%d) angle=%d scale=%d zclip=%d rendered=%d rect=(%d,%d)-(%d,%d) depth=%d depthBucket=%d cel=%ux%u",
 					penny.actor->visible ? 1 : 0, penny.actor->setName.c_str(),
 					penny.actor->sceneName.c_str(), penny.actor->shapeName.c_str(),
 					penny.actor->x, penny.actor->y, penny.actor->z, penny.actor->angle,
 					penny.actor->scale, penny.actor->zClip, rendered ? 1 : 0,
-					rect.left, rect.top, rect.right, rect.bottom, depth, cel.width, cel.height);
+					rect.left, rect.top, rect.right, rect.bottom, depth, depthBucket, cel.width, cel.height);
 		} else {
 			warning("Cyberflix: GYM load diagnostics: penny actor is not present");
 		}

@@ -296,7 +296,7 @@ bool Shop::renderProp(const Prop &prop, Common::SharedPtr<CelImage> &cel, Common
 
 bool Shop::renderWorldProp(const Prop &prop, const WorldCamera &camera,
 		const Common::String &setName, Common::SharedPtr<CelImage> &cel,
-		Common::Rect &rect, int16 &depth) const {
+		Common::Rect &rect, int16 &depth, int16 &depthBucket) const {
 	if (!prop.visible || prop.mode == 0 || !prop.setName.equalsIgnoreCase(setName))
 		return false;
 
@@ -349,6 +349,7 @@ bool Shop::renderWorldProp(const Prop &prop, const WorldCamera &camera,
 	if (!rect.intersects(viewport))
 		return false;
 	depth = static_cast<int16>(projectedDepth);
+	depthBucket = camera.nearPlane ? static_cast<int16>(zClippedDepth / camera.nearPlane) : 0;
 	return true;
 }
 

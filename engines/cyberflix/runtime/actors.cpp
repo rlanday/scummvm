@@ -114,7 +114,8 @@ void ActorRuntime::collectWorldActors(CyberflixEngine &engine, Common::Array<con
 			CelImage cel;
 			Common::Rect rect;
 			int16 depth = 0;
-			if (!_casts[c]->renderWorldActor(actor, camera, setName, cel, rect, depth))
+			int16 depthBucket = 0;
+			if (!_casts[c]->renderWorldActor(actor, camera, setName, cel, rect, depth, depthBucket))
 				continue;
 			draw.push_back(&actor);
 			drawCast.push_back(_casts[c].get());

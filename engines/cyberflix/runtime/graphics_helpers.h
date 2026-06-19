@@ -29,7 +29,8 @@
 namespace Cyberflix {
 
 inline void drawScaledCel(Graphics::Surface *screen, const CelImage &cel,
-		const Common::Rect &dest, const Common::Rect &clip) {
+		const Common::Rect &dest, const Common::Rect &clip,
+		const FrameSequence *depthFrame = nullptr, int depthBucket = 0) {
 	const int destW = dest.width();
 	const int destH = dest.height();
 	if (destW <= 0 || destH <= 0 || cel.width <= 0 || cel.height <= 0)
@@ -42,7 +43,8 @@ inline void drawScaledCel(Graphics::Surface *screen, const CelImage &cel,
 		int srcY = static_cast<int>(static_cast<int64>(y - dest.top) * cel.height / destH);
 		for (int x = paint.left; x < paint.right; ++x) {
 			int srcX = static_cast<int>(static_cast<int64>(x - dest.left) * cel.width / destW);
-			if (cel.isOpaque(srcX, srcY))
+			if (cel.isOpaque(srcX, srcY) &&
+					(!depthFrame || depthFrame->depthVisibleAt(x, y, depthBucket)))
 				*(reinterpret_cast<byte *>(screen->getBasePtr(x, y))) =
 						cel.pixels[static_cast<uint>(srcY) * cel.width + srcX];
 		}

@@ -194,18 +194,19 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 				Common::SharedPtr<CelImage> propCel;
 				Common::Rect r;
 				int16 depth = 0;
+				int16 depthBucket = 0;
 				Common::String name;
 				if (itemType[static_cast<uint>(i)]) {
 					uint32 idx = itemIndex[static_cast<uint>(i)];
 					if (!actorCast[idx]->renderWorldActor(*actorDraw[idx], camera,
-							_setRuntime.set()->setName(), actorCel, r, depth))
+							_setRuntime.set()->setName(), actorCel, r, depth, depthBucket))
 						continue;
 					cel = &actorCel;
 					name = actorDraw[idx]->name;
 				} else {
 					uint32 idx = itemIndex[static_cast<uint>(i)];
 					if (!worldShop[idx]->renderWorldProp(*worldDraw[idx], camera,
-							_setRuntime.set()->setName(), propCel, r, depth))
+							_setRuntime.set()->setName(), propCel, r, depth, depthBucket))
 						continue;
 					cel = propCel.get();
 					name = worldDraw[idx]->name;
@@ -215,6 +216,8 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 				int srcX = static_cast<int>(static_cast<int64>(x - r.left) * cel->width / r.width());
 				int srcY = static_cast<int>(static_cast<int64>(y - r.top) * cel->height / r.height());
 				if (!cel->isOpaque(srcX, srcY))
+					continue;
+				if (!_setRuntime.frameSequence().depthVisibleAt(x, y, depthBucket))
 					continue;
 				_hitKind = itemType[static_cast<uint>(i)] ? "actor" : "prop";
 				return name;

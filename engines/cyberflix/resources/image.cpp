@@ -469,13 +469,63 @@ uint32 FrameSequence::applyFrame(const byte *src, uint32 srcSize) {
 	dec.run(height, width, kPad * _pitch);
 	if (!dec.ok())
 		return 0;
-	return dec.consumed();
+	const uint32 consumed = dec.consumed();
+	updateDepthMap(src, srcSize, consumed);
+	return consumed;
 }
 
 const byte *FrameSequence::pixels() const {
 	if (empty())
 		return nullptr;
 	return _work.begin() + kPad * _pitch;
+}
+
+bool FrameSequence::updateDepthMap(const byte *src, uint32 srcSize, uint32 consumed) {
+	_depthMap.clear();
+	if (empty() || consumed >= srcSize)
+		return false;
+
+	const byte *tail = src + consumed;
+	const uint32 tailSize = srcSize - consumed;
+	const uint32 tableSize = static_cast<uint32>(_height) * 2;
+	if (tailSize < tableSize)
+		return false;
+
+	Common::Array<byte> depthMap;
+	depthMap.resize(static_cast<uint>(_width) * _height);
+	for (uint16 y = 0; y < _height; ++y) {
+		const uint32 rowOffset = static_cast<uint32>(tail[y * 2] | (tail[y * 2 + 1] << 8));
+		if (rowOffset < tableSize || rowOffset >= tailSize)
+			return false;
+		const uint32 count = tail[rowOffset];
+		const uint32 rowEnd = rowOffset + 1 + count * 2;
+		if (rowEnd > tailSize)
+			return false;
+
+		uint32 x = 0;
+		const byte *run = tail + rowOffset + 1;
+		for (uint32 i = 0; i < count; ++i, run += 2) {
+			const uint32 length = run[0];
+			const byte depth = run[1];
+			if (length == 0 || x + length > _width)
+				return false;
+			memset(depthMap.begin() + static_cast<uint>(y) * _width + x, depth, length);
+			x += length;
+		}
+		if (x != _width)
+			return false;
+	}
+
+	_depthMap = depthMap;
+	return true;
+}
+
+bool FrameSequence::depthVisibleAt(int x, int y, int depth) const {
+	if (_depthMap.empty())
+		return true;
+	if (x < 0 || y < 0 || x >= _width || y >= _height)
+		return false;
+	return depth <= _depthMap[static_cast<uint>(y) * _width + x];
 }
 
 void FrameSequence::copyTo(FrameImage &out) const {

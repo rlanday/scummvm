@@ -112,7 +112,8 @@ public:
 			const Common::String &view = Common::String());
 	void displaySetFrame(CyberflixEngine &engine, const FrameImage &frame);
 	void displaySetFrame(CyberflixEngine &engine, const FrameSequence &frame);
-	void displaySetFramePixels(CyberflixEngine &engine, const byte *pixels, uint16 width, uint16 height);
+	void displaySetFramePixels(CyberflixEngine &engine, const byte *pixels, uint16 width, uint16 height,
+			const FrameSequence *depthFrame = nullptr);
 	bool presentPendingScreenUpdate(CyberflixEngine &engine);
 	Snapshot snapshot() const;
 	bool restoreSnapshot(const Snapshot &snapshot);

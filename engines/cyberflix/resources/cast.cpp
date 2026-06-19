@@ -232,7 +232,7 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 
 bool Cast::renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
 		const Common::String &setName, CelImage &cel, Common::Rect &rect,
-		int16 &depth) const {
+		int16 &depth, int16 &depthBucket) const {
 	if (!actor.visible || !actor.setName.equalsIgnoreCase(setName))
 		return false;
 
@@ -285,6 +285,7 @@ bool Cast::renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
 	if (!rect.intersects(viewport))
 		return false;
 	depth = static_cast<int16>(projectedDepth);
+	depthBucket = camera.nearPlane ? static_cast<int16>(zClippedDepth / camera.nearPlane) : 0;
 	return true;
 }
 

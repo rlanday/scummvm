@@ -309,10 +309,11 @@ void SetRuntime::displaySetFrame(CyberflixEngine &engine, const FrameImage &fram
 void SetRuntime::displaySetFrame(CyberflixEngine &engine, const FrameSequence &frame) {
 	if (frame.empty())
 		return;
-	displaySetFramePixels(engine, frame.pixels(), frame.width(), frame.height());
+	displaySetFramePixels(engine, frame.pixels(), frame.width(), frame.height(), &frame);
 }
 
-void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixels, uint16 width, uint16 height) {
+void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixels, uint16 width, uint16 height,
+		const FrameSequence *depthFrame) {
 	if (!visible() || !set() || !set()->isOpen())
 		return;
 
@@ -368,15 +369,16 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 			Common::SharedPtr<CelImage> propCel;
 			Common::Rect r;
 			int16 depth = 0;
+			int16 depthBucket = 0;
 			if (drawActor) {
 				if (actorCast[actorIndex]->renderWorldActor(*actorDraw[actorIndex],
-						camera, set()->setName(), actorCel, r, depth))
-					drawScaledCel(screen, actorCel, r, viewport);
+						camera, set()->setName(), actorCel, r, depth, depthBucket))
+					drawScaledCel(screen, actorCel, r, viewport, depthFrame, depthBucket);
 				++actorIndex;
 			} else {
 				if (worldShop[propIndex]->renderWorldProp(*worldDraw[propIndex], camera,
-						set()->setName(), propCel, r, depth))
-					drawScaledCel(screen, *propCel, r, viewport);
+						set()->setName(), propCel, r, depth, depthBucket))
+					drawScaledCel(screen, *propCel, r, viewport, depthFrame, depthBucket);
 				++propIndex;
 			}
 		}
