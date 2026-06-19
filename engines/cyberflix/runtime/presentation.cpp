@@ -139,11 +139,26 @@ void CyberflixEngine::blackScreen() {
 }
 
 void CyberflixEngine::message(const Common::String &text) {
+	// TI.EXE message() (dispatch B FUN_00444c60 case 0 -> FUN_00446240) only
+	// evaluates its argument expression (FUN_00419cf0) and releases the
+	// resulting temporary string slot (FUN_00419c40); it never draws anything
+	// or opens a modal box. Several scripts (e.g. MAP.STG) leave debug
+	// message() calls like "Map 1" that the shipping game silently ignores, so
+	// mirror that by debug-logging only rather than popping a GUI dialog.
 	debug(1, "Cyberflix message: %s", text.c_str());
-	if (!text.empty()) {
-		GUI::MessageDialog dialog(text);
-		dialog.runModal();
-	}
+}
+
+// TI.EXE notedialog() (dispatch B FUN_00444c60 case 0x4e -> FUN_004461e0)
+// evaluates its argument and shows a real modal note box through FUN_00408fc0:
+// MessageBoxA(NULL, text, title, 0x2040) = MB_OK | MB_ICONINFORMATION |
+// MB_TASKMODAL. Unlike message(), this is user-visible. The CTL.STG SAVE/OPEN
+// button scripts call it (gated by `if (tour)`) to show the authored warnings
+// "Sorry, you can't save/open a saved game during the tour.", so mirror the
+// native single-OK modal with a GUI::MessageDialog.
+void CyberflixEngine::noteDialog(const Common::String &text) {
+	debug(1, "Cyberflix notedialog: %s", text.c_str());
+	GUI::MessageDialog dialog(text);
+	dialog.runModal();
 }
 
 void CyberflixEngine::flushEvents() {

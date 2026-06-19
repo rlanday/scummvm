@@ -134,6 +134,7 @@ public:
 	void blackScreen() override;
 	void forceUpdate() override;
 	void message(const Common::String &text) override;
+	void noteDialog(const Common::String &text) override;
 	void flushEvents() override;
 	void drawString(const Common::String &text, int32 packedPoint, int color, int size) override;
 	void fadePalette(const Common::String &target, int steps, bool toBlack) override;

@@ -1017,6 +1017,16 @@ bool CyberflixEngine::canSaveAutosaveCurrently() {
 }
 
 bool CyberflixEngine::canLoadGameStateCurrently(Common::U32String *msg) {
+	// The original blocks loading during the tour: the CTL.STG OPEN button
+	// script shows notedialog("Sorry, you can't open a saved game during the
+	// tour.") instead of calling opengame(). Mirror that for ScummVM's own
+	// load entry points (GMM / F7) so the framework path can't bypass the tour
+	// restriction the script enforces.
+	if (isTourMode(_vm)) {
+		if (msg)
+			*msg = _("You can't open a saved game during the tour.");
+		return false;
+	}
 	return true;
 }
 
@@ -1028,8 +1038,10 @@ void CyberflixEngine::saveGame(const Common::String &signature) {
 }
 
 void CyberflixEngine::openGame(const Common::String &signature) {
-	if (!canLoadGameStateCurrently()) {
-		g_system->displayMessageOnOSD(_("Loading game is currently unavailable"));
+	Common::U32String msg;
+	if (!canLoadGameStateCurrently(&msg)) {
+		g_system->displayMessageOnOSD(msg.empty()
+				? _("Loading game is currently unavailable") : msg);
 		return;
 	}
 

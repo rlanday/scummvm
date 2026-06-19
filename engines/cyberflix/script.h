@@ -173,6 +173,7 @@ public:
 		kMethodPropInstance     = 0x2F2C,
 		kMethodSaveGame         = 0x2F2D,
 		kMethodOpenGame         = 0x2F2E,
+		kMethodNoteDialog       = 0x2F2F,
 		kMethodDrawString       = 0x2F30,
 		kMethodSendToBoot       = 0x2F31,
 		kMethodActorVisible     = 0x3E81,

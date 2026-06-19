@@ -523,8 +523,11 @@ bool ScriptVM::callInputMethod(uint16 opcode, const Common::Array<Value> &args, 
 
 bool ScriptVM::callRuntimeMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
 	switch (opcode) {
-	case Script::kMethodMessage: // message(text) -> FUN_00446240
+	case Script::kMethodMessage: // message(text) -> FUN_00446240 (no-op debug stub)
 		_systemHost->message(args.empty() ? Common::String() : args[0].strValue);
+		return true;
+	case Script::kMethodNoteDialog: // notedialog(text) -> FUN_004461e0 -> FUN_00408fc0 (modal OK box)
+		_systemHost->noteDialog(args.empty() ? Common::String() : args[0].strValue);
 		return true;
 	case Script::kMethodPlayMovie: // playmovie('name.mov')
 		_movieHost->playMovie(args.empty() ? Common::String() : args[0].strValue);

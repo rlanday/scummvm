@@ -259,6 +259,16 @@ public:
 	/** message(text) (0x2ee1): copy/log a script diagnostic message. */
 	virtual void message(const Common::String &text) {}
 
+	/**
+	 * notedialog(text) (0x2f2f -> FUN_004461e0 -> FUN_00408fc0): show a modal
+	 * note dialog with an OK button. The original calls MessageBoxA with flags
+	 * 0x2040 (MB_OK | MB_ICONINFORMATION | MB_TASKMODAL). Unlike message(),
+	 * which only writes the debug-console line, notedialog() is user-visible:
+	 * the CTL.STG SAVE/OPEN button scripts use it (gated by `if (tour)`) to warn
+	 * "Sorry, you can't save/open a saved game during the tour."
+	 */
+	virtual void noteDialog(const Common::String &text) {}
+
 	/** flushevents() (0x2f29): purge queued input events. */
 	virtual void flushEvents() {}
 
