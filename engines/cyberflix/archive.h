@@ -24,6 +24,7 @@
 
 #include "common/scummsys.h"
 #include "common/array.h"
+#include "common/ptr.h"
 #include "common/str.h"
 #include "common/stream.h"
 
@@ -69,11 +70,11 @@ namespace Cyberflix {
 class Archive {
 public:
 	struct Resource {
-		uint32 id;          ///< Sequential resource id.
-		uint32 length;      ///< Payload size in bytes.
-		uint32 info;        ///< Type/flags (semantics still being mapped).
-		uint32 dataOffset;  ///< Absolute file offset of the payload.
-		bool empty;         ///< True for placeholder slots with no data.
+		uint32 id = 0;          ///< Sequential resource id.
+		uint32 length = 0;      ///< Payload size in bytes.
+		uint32 info = 0;        ///< Type/flags (semantics still being mapped).
+		uint32 dataOffset = 0;  ///< Absolute file offset of the payload.
+		bool empty = false;     ///< True for placeholder slots with no data.
 	};
 
 	Archive();
@@ -84,7 +85,7 @@ public:
 
 	void close();
 
-	bool isOpen() const { return _stream != nullptr; }
+	bool isOpen() const { return _stream.get() != nullptr; }
 
 	/** Number of resources declared in the container header (+0x14). */
 	uint32 getResourceCount() const { return _resources.size(); }
@@ -116,7 +117,10 @@ public:
 private:
 	bool readDirectory();
 
-	Common::SeekableReadStream *_stream;
+	// Owns the backing stream (RAII); ScopedPtr is non-copyable, so Archive (and
+	// the resource objects that hold one by value) are non-copyable too, which is
+	// correct -- they are always referenced through ScopedPtr/SharedPtr.
+	Common::ScopedPtr<Common::SeekableReadStream> _stream;
 	Common::String _name;
 
 	uint32 _magic;

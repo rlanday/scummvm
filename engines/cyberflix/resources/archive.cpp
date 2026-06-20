@@ -29,7 +29,7 @@
 namespace Cyberflix {
 
 Archive::Archive() :
-		_stream(nullptr), _magic(0), _declaredSize(0),
+		_magic(0), _declaredSize(0),
 		_firstSectionSize(0), _resourceCount(0) {
 }
 
@@ -76,7 +76,7 @@ bool Archive::open(Common::SeekableReadStream *stream, const Common::String &nam
 				name.c_str(), _declaredSize, static_cast<int>(stream->size()));
 	}
 
-	_stream = stream;
+	_stream.reset(stream);
 
 	if (!readDirectory()) {
 		warning("Cyberflix::Archive: '%s' has an invalid resource directory", name.c_str());
@@ -147,13 +147,12 @@ Common::SeekableReadStream *Archive::createReadStreamForResource(uint32 index) c
 	const Resource &res = _resources[index];
 	if (res.empty || res.length == 0)
 		return nullptr;
-	return new Common::SeekableSubReadStream(_stream, res.dataOffset,
+	return new Common::SeekableSubReadStream(_stream.get(), res.dataOffset,
 			res.dataOffset + res.length);
 }
 
 void Archive::close() {
-	delete _stream;
-	_stream = nullptr;
+	_stream.reset();
 	_magic = _declaredSize = _firstSectionSize = _resourceCount = 0;
 	_resources.clear();
 	_name.clear();

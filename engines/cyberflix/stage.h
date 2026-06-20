@@ -59,7 +59,6 @@ namespace Cyberflix {
 class Stage {
 public:
 	Stage() {}
-	~Stage() {}
 
 	/** Node-table record stride and field offsets (engine-base frame). */
 	enum {

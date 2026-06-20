@@ -84,7 +84,6 @@ namespace Cyberflix {
 class Set {
 public:
 	Set() {}
-	~Set() {}
 
 	/** Master-header, scene-record and panorama-record field offsets. */
 	enum {
