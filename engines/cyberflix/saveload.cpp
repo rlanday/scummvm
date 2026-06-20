@@ -146,6 +146,16 @@ static bool isTourMode(const ScriptVM &vm) {
 			it->_value.intValue != 0;
 }
 
+static int globalIntValue(const Common::HashMap<Common::String, Value> &vars,
+		const Common::String &name) {
+	Common::HashMap<Common::String, Value>::const_iterator it = vars.find(name);
+	if (it == vars.end())
+		return 0;
+	if (it->_value.type != Value::kBool && it->_value.type != Value::kInt)
+		return 0;
+	return it->_value.intValue;
+}
+
 static void logTitanicGymLoadDiagnostics(CyberflixEngine &engine) {
 	SetRuntime &setRuntime = engine.setRuntime();
 	if (engine.getGameType() != GType_Titanic || !setRuntime.set() ||
@@ -734,7 +744,8 @@ static void restoreCastState(ActorRuntime &actorRuntime, const Common::Array<Cas
 	}
 }
 
-static void restoreTitanicLegacyCastState(CyberflixEngine &engine) {
+static void restoreTitanicLegacyCastState(CyberflixEngine &engine,
+		const Common::HashMap<Common::String, Value> &vars) {
 	// Early ScummVM CyberFlix saves wrote an empty CAST chunk. Native Titanic
 	// keeps GANG.CST open after boot (`opencastfile("gang.cst")`, then
 	// `sendtocast("gang.cst", initactors())`), and room scripts such as
@@ -744,6 +755,19 @@ static void restoreTitanicLegacyCastState(CyberflixEngine &engine) {
 	engine.actorRuntime().openCastFile(engine, "gang.cst");
 	Common::Array<Value> noArgs;
 	engine.actorRuntime().sendToCast(engine, "gang.cst", "initactors", noArgs);
+
+	// The same legacy saves lost actor dialogue counters. C73.SET schedules the
+	// Smethels door knock while actorvalue("smeth") is still zero, but the door
+	// only answers that knock during mission 1, phase 0. Once the durable story
+	// globals have moved past that initial cabin state, Smethels has necessarily
+	// already been handled; preserve that native post-runpuppet side effect.
+	const int mission = globalIntValue(vars, "mission");
+	const int phase = globalIntValue(vars, "phase");
+	const int smethPhase = globalIntValue(vars, "smethphase");
+	if (mission > 1 || (mission == 1 && phase > 0) || smethPhase > 0) {
+		const int talkedToSmethels = 1;
+		engine.actorRuntime().actorValue("smeth", &talkedToSmethels);
+	}
 }
 
 static void restoreTrackState(AudioRuntime &audioRuntime, const Common::Array<TrackState> &trackStates) {
@@ -1250,7 +1274,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	setRuntime().restoreSnapshot(setSnapshot);
 
 	if (castStates.empty() && getGameType() == GType_Titanic) {
-		restoreTitanicLegacyCastState(*this);
+		restoreTitanicLegacyCastState(*this, _vm.globalVars());
 		Common::Array<Value> noArgs;
 		if (setRuntime().set() && setRuntime().set()->isOpen())
 			dispatchSetMessage("openset", noArgs);
