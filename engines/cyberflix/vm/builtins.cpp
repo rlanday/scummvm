@@ -86,6 +86,9 @@ bool ScriptVM::callAudioMethod(uint16 opcode, const Common::Array<Value> &args, 
 	case Script::kMethodCurrentVoice: // currentvoice() -> FUN_00412ff0: active voice cue or 'None'
 		result = Value::makeString(_audioHost->currentVoice());
 		return true;
+	case Script::kMethodVoiceDone: // voicedone() -> true once the voice channel is idle
+		result = Value::makeBool(_audioHost->voiceDone());
+		return true;
 	default:
 		return false;
 	}

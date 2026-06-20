@@ -79,4 +79,8 @@ Common::String CyberflixAudioVMHost::currentVoice() {
 	return engine().audioRuntime().currentVoice(engine());
 }
 
+bool CyberflixAudioVMHost::voiceDone() {
+	return engine().audioRuntime().voiceDone(engine());
+}
+
 } // End of namespace Cyberflix

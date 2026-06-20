@@ -746,5 +746,21 @@ Common::String AudioRuntime::currentVoice(CyberflixEngine &engine) {
 	return "None";
 }
 
+// voicedone() (0x4e81): true once the voicesound()/knock channel is idle. Native
+// scripts busy-wait `while (not voicedone()) endwhile` on the asynchronous voice
+// channel (e.g. HALLF2C Penny door: knock, wait for it to finish, then open the
+// door and run the puppet). The voice plays on the mixer thread, so pump the
+// engine here while it is still active: this lets the sound finish and keeps the
+// software cursor responsive instead of spinning the VM to its step cap (which
+// would abandon the rest of the handler and skip the conversation).
+bool AudioRuntime::voiceDone(CyberflixEngine &engine) {
+	if (engine._mixer->isSoundHandleActive(_voiceSlot.handle)) {
+		engine.delayMillisWithCursorUpdates(10);
+		if (engine._mixer->isSoundHandleActive(_voiceSlot.handle))
+			return false;
+	}
+	return true;
+}
+
 
 } // End of namespace Cyberflix

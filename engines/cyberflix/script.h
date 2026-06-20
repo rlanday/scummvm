@@ -259,6 +259,7 @@ public:
 		kMethodFrame            = 0x4E6A,
 		kMethodCurrentSound     = 0x4E6D,
 		kMethodCurrentVoice     = 0x4E6E,
+		kMethodVoiceDone        = 0x4E81,
 		kMethodCurrentTheme     = 0x4E6F,
 		kMethodCalcDist         = 0x4E71,
 		kMethodCalcMod          = 0x4E72,

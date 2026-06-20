@@ -383,6 +383,9 @@ public:
 
 	/** currentvoice(): active voice cue name, or "None" when silent. */
 	virtual Common::String currentVoice() { return "None"; }
+
+	/** voicedone(): true once the voicesound() channel has finished playing. */
+	virtual bool voiceDone() { return true; }
 };
 
 class VMInputHost {

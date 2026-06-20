@@ -126,6 +126,7 @@ public:
 	Common::String currentTheme(int which) override;
 	Common::String currentSound(int which) override;
 	Common::String currentVoice() override;
+	bool voiceDone() override;
 
 private:
 	CyberflixEngine &engine();

@@ -94,6 +94,7 @@ public:
 	Common::String currentTheme(CyberflixEngine &engine, int which);
 	Common::String currentSound(CyberflixEngine &engine, int which);
 	Common::String currentVoice(CyberflixEngine &engine);
+	bool voiceDone(CyberflixEngine &engine);
 
 	Common::Array<Common::SharedPtr<ThemeTrack> > &tracks() { return _tracks; }
 	const Common::Array<Common::SharedPtr<ThemeTrack> > &tracks() const { return _tracks; }
