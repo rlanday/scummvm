@@ -1033,6 +1033,11 @@ bool CyberflixEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 			*msg = _("You can't save your game during the tour.");
 		return false;
 	}
+	if (_puppetRuntime.isOpen()) {
+		if (msg)
+			*msg = _("You can't save your game right now.");
+		return false;
+	}
 	return (stageRuntime().stage() && stageRuntime().stage()->isOpen()) ||
 			(setRuntime().set() && setRuntime().set()->isOpen());
 }
