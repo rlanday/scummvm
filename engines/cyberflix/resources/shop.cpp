@@ -225,7 +225,9 @@ bool Shop::resolvePropCel(const Prop &prop, int angle, Common::SharedPtr<CelImag
 	}
 	int shIdx = resourceIndexById(shape->resId);
 	const byte *sh = shIdx >= 0 ? engineBase(static_cast<uint32>(shIdx)) : nullptr;
-	if (!sh || sh + kShapeCellTableOffset > _fileData.end()) {
+	const uint64 shapeLen = shIdx >= 0 ?
+			static_cast<uint64>(_archive.getResource(static_cast<uint32>(shIdx)).length) + 4 : 0;
+	if (!sh || shapeLen < kShapeCellTableOffset) {
 		debug(1, "Cyberflix: renderProp('%s'): shape res %u missing",
 				prop.name.c_str(), shape->resId);
 		return false;
@@ -234,6 +236,9 @@ bool Shop::resolvePropCel(const Prop &prop, int angle, Common::SharedPtr<CelImag
 	uint16 poseCount = READ_LE_UINT16(sh + kShapePoseCountOffset);
 	uint16 cellCount = READ_LE_UINT16(sh + kShapeCellCountOffset);
 	if (!poseCount || !cellCount)
+		return false;
+	if (static_cast<uint64>(kShapePoseTableOffset) + static_cast<uint64>(poseCount) * 2 > shapeLen ||
+			static_cast<uint64>(kShapeCellTableOffset) + static_cast<uint64>(cellCount) * kShapeCellStride > shapeLen)
 		return false;
 	// Pose id from the pose table; cells store poseId-1 in their id field.
 	uint16 poseIdx = prop.poseIndex < poseCount ? prop.poseIndex : poseCount - 1;

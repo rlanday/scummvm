@@ -672,10 +672,10 @@ bool ScriptVM::callRuntimeMethod(uint16 opcode, const Common::Array<Value> &args
 
 Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Common::Array<Value> &args) {
 	// Dispatch a builtin method by opcode. The interpreter routes 0x2Exx/0x2Fxx
-	// through dispatch B and 0x3Exx/0x4Exx through dispatch A (files/opcode-map.md
-	// section 6); ~340 handlers are stubbed as logged no-ops until their
-	// subsystems (renderer/video/audio/navigation) are implemented. Arguments are
-	// fully evaluated so trace output reflects real call sites.
+	// through dispatch B and 0x3Exx/0x4Exx through dispatch A; ~340 handlers are
+	// stubbed as logged no-ops until their subsystems (renderer/video/audio/
+	// navigation) are implemented. Arguments are fully evaluated so trace output
+	// reflects real call sites.
 	if (_trace) {
 		Common::String a;
 		for (uint32 i = 0; i < args.size(); ++i) {
@@ -694,7 +694,7 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		return result;
 
 	// Forward the effectful builtins we implement to the engine host. Opcodes
-	// not handled here remain logged no-ops (see files/method-catalog.md).
+	// not handled here remain logged no-ops.
 	// (The message-carrying send* builtins never reach this path; they are
 	// routed through dispatchMessageBuiltin with the message unevaluated.)
 

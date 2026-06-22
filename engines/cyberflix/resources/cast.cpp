@@ -169,7 +169,9 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 	}
 	int shIdx = resourceIndexById(shape->resId);
 	const byte *sh = shIdx >= 0 ? engineBase(static_cast<uint32>(shIdx)) : nullptr;
-	if (!sh || sh + kShapeCellTableOffset > _fileData.end()) {
+	const uint64 shapeLen = shIdx >= 0 ?
+			static_cast<uint64>(_archive.getResource(static_cast<uint32>(shIdx)).length) + 4 : 0;
+	if (!sh || shapeLen < kShapeCellTableOffset) {
 		debug(1, "Cyberflix: renderActor('%s'): shape res %u missing",
 				actor.name.c_str(), shape->resId);
 		return false;
@@ -178,6 +180,9 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 	uint16 poseCount = READ_LE_UINT16(sh + kShapePoseCountOffset);
 	uint16 cellCount = READ_LE_UINT16(sh + kShapeCellCountOffset);
 	if (!poseCount || !cellCount)
+		return false;
+	if (static_cast<uint64>(kShapePoseTableOffset) + static_cast<uint64>(poseCount) * 2 > shapeLen ||
+			static_cast<uint64>(kShapeCellTableOffset) + static_cast<uint64>(cellCount) * kShapeCellStride > shapeLen)
 		return false;
 	uint16 poseIdx = actor.poseIndex < poseCount ? actor.poseIndex : 0;
 	uint16 poseId = READ_LE_UINT16(sh + kShapePoseTableOffset + poseIdx * 2);

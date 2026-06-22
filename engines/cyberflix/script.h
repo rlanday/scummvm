@@ -70,7 +70,6 @@ public:
 
 		// Control-flow builtins dispatched by the main loop's small switch
 		// (TI.EXE 0x0040ba4f, map 0x40c458; statement executor 0x0040ba20).
-		// See files/opcode-map.md section 3 and decomp/stage-notes.md.
 		kOpScriptMarker = 0x0FA1, ///< Separates named definitions in a resource.
 		kOpDeclGlobal   = 0x0FA2, ///< Declare var list in the global scope (0x45f010).
 		kOpDeclLocal    = 0x0FA3, ///< Declare var list in the current local scope.
@@ -97,7 +96,7 @@ public:
 		kOpPass    = 0x0FB9, ///< Pretend unhandled: dispatcher tries next scope.
 
 		// Infix operator opcodes, applied by the TI.EXE evaluator
-		// (applier 0x00419f30, jump table 0x41a484). See files/opcode-map.md.
+		// (applier 0x00419f30, jump table 0x41a484).
 		kOpAdd     = 0x1F41, ///< int: lhs + rhs.
 		kOpSub     = 0x1F42, ///< int: lhs - rhs.
 		kOpMul     = 0x1F43, ///< int: lhs * rhs.
@@ -353,7 +352,7 @@ public:
 	 *
 	 * The runtime resolves a call `name(args)` by scanning these definitions
 	 * (per-scope runner TI.EXE 0x0040b7a0, matcher 0x0040b870) and matching the
-	 * name case-insensitively (0x0041ae80). See decomp/stage-notes.md.
+	 * name case-insensitively (0x0041ae80).
 	 */
 	struct Definition {
 		Common::String name;                ///< Definition name (lowercased).

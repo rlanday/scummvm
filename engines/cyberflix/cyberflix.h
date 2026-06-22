@@ -196,8 +196,8 @@ private:
 	 * Install the named mouse cursor, decoding it on demand from the user's
 	 * copy of TI.EXE. The cursor bitmaps are copyrighted game assets, so they
 	 * are never embedded in ScummVM: they are read at runtime from the game's
-	 * PE executable (RT_GROUP_CURSOR resources named CURS.ARROW, CURS.HAND, ...
-	 * documented in files/decomp/movie-playback.md). The PEResources handle and
+	 * PE executable (RT_GROUP_CURSOR resources named CURS.ARROW, CURS.HAND, ...).
+	 * The PEResources handle and
 	 * decoded cursor groups are cached for reuse. Returns true on success.
 	 */
 	bool setGameCursor(const Common::String &name);
@@ -289,7 +289,7 @@ private:
 	 * playmovie (FUN_00446f80), bit 0/1 ORed in by the player main loop when
 	 * the presented frame matches the master header cue-name field at +0x40 /
 	 * +0x50 (FUN_0043b800 callers at 0x0040d19a/0x0040d1af). actionframe(n)
-	 * (0x4e73, FUN_004362c0) tests bit n-1. See decomp/movie-playback.md.
+	 * (0x4e73, FUN_004362c0) tests bit n-1.
 	 */
 	uint16 _actionFrameMask = 0;
 

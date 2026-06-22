@@ -37,8 +37,7 @@ namespace Cyberflix {
  * the game, parsed from the same LPPALPPA container as everything else.
  * Reversed from the native scene renderer the boot/stage scripts reach through
  * @c sendtoscene (opcode 0x2f02 -> dispatch case 0x21 -> TI.EXE FUN_004311e0 ->
- * FUN_00431200, sharing the stage render path FUN_0040b690/FUN_0040b7a0). Full
- * RE writeup in files/decomp/stage-notes.md ("SET SCENE / VIEW / PANORAMA").
+ * FUN_00431200, sharing the stage render path FUN_0040b690/FUN_0040b7a0).
  *
  * A set's resource 0 is its master header (info tag @c 0x00040000), addressed
  * through the same "record+8" engine-base frame as stages, laid out:
@@ -63,7 +62,7 @@ namespace Cyberflix {
  *         indexes @c base+0xc+frame*0x3c), each a camera/transform matrix plus,
  *         at record +0x2c, a uint32 BACKGROUND FRAME resource id.
  * (Equivalently, from the raw payload pointer: count @ +0x00, first record @
- * +0x04, frame id @ record +0x30 -- the framing this class uses; both resolve
+ * +0x08, frame id @ record +0x30 -- the framing this class uses; both resolve
  * to the same absolute frame-id dword.)
  *
  * The panorama is a CONTINUOUS CYCLIC DELTA-ANIMATION, not random-access

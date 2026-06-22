@@ -38,7 +38,7 @@ namespace Cyberflix {
  * Reversed from the native stage interpreter the boot script hands off to after
  * @c sendtostage(0)
  * (openstagefile = TI.EXE FUN_004090b0 -> FUN_00409150 parse; node render =
- * FUN_0040b180). Full RE writeup in files/decomp/stage-notes.md.
+ * FUN_0040b180).
  *
  * A stage's resource 0 is its master header (info tag @c 0x00040000), laid out
  * (offsets in the @c record+8 "engine base" frame, like movie master headers):

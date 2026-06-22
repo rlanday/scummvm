@@ -82,16 +82,20 @@ static void copyFramePixelsToScreen(Graphics::Surface &screen, const byte *pixel
 
 // Sample-add an 8-bit unsigned mono SFX buffer into the music track at the given
 // sample offset, extending the track with silence (0x80) if needed and clamping.
-static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, uint32 atSample) {
+static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, uint64 atSample) {
 	if (sfx.empty())
 		return;
-	uint32 end = atSample + sfx.size();
-	while (track.size() < end)
-		track.push_back(0x80);
+	const uint64 end64 = atSample + sfx.size();
+	if (atSample > 0xffffffffU || end64 > 0xffffffffU)
+		return;
+	const uint32 start = static_cast<uint32>(atSample);
+	const uint32 end = static_cast<uint32>(end64);
+	if (track.size() < end)
+		track.resize(end, 0x80);
 	for (uint32 i = 0; i < sfx.size(); ++i) {
-		int v = (static_cast<int>(track[atSample + i]) - 0x80) + (static_cast<int>(sfx[i]) - 0x80);
+		int v = (static_cast<int>(track[start + i]) - 0x80) + (static_cast<int>(sfx[i]) - 0x80);
 		v = CLIP(v, -128, 127);
-		track[atSample + i] = static_cast<byte>(v + 0x80);
+		track[start + i] = static_cast<byte>(v + 0x80);
 	}
 }
 
@@ -206,7 +210,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// movies or movies with no music track, keep those SFX separate and play them
 	// live when their frame is reached. This preserves LOGO.MOV's sample-locked
 	// gunshots while allowing BEDCARDS.MOV's silent interactive stopwatch frames
-	// to fire their voice cues. See files/decomp/movie-playback.md.
+	// to fire their voice cues.
 	//
 	// NB: do NOT concatenate the SFX resources onto the music track. Doing so
 	// lengthened the track (so frames played too slowly) and made the effects
@@ -215,7 +219,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// Cumulative start time (ms) of each video frame; last entry is the total
 	// duration. Built from the per-frame event chunks below. Empty => no usable
 	// master header, in which case the frame loop falls back to a fixed cadence.
-	Common::Array<uint32> frameStartMs;
+	Common::Array<uint64> frameStartMs;
 	// Per-frame table, captured from the master header: the video resource id to
 	// composite (event record +0xc) and the navigation command of its event
 	// chunk (event chunk +0: 6 = NEXT, 1 = HOLD/wait). When populated this is the
@@ -266,7 +270,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// blits at the master header's QuickDraw rect {top,left,bottom,right}
 	// @+0x86c offset by the s16 origin @+0x24 (x) / +0x26 (y) (FUN_0040eef0 ->
 	// FUN_00410660 -> FUN_0041ad40). LOGO.MOV's rect is {0,0,264,512}: the
-	// logo plays at the TOP of the screen. See files/decomp/movie-playback.md.
+	// logo plays at the TOP of the screen.
 	int movieX = 0, movieY = 0;
 
 	int masterIdx = -1;
@@ -335,7 +339,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			const byte *st = (sfxTableIdx < archive.getResourceCount())
 					? resourceEngineBase(fileData, archive.getResource(sfxTableIdx)) : nullptr;
 			uint32 sfxCount = (st && st + 8 <= fileData.end()) ? READ_LE_UINT32(st + 4) : 0;
-			uint32 cumMs = 0;
+			uint64 cumMs = 0;
 			for (uint32 f = 0; f < pfCount; ++f) {
 				const byte *rec = pfTable + f * 0x2a;
 				if (rec + 0x2a > fileData.end())
@@ -432,8 +436,10 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 					if (d > units)
 						units = d;
 				}
-				uint32 holdMs = static_cast<uint32>((static_cast<uint64>(units) * 1000 / 60));
-				pfHoldMs.push_back(holdMs);
+				uint64 holdMs = static_cast<uint64>(units) * 1000 / 60;
+				if (holdMs > 0xffffffffU)
+					holdMs = 0xffffffffU;
+				pfHoldMs.push_back(static_cast<uint32>(holdMs));
 				cumMs += holdMs;
 			}
 			frameStartMs.push_back(cumMs); // total movie duration
@@ -464,8 +470,8 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		for (uint i = 0; i < pfFrameSfx.size(); ++i) {
 			if (!pfFrameSfx[i] || pfFrameSfx[i]->empty())
 				continue;
-			uint32 atMs = (i < frameStartMs.size()) ? frameStartMs[i] : 0;
-			uint32 atSample = static_cast<uint32>((static_cast<uint64>(atMs) * kAudioSampleRate / 1000));
+			uint64 atMs = (i < frameStartMs.size()) ? frameStartMs[i] : 0;
+			uint64 atSample = atMs * kAudioSampleRate / 1000;
 			mixSfx(pcmBuf, *pfFrameSfx[i], atSample);
 		}
 	}
@@ -587,8 +593,8 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		uint32 nowMs = (hasMovieAudio && engine._mixer->isSoundHandleActive(audioHandle))
 				? engine._mixer->getSoundElapsedTime(audioHandle)
 				: (engine._system->getMillis() - wallStartMs);
-		uint32 frameEndMs = (fi + 1 < frameStartMs.size())
-				? frameStartMs[fi + 1] : (fi + 1) * kFallbackFrameDelayMs;
+		uint64 frameEndMs = (fi + 1 < frameStartMs.size())
+				? frameStartMs[fi + 1] : static_cast<uint64>(fi + 1) * kFallbackFrameDelayMs;
 
 		// Drop the present of a late linear frame to let the picture catch up to
 		// the audio; always present in interactive movies. The original player
@@ -833,7 +839,10 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			// ~30 Hz avoids waking SDL/Cocoa's event pump twice as often in the
 			// sampled scripted movie path without affecting cursor responsiveness.
 			const uint32 pollCapMs = movieSkippable ? 16 : 33;
-			engine._system->delayMillis(MIN<uint32>(frameEndMs - t, pollCapMs));
+			const uint64 remaining = frameEndMs - t;
+			engine._system->delayMillis(MIN<uint32>(
+					remaining > 0xffffffffU ? 0xffffffffU : static_cast<uint32>(remaining),
+					pollCapMs));
 		}
 		if (nav == 2 && fi < pfNavTarget.size()) {
 			int idx = resolveFrameName(pfName, pfNavTarget[fi]);

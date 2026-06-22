@@ -198,9 +198,8 @@ void ScriptVM::execute(const Script &script, uint32 index) {
 			applyOperator(inst.opcode);
 			break;
 		}
-		// Builtin (0x0Fxx) and method (0x2E/0x3E/0x4Exx) opcodes are mapped in
-		// files/opcode-map.md and wired in incrementally. Skip so the VM can
-		// still be stepped over real scripts.
+		// Builtin (0x0Fxx) and method (0x2E/0x3E/0x4Exx) opcodes are wired in
+		// incrementally. Skip so the VM can still be stepped over real scripts.
 		break;
 	}
 }
@@ -214,8 +213,7 @@ void ScriptVM::applyOperator(uint16 opcode) {
 
 Value ScriptVM::applyBinary(uint16 opcode, const Value &lhs, const Value &rhs) {
 	// Binary infix operators. The TI.EXE applier 0x00419f30 takes lhs as the
-	// first-pushed operand and rhs as the second. See section 7 of
-	// files/opcode-map.md for the verified opcode->operation mapping.
+	// first-pushed operand and rhs as the second.
 	int32 a = lhs.intValue;
 	int32 b = rhs.intValue;
 	const bool lhsString = lhs.type == Value::kString || lhs.type == Value::kSymbol;

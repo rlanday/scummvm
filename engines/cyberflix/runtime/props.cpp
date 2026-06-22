@@ -32,7 +32,7 @@ static bool isReplacementStageForProps(const Common::SharedPtr<Stage> &stage) {
 }
 
 // ---- Shop/prop subsystem (TI.EXE FUN_00428450 and friends) ----------------
-// RE notes: files/renderer-notes.md "Shop/prop subsystem". The original keeps
+// The original keeps
 // one global prop array across all open shops; here the by-name lookups and
 // countprops/indextoprop span _shops in open order, which preserves the
 // global-index semantics (shops are only ever appended).

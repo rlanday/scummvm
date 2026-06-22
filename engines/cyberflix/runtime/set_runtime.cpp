@@ -427,8 +427,7 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 	screenUpdatePending() = true;
 
 	// Default arrow until per-view hotspot hit-testing (directional cursors) is
-	// implemented. Views (the scene's hotspot lists) are documented in
-	// files/decomp/stage-notes.md.
+	// implemented. Views are the scene's hotspot lists.
 	if (engine.setGameCursor("CURS.ARROW"))
 		CursorMan.showMouse(true);
 }

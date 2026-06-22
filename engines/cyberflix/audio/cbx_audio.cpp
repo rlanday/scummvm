@@ -30,6 +30,8 @@ static const int8 kSignedNibble[16] = {
 	-8, -7, -6, -5, -4, -3, -2, -1
 };
 
+static const uint32 kMaxCbxBlockBytes = 0x10000;
+
 static inline void emitCbxSample(byte *dst, uint32 outSize, uint32 &produced,
 		byte sample, bool duplicate) {
 	if (produced >= outSize)
@@ -91,7 +93,7 @@ CbxAudioInfo getCbxAudioInfo(const byte *payload, uint32 payloadLen) {
 	const uint32 rate = READ_LE_UINT32(payload + 0x18);
 	const uint32 blockBytes = READ_LE_UINT32(payload + 0x1c);
 	const uint32 count = READ_LE_UINT32(payload + 0x24);
-	if (blockBytes == 0 || count == 0 || count > 0x10000)
+	if (blockBytes == 0 || blockBytes > kMaxCbxBlockBytes || count == 0 || count > 0x10000)
 		return info;
 	const bool duplicate = rate != kAudioRate22050;
 	if (duplicate && blockBytes > 0x7fffffffU)
@@ -122,7 +124,7 @@ uint32 decodeCbxAudioBlock(const byte *payload, uint32 payloadLen, uint32 blockI
 	const uint32 rate = READ_LE_UINT32(payload + 0x18);
 	const uint32 blockBytes = READ_LE_UINT32(payload + 0x1c);
 	const uint32 count = READ_LE_UINT32(payload + 0x24);
-	if (blockBytes == 0 || blockIndex >= count)
+	if (blockBytes == 0 || blockBytes > kMaxCbxBlockBytes || blockIndex >= count)
 		return 0;
 	const bool duplicate = rate != kAudioRate22050;
 	if (duplicate && blockBytes > 0x7fffffffU)

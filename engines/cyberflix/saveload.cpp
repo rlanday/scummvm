@@ -250,6 +250,7 @@ struct HeaderState {
 	Common::String stageName;
 	int32 stageNode = 0;
 	Common::String flatName;
+	bool stageVisible = false;
 	Common::String setFileName;
 	Common::String setName;
 	int32 setScene = -1;
@@ -405,6 +406,9 @@ static bool parseHeaderChunk(Common::SeekableReadStream &in, int64 end, HeaderSt
 	header.setTransitionType = in.readUint32LE();
 	header.setTransitionResource = in.readUint32LE();
 	header.setTransitionFrame = in.readUint32LE();
+	header.stageVisible = !header.stageName.empty();
+	if (in.pos() < end)
+		header.stageVisible = in.readByte() != 0;
 	return !in.err();
 }
 
@@ -420,7 +424,7 @@ static bool parsePaletteChunk(Common::SeekableReadStream &in, int64 end,
 		Palette &screenClut, double (&paletteGamma)[3]) {
 	if (in.pos() + kPaletteByteCount + kPaletteChannelCount * 8 > end)
 		return false;
-	if (in.read(screenClut.data(), screenClut.size()) != screenClut.size())
+	if (in.read(screenClut.data(), screenClut.byteSize()) != screenClut.byteSize())
 		return false;
 	for (uint i = 0; i < 3; ++i)
 		paletteGamma[i] = in.readDoubleLE();
@@ -1057,6 +1061,11 @@ bool CyberflixEngine::canLoadGameStateCurrently(Common::U32String *msg) {
 			*msg = _("You can't open a saved game during the tour.");
 		return false;
 	}
+	if (_puppetRuntime.isOpen()) {
+		if (msg)
+			*msg = _("You can't open a saved game right now.");
+		return false;
+	}
 	return true;
 }
 
@@ -1128,7 +1137,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	HeaderState header;
 	Common::String pathSlots[PathRuntime::kPathSlotCount];
 	Palette savedClut = {};
-	double savedGamma[3] = { 0.65, 0.65, 0.65 };
+	double savedGamma[kPaletteChannelCount] = { kDefaultPaletteGamma, kDefaultPaletteGamma, kDefaultPaletteGamma };
 	Common::Array<ShopState> shopStates;
 	Common::Array<CastState> castStates;
 	Common::Array<TrackState> trackStates;
@@ -1260,7 +1269,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	stageSnapshot.stageName = header.stageName;
 	stageSnapshot.node = header.stageNode;
 	stageSnapshot.flatName = header.flatName;
-	stageSnapshot.visible = !header.stageName.empty();
+	stageSnapshot.visible = header.stageVisible;
 	stageRuntime().restoreSnapshot(stageSnapshot);
 
 	SetRuntime::Snapshot setSnapshot;
@@ -1348,6 +1357,7 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		payload.writeUint32LE(static_cast<uint32>(setSnapshot.transitionType));
 		payload.writeUint32LE(setSnapshot.transitionResource);
 		payload.writeUint32LE(setSnapshot.transitionFrame);
+		payload.writeByte(stageSnapshot.visible ? 1 : 0);
 
 		writeChunk(*saveFile, "HEAD", payload);
 	}
@@ -1363,7 +1373,7 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
 		Palette currentClut = {};
 		_paletteRuntime.copyCurrent(currentClut);
-		payload.write(currentClut.data(), currentClut.size());
+		payload.write(currentClut.data(), currentClut.byteSize());
 		for (uint i = 0; i < 3; ++i)
 			payload.writeDoubleLE(_paletteRuntime.gamma(i));
 		writeChunk(*saveFile, "PAL ", payload);
@@ -1392,6 +1402,7 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 	}
 
 	getMetaEngine()->appendExtendedSave(saveFile.get(), getTotalPlayTime(), desc, isAutosave);
+	saveFile->finalize();
 	if (saveFile->err())
 		return Common::Error(Common::kWritingFailed, getSaveStateName(slot));
 	return Common::kNoError;

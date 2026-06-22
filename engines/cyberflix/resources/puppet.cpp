@@ -97,7 +97,8 @@ bool Puppet::open(const Common::String &name) {
 	}
 
 	const byte *hdr = engineBase(static_cast<uint32>(_master));
-	if (!hdr || hdr + kMasterBaseTableOffset > _fileData.end()) {
+	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
+	if (!hdr || masterLen < kMasterBaseCountOffset + 4) {
 		warning("Cyberflix: puppet '%s' master header truncated", name.c_str());
 		_master = -1;
 		return false;
@@ -105,6 +106,11 @@ bool Puppet::open(const Common::String &name) {
 	_globalResourceId = READ_LE_UINT32(hdr + kMasterGlobalResourceOffset);
 	_puppetName = pascalString(hdr + kMasterNameOffset);
 	_baseCount = READ_LE_UINT32(hdr + kMasterBaseCountOffset);
+	if (masterLen < kMasterBaseTableOffset)
+		_baseCount = 0;
+	else
+		_baseCount = MIN<uint32>(_baseCount,
+				static_cast<uint32>((masterLen - kMasterBaseTableOffset) / kMasterBaseStride));
 	for (uint32 i = 0; i < _baseCount; ++i) {
 		const byte *entry = hdr + kMasterBaseTableOffset + i * kMasterBaseStride;
 		if (entry + kMasterBaseStride > _fileData.end())
@@ -131,7 +137,9 @@ bool Puppet::open(const Common::String &name) {
 
 	int baseIdx = resourceIndexById(kBaseControllerResourceId);
 	const byte *base = baseIdx >= 0 ? engineBase(static_cast<uint32>(baseIdx)) : nullptr;
-	if (base) {
+	const uint64 baseLen = baseIdx >= 0 ?
+			static_cast<uint64>(_archive.getResource(static_cast<uint32>(baseIdx)).length) + 4 : 0;
+	if (base && baseLen >= kBaseControllerResourceOffset + kBaseControllerStateCount * 4) {
 		for (uint32 i = 0; i < kBaseControllerStateCount; ++i)
 			_baseDisplayListResources[i] =
 					READ_LE_UINT32(base + kBaseControllerResourceOffset + i * 4);

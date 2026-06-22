@@ -35,7 +35,7 @@ namespace Cyberflix {
  * Tagged value held on the CyberFlix VM operand stack.
  *
  * The precise runtime value model of the "Bicycle" VM is still being recovered
- * from TI.EXE (see files/vm-re-notes.md); this is the structural skeleton the
+ * from TI.EXE; this is the structural skeleton the
  * confirmed opcodes operate on and will be refined as the evaluator at
  * 0x00419cf0 is mapped. Keep changes additive so the disassembler/trace stays
  * usable while semantics are filled in.
@@ -675,7 +675,7 @@ public:
 	 * now; their side effects land as the subsystems are implemented.
 	 *
 	 * Returns the number of statements executed. Mirrors the TI.EXE main loop
-	 * at vaddr 0x0040ba4f (see files/opcode-map.md sections 3 and 8).
+	 * at vaddr 0x0040ba4f.
 	 */
 	uint32 runProgram(const Script &script, uint32 maxSteps = 100000);
 
@@ -808,7 +808,7 @@ private:
 	 * Evaluate the expression starting at instruction @p pc, advancing @p pc
 	 * past every instruction consumed. Mirrors the TI.EXE evaluator 0x00419cf0:
 	 * an atom followed by zero or more (operator, atom) pairs, reduced by the
-	 * operator precedence recovered in files/opcode-map.md section 8.
+	 * recovered operator precedence.
 	 */
 	Value evaluateExpression(const Script &script, uint32 &pc);
 	Value evaluateExpression(const Script &script, uint32 &pc, uint8 minBindingPower);
@@ -860,7 +860,7 @@ private:
 	 * Active for-loop frames. Each binds a loop variable that is incremented
 	 * and compared against an inclusive upper bound at kOpForNext, looping back
 	 * to the body start or falling through (TI.EXE for-setup 0x0040bda9,
-	 * frame stack 0x45ed48). See files/opcode-map.md section 9.
+	 * frame stack 0x45ed48).
 	 */
 	struct ForFrame {
 		Common::String var; ///< Loop-variable name.

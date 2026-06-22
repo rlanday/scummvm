@@ -38,7 +38,7 @@ namespace Cyberflix {
 // from the player's own TI.EXE rather than shipped with ScummVM. TI.EXE is the
 // CyberFlix "Bicycle" runtime; in an installed game it lives under INSTALL/BINX
 // (or INSTALL/BIN). It is a Win32 PE whose RT_GROUP_CURSOR resources are named
-// CURS.ARROW, CURS.HAND, CURS.GOUP, ... (see files/decomp/movie-playback.md).
+// CURS.ARROW, CURS.HAND, CURS.GOUP, ...
 Common::PEResources *CursorRuntime::gameExe() {
 	if (_exeTried)
 		return _exe.get();

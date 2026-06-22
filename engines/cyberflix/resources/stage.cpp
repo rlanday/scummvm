@@ -210,8 +210,9 @@ bool Stage::open(const Common::String &name) {
 	_nodeCount = READ_LE_UINT32(hdr + kNodeCountOffset);
 
 	// Bound the node table against the file so a corrupt count can't run off.
-	const byte *tableEnd = hdr + kNodeTableOffset + static_cast<uint32>(_nodeCount) * kNodeRecordStride;
-	if (tableEnd > _fileData.end()) {
+	const uint64 tableEnd = static_cast<uint64>(kNodeTableOffset) +
+			static_cast<uint64>(_nodeCount) * kNodeRecordStride;
+	if (tableEnd > static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4) {
 		warning("Cyberflix: stage '%s' node table overruns file (count %u)", name.c_str(), _nodeCount);
 		_nodeCount = 0;
 	}

@@ -45,8 +45,7 @@ namespace Cyberflix {
  * propvisible FUN_00429d00, propview FUN_004293a0, propdist FUN_004295c0,
  * propowner FUN_00428d40, countprops FUN_0042b4f0, indextoprop FUN_0042b550),
  * the shape/cell resolver FUN_0042bed0 and the display-item builder
- * FUN_0042bb90. Full writeup in files/renderer-notes.md ("Shop/prop
- * subsystem").
+ * FUN_0042bb90.
  *
  * Master header (engine base = record+8; located by info tag 0x40000 — NOT by
  * resource id: HOUSE.SHP has an empty placeholder with rid 0 first):
@@ -73,8 +72,8 @@ public:
 	};
 
 	/**
-	 * A prop and its runtime state, mirroring the original's 0x9e-byte record
-	 * (offsets in files/renderer-notes.md). Props start hidden in screen mode;
+	 * A prop and its runtime state, mirroring the original's 0x9e-byte record.
+	 * Props start hidden in screen mode;
 	 * scripts place/show them via propxy/propvisible/propview or switch them to
 	 * world mode with propset/propxyz.
 	 */

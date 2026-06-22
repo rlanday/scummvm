@@ -78,7 +78,7 @@ void PuppetRuntime::close(Audio::Mixer *mixer) {
 }
 
 // ---- Puppet subsystem (TI.EXE FUN_004473c0 and friends) --------------------
-// RE notes: files/decomp/stage-notes.md. This models the verified PUP archive
+// This models the verified PUP archive
 // lifetime, script table, and palette state used by C73 Smethels. The native
 // compositor branch (FUN_00448a60), speech runner (FUN_00447ce0/FUN_00448b60),
 // and bevel queue/event path (FUN_00447b30/FUN_00449370/FUN_00449e40).
@@ -243,6 +243,10 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 
 		bool cursorDirty = false;
 		while (engine._eventMan->pollEvent(event)) {
+			if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
+				engine.requestQuit();
+				return -1;
+			}
 			if (event.type == Common::EVENT_MOUSEMOVE) {
 				cursorDirty = true;
 				continue;
@@ -569,6 +573,11 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 		bool aborted = false;
 		bool cursorDirty = false;
 		while (engine._eventMan->pollEvent(event)) {
+			if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
+				engine.requestQuit();
+				aborted = true;
+				break;
+			}
 			if (event.type == Common::EVENT_MOUSEMOVE) {
 				cursorDirty = true;
 				continue;

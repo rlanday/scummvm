@@ -368,6 +368,10 @@ Common::String SetRuntime::currentScene(CyberflixEngine &engine, const Common::S
 		} else {
 			int sceneIdx = set()->findScene(*target);
 			if (sceneIdx >= 0) {
+				if (!engine.closeCurrentSceneForNavigation())
+					return currentScene(engine, nullptr);
+				if (!set() || !set()->isOpen())
+					return "none";
 				int targetAngle = 0;
 				Common::String targetView = set()->defaultView();
 				int viewIdx = set()->findView(static_cast<uint32>(sceneIdx), targetView);
@@ -377,6 +381,8 @@ Common::String SetRuntime::currentScene(CyberflixEngine &engine, const Common::S
 				else
 					targetView.clear();
 				renderSetScene(engine, sceneIdx, 0, targetAngle, targetView);
+				Common::Array<Value> noArgs;
+				engine.dispatchSceneMessage(static_cast<uint32>(sceneIdx), "openscene", noArgs);
 			} else {
 				warning("Cyberflix: currentscene('%s'): no such scene", target->c_str());
 			}

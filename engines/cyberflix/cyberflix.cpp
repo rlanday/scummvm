@@ -611,7 +611,7 @@ Common::Error CyberflixEngine::run() {
 	// definition `boot()` runs engine setup, the CD check, the intro movies
 	// and the menu branch; later definitions are event handlers like
 	// keydown()), and res2 is the GLOBAL function library (changeset, initall,
-	// advanceday, advancetour, ... — see files/decomp/stage-notes.md). Both
+	// advanceday, advancetour, ...). Both
 	// stay registered on the VM's dispatch scope chain for the lifetime of the
 	// session, mirroring the TI.EXE chain [current script, global library]
 	// built by FUN_0040ad80.

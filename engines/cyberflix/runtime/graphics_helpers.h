@@ -22,6 +22,8 @@
 #ifndef CYBERFLIX_RUNTIME_GRAPHICS_HELPERS_H
 #define CYBERFLIX_RUNTIME_GRAPHICS_HELPERS_H
 
+#include "common/rect.h"
+
 #include "graphics/surface.h"
 
 #include "cyberflix/image.h"

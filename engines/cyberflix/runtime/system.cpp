@@ -32,7 +32,6 @@
 
 namespace Cyberflix {
 
-static const double kDefaultPaletteGamma = 0.65;
 static const double kPaletteGammaUp = 1.05;
 static const double kPaletteGammaDown = 0.9523809523809523;
 static const double kPaletteGammaMin = 0.15;
@@ -87,6 +86,10 @@ bool CyberflixEngine::exciseBootCdCheck(Script &script) {
 
 uint32 CyberflixEngine::handleMovieHotkeys(const Common::Event &event, bool skippable,
 		const Audio::SoundHandle &audioHandle, bool &skip) {
+	if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
+		requestQuit();
+		return 0;
+	}
 	if (event.type != Common::EVENT_KEYDOWN)
 		return 0;
 
@@ -120,7 +123,9 @@ uint32 CyberflixEngine::handleMovieHotkeys(const Common::Event &event, bool skip
 		Common::Event e2;
 		while (paused && !shouldQuit()) {
 			while (_eventMan->pollEvent(e2)) {
-				if (e2.type == Common::EVENT_KEYDOWN &&
+				if (e2.type == Common::EVENT_QUIT || e2.type == Common::EVENT_RETURN_TO_LAUNCHER)
+					requestQuit();
+				else if (e2.type == Common::EVENT_KEYDOWN &&
 						(e2.kbd.flags & Common::KBD_CTRL) && e2.kbd.keycode == Common::KEYCODE_t)
 					paused = false;
 				else if (e2.type == Common::EVENT_KEYDOWN &&

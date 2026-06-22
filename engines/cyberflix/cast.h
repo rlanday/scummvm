@@ -26,6 +26,7 @@
 #include "common/hash-str.h"
 #include "common/hashmap.h"
 #include "common/ptr.h"
+#include "common/rect.h"
 #include "common/str.h"
 
 #include "cyberflix/archive.h"

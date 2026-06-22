@@ -326,8 +326,10 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 			cel.width, cel.height, cel.originX, cel.originY,
 			havePalette ? "loaded" : "MISSING (grayscale)");
 	if (!havePalette)
-		for (int i = 0; i < 256; ++i)
-			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = static_cast<byte>(i);
+		for (int i = 0; i < kPaletteColorCount; ++i) {
+			const uint32 color = Palette::colorOffset(i);
+			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
+		}
 
 	// Blit centred on a black screen; transparent pixels show through as black.
 	Graphics::Surface *screen = g_system->lockScreen();
@@ -410,8 +412,10 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 			frame.width, frame.height, consumed,
 			havePalette ? "loaded" : "MISSING (grayscale)");
 	if (!havePalette)
-		for (int i = 0; i < 256; ++i)
-			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = static_cast<byte>(i);
+		for (int i = 0; i < kPaletteColorCount; ++i) {
+			const uint32 color = Palette::colorOffset(i);
+			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
+		}
 
 	// Blit centred on a black screen.
 	Graphics::Surface *screen = g_system->lockScreen();
@@ -501,8 +505,10 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 			argv[1], frameIndices.size(), target, seq.width(), seq.height(),
 			havePalette ? "loaded" : "MISSING (grayscale)");
 	if (!havePalette)
-		for (int i = 0; i < 256; ++i)
-			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = static_cast<byte>(i);
+		for (int i = 0; i < kPaletteColorCount; ++i) {
+			const uint32 color = Palette::colorOffset(i);
+			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
+		}
 
 	const byte *pixels = seq.pixels();
 	Graphics::Surface *screen = g_system->lockScreen();
@@ -557,8 +563,10 @@ bool Console::cmdShowNode(int argc, const char **argv) {
 			argv[1], stage.width(), stage.height(), stage.nodeCount(), node,
 			frame.width, frame.height, havePalette ? "loaded" : "MISSING (grayscale)");
 	if (!havePalette)
-		for (int i = 0; i < 256; ++i)
-			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = static_cast<byte>(i);
+		for (int i = 0; i < kPaletteColorCount; ++i) {
+			const uint32 color = Palette::colorOffset(i);
+			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
+		}
 
 	Graphics::Surface *screen = g_system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
@@ -629,8 +637,10 @@ bool Console::cmdShowSet(int argc, const char **argv) {
 	debugPrintf("Showing scene %u table %u angle %u (%ux%u), palette %s\n", scene, table, angle,
 			frame.width, frame.height, havePalette ? "loaded" : "MISSING (grayscale)");
 	if (!havePalette)
-		for (int i = 0; i < 256; ++i)
-			rgb[i * 3 + 0] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = static_cast<byte>(i);
+		for (int i = 0; i < kPaletteColorCount; ++i) {
+			const uint32 color = Palette::colorOffset(i);
+			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
+		}
 
 	Graphics::Surface *screen = g_system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);

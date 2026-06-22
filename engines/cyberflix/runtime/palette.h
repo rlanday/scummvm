@@ -41,8 +41,8 @@ public:
 
 private:
 	Palette _currentClut = {};
-	double _gamma[3] = { 0.65, 0.65, 0.65 };
-	byte _gammaTable[3][256] = {};
+	double _gamma[kPaletteChannelCount] = { kDefaultPaletteGamma, kDefaultPaletteGamma, kDefaultPaletteGamma };
+	byte _gammaTable[kPaletteChannelCount][kPaletteColorCount] = {};
 	bool _gammaTableDirty = true;
 };
 

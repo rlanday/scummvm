@@ -93,25 +93,31 @@ static bool decodeScanline(const byte *data, uint32 p, uint32 byteLen, uint16 wi
 }
 
 bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, CelImage &out) {
-	if (width == 0 || height == 0 || width > 0x400)
+	if (width == 0 || height == 0 || width > 0x400 || height > 0x400)
+		return false;
+	if (stream.pos() < 0 || stream.size() < stream.pos() + 4)
 		return false;
 
 	const int16 originX = stream.readSint16LE();
 	const int16 originY = stream.readSint16LE();
 
 	// Slurp the remaining scanline data for random access.
+	if (stream.pos() < 0 || stream.size() < stream.pos() ||
+			stream.size() - stream.pos() > 0xffffffffLL)
+		return false;
 	const uint32 remain = static_cast<uint32>((stream.size() - stream.pos()));
 	Common::Array<byte> data;
 	data.resize(remain);
 	if (remain && stream.read(data.begin(), remain) != remain)
 		return false;
 
+	const uint32 pixelCount = static_cast<uint32>(width) * height;
 	out.width = width;
 	out.height = height;
 	out.originX = originX;
 	out.originY = originY;
-	out.pixels.resize(static_cast<uint>(width) * height);
-	out.opaque.resize(static_cast<uint>(width) * height);
+	out.pixels.resize(pixelCount);
+	out.opaque.resize(pixelCount);
 	for (uint i = 0; i < out.pixels.size(); ++i) {
 		out.pixels[i] = 0;
 		out.opaque[i] = 0;
@@ -385,6 +391,10 @@ private:
 			const int n = readRunLength(c);
 			if (!_ok)
 				return;
+			if (n <= 0 || n > edx) {
+				_ok = false;
+				return;
+			}
 			switch (c & 7) {
 			case 0: {                           // one literal byte, then DPCM (predict from left)
 				edx -= n; ref += n;
@@ -433,6 +443,8 @@ private:
 			}
 			}
 		}
+		if (edx != 0)
+			_ok = false;
 	}
 
 	const byte *_src;
@@ -547,17 +559,18 @@ uint32 decodeFrame(const byte *src, uint32 srcSize, FrameImage &out) {
 }
 
 bool loadPalette(const byte *fileData, uint32 fileSize, Palette &rgb) {
-	if (fileSize < 8 + 256 * 8)
+	static const uint32 kColorSpecByteCount = 8;
+	if (fileSize < kColorSpecByteCount + kPaletteColorCount * kColorSpecByteCount)
 		return false;
 
 	// The clut is embedded (not a top-level resource). Identify it by its
 	// ColorSpec array: 256 eight-byte entries whose leading uint16 value field
 	// counts 0, 1, 2, ... A 64-entry run is a reliable, cheap signature.
-	const uint32 limit = fileSize - 256 * 8;
-	for (uint32 o = 0; o + 64 * 8 <= fileSize; o += 2) {
+	const uint32 limit = fileSize - kPaletteColorCount * kColorSpecByteCount;
+	for (uint32 o = 0; o + 64 * kColorSpecByteCount <= fileSize; o += 2) {
 		bool match = true;
 		for (uint32 k = 0; k < 64; ++k) {
-			const uint32 b = o + k * 8;
+			const uint32 b = o + k * kColorSpecByteCount;
 			const uint16 value = static_cast<uint16>((fileData[b] | (fileData[b + 1] << 8)));
 			if (value != k) {
 				match = false;
@@ -567,21 +580,23 @@ bool loadPalette(const byte *fileData, uint32 fileSize, Palette &rgb) {
 		if (!match || o > limit)
 			continue;
 
-		for (uint32 k = 0; k < 256; ++k) {
+		for (uint32 k = 0; k < kPaletteColorCount; ++k) {
 			// Each ColorSpec entry is {uint16 value; uint16 R, G, B} little-
 			// endian. The channels are 16-bit, but only the high byte carries
 			// the 8-bit value we want, so we read the odd byte of each pair
 			// (b+3/b+5/b+7). MOV cluts happen to replicate the value into both
 			// bytes (e.g. 0xf1f1), but SET cluts leave the low byte zero
 			// (e.g. 0x1900), so reading the low byte would render them black.
-			const uint32 b = o + k * 8;
-			rgb[k * 3 + 0] = fileData[b + 3]; // high byte of the R channel
-			rgb[k * 3 + 1] = fileData[b + 5]; // high byte of the G channel
-			rgb[k * 3 + 2] = fileData[b + 7]; // high byte of the B channel
+			const uint32 b = o + k * kColorSpecByteCount;
+			const uint32 color = Palette::colorOffset(k);
+			rgb[color + 0] = fileData[b + 3]; // high byte of the R channel
+			rgb[color + 1] = fileData[b + 5]; // high byte of the G channel
+			rgb[color + 2] = fileData[b + 7]; // high byte of the B channel
 		}
 		// The runtime forces the palette's extreme indices (FUN_0041ba80).
 		rgb[0] = rgb[1] = rgb[2] = 0;
-		rgb[255 * 3 + 0] = rgb[255 * 3 + 1] = rgb[255 * 3 + 2] = 0xff;
+		const uint32 lastColor = Palette::colorOffset(kPaletteLastColor);
+		rgb[lastColor + 0] = rgb[lastColor + 1] = rgb[lastColor + 2] = 0xff;
 		return true;
 	}
 	return false;

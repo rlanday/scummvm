@@ -232,8 +232,10 @@ void CyberflixEngine::fadePaletteSteps(const Palette &from, const Palette &to, i
 		if (now < deadline)
 			_system->delayMillis(deadline - now);
 		Common::Event event;
-		while (_eventMan->pollEvent(event))
-			; // keep the window live; fades are not skippable in the original
+		while (_eventMan->pollEvent(event)) {
+			if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER)
+				requestQuit();
+		}
 	}
 	if (!reachedFinalStep) {
 		// Preserve the old "finish at target palette" behavior if the loop exits

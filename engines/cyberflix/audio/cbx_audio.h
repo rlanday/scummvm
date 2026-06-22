@@ -33,7 +33,7 @@ namespace Cyberflix {
  * Each such resource is a "cbx" ADPCM stream reversed from TI.EXE: the servicer
  * thread (@c 0x0042ea90 -> @c FUN_0042ebb0) decodes it block-by-block into the
  * DirectSound ring with @c FUN_00430480 (22050 Hz) or @c FUN_00430590 (11025 Hz,
- * sample-doubled). See decodeCbxAudio() and files/audio-re-notes.md.
+ * sample-doubled).
  *
  * The runtime queues several such resources back-to-back (the servicer walks a
  * node chain); concatenating a movie's 22050 Hz resources in directory order
@@ -71,8 +71,7 @@ uint32 decodeCbxAudioBlock(const byte *payload, uint32 payloadLen, uint32 blockI
  * Decode a CyberFlix "cbx" audio resource (MOV @c info==kAudioResourceInfoTag)
  * into 8-bit unsigned mono PCM at @c kAudioSampleRate, appending the samples to
  * @p out. Reversed byte-for-byte from TI.EXE @c FUN_00430480 (22050 Hz) and
- * @c FUN_00430590 (11025 Hz, each sample emitted twice to upsample). See
- * files/audio-re-notes.md for the full derivation.
+ * @c FUN_00430590 (11025 Hz, each sample emitted twice to upsample).
  *
  * The resource payload (the @c Archive::Resource @c dataOffset pointer) holds a
  * header followed by an offset table and the encoded blocks. Relative to the

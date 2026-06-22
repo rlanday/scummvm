@@ -360,7 +360,6 @@ bool AudioRuntime::startThemeStream(CyberflixEngine &engine, const Common::Share
 // FUN_00440b00 loads/caches the resource, FUN_0043f970 locks it, and the cue
 // descriptor stores the payload pointer. playtheme() later consumes those
 // descriptors, so disk/resource loading is intentionally front-loaded here.
-// See files/audio-re-notes.md.
 void AudioRuntime::openTrackFile(const Common::String &name) {
 	if (name.empty())
 		return;

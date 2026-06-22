@@ -145,7 +145,7 @@ const byte *Set::panoramaTable(uint32 scene, uint32 table, uint32 &count) const 
 	uint32 c = READ_LE_UINT32(pano + kPanoramaCountOffset);
 	// Bound the record array against the resource payload.
 	uint32 len = _archive.getResource(static_cast<uint32>(idx)).length;
-	if (static_cast<uint64>(c) * kPanoramaRecordStride + 4 > len)
+	if (static_cast<uint64>(c) * kPanoramaRecordStride + 8 > len)
 		return nullptr;
 	count = c;
 	return pano;
@@ -296,7 +296,8 @@ bool Set::open(const Common::String &name) {
 	}
 
 	const byte *hdr = engineBase(static_cast<uint32>(_master));
-	if (!hdr || hdr + kSceneTableIdOffset + 4 > _fileData.end()) {
+	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
+	if (!hdr || masterLen < kMasterDefaultViewOffset + 1) {
 		warning("Cyberflix: set '%s' master header truncated", name.c_str());
 		_master = -1;
 		return false;
