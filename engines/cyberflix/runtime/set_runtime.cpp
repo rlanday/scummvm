@@ -291,11 +291,21 @@ void SetRuntime::renderSetScene(CyberflixEngine &engine, int sceneIdx, int table
 	memset(rgb, 0, sizeof(rgb));
 	// As with stage nodes: while the screen palette is black the room is
 	// painted invisibly and revealed later by blacktoscreen('set', n).
-	if (visible() && set()->loadSetPalette(rgb) && !engine.paletteIsBlack())
+	//
+	// If a puppet is visible, native changeset() only prepares the new SET's
+	// retained backing image. The next compositor pass chooses the puppet branch
+	// instead of drawing the room. ELEV1.PUP depends on this ordering: it calls
+	// changeset() before ELEVGS.MOV, and the visible elevator puppet uses the same
+	// palette as the movie. Drawing the destination room immediately would expose
+	// the inventory bar under the elevator movie palette.
+	const bool displaySet = visible() && !engine.puppetRuntime().isVisible();
+	if (displaySet && set()->loadSetPalette(rgb) && !engine.paletteIsBlack())
 		engine.programPalette(rgb);
 
-	if (visible())
+	if (displaySet)
 		displaySetFrame(engine, frameSequence());
+	else
+		screenUpdatePending() = false;
 
 	debug(1, "Cyberflix: rendered set '%s' scene %d '%s' angle %d (%ux%u)",
 			set()->name().c_str(), sceneIdx, set()->sceneName(static_cast<uint32>(sceneIdx)).c_str(),
@@ -316,6 +326,10 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		const FrameSequence *depthFrame) {
 	if (!visible() || !set() || !set()->isOpen())
 		return;
+	if (engine.puppetRuntime().isVisible()) {
+		screenUpdatePending() = false;
+		return;
+	}
 
 	engine.propRuntime().advancePropPoses();
 	const FrameImage *stageBg = engine.stageRuntime().stageShellFrame();
