@@ -287,11 +287,6 @@ void SetRuntime::renderSetScene(CyberflixEngine &engine, int sceneIdx, int table
 			view() = set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx));
 	}
 
-	byte rgb[256 * 3];
-	memset(rgb, 0, sizeof(rgb));
-	// As with stage nodes: while the screen palette is black the room is
-	// painted invisibly and revealed later by blacktoscreen('set', n).
-	//
 	// If a puppet is visible, native changeset() only prepares the new SET's
 	// retained backing image. The next compositor pass chooses the puppet branch
 	// instead of drawing the room. ELEV1.PUP depends on this ordering: it calls
@@ -299,13 +294,13 @@ void SetRuntime::renderSetScene(CyberflixEngine &engine, int sceneIdx, int table
 	// palette as the movie. Drawing the destination room immediately would expose
 	// the inventory bar under the elevator movie palette.
 	const bool displaySet = visible() && !engine.puppetRuntime().isVisible();
-	if (displaySet && set()->loadSetPalette(rgb) && !engine.paletteIsBlack())
-		engine.programPalette(rgb);
-
-	if (displaySet)
+	if (displaySet) {
 		displaySetFrame(engine, frameSequence());
-	else
+	} else {
 		screenUpdatePending() = false;
+		if (visible())
+			engine.propRuntime().setDirty(true);
+	}
 
 	debug(1, "Cyberflix: rendered set '%s' scene %d '%s' angle %d (%ux%u)",
 			set()->name().c_str(), sceneIdx, set()->sceneName(static_cast<uint32>(sceneIdx)).c_str(),
@@ -328,8 +323,15 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		return;
 	if (engine.puppetRuntime().isVisible()) {
 		screenUpdatePending() = false;
+		engine.propRuntime().setDirty(true);
 		return;
 	}
+
+	byte rgb[256 * 3] = {};
+	// As with stage nodes: while the screen palette is black the room is painted
+	// invisibly and revealed later by blacktoscreen('set', n).
+	if (set()->loadSetPalette(rgb) && !engine.paletteIsBlack())
+		engine.programPalette(rgb);
 
 	engine.propRuntime().advancePropPoses();
 	const FrameImage *stageBg = engine.stageRuntime().stageShellFrame();

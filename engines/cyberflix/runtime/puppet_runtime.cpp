@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/algorithm.h"
 #include "common/archive.h"
 #include "common/config-manager.h"
 #include "common/debug.h"
@@ -329,7 +330,7 @@ bool PuppetRuntime::captureGrabBackdrop(CyberflixEngine &engine, Common::Array<b
 	}
 
 	backdrop.resize(kScreenWidth * kScreenHeight);
-	memset(backdrop.begin(), 0, backdrop.size());
+	Common::fill(backdrop.begin(), backdrop.end(), 0);
 
 	SetRuntime &setRuntime = engine._setRuntime;
 	if (setRuntime.visible() && setRuntime.set() && setRuntime.set()->isOpen() && setRuntime.scene() >= 0) {

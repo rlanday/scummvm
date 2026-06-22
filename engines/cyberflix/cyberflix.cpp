@@ -598,8 +598,7 @@ Common::Error CyberflixEngine::run() {
 		return Common::kNoGameDataFoundError;
 
 	// Clear to black before the boot script paints anything.
-	byte palette[3 * 256];
-	memset(palette, 0, sizeof(palette));
+	byte palette[3 * 256] = {};
 	_system->getPaletteManager()->setPalette(palette, 0, 256);
 
 	Graphics::Surface *screen = _system->lockScreen();

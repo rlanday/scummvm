@@ -306,8 +306,7 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 
 	// Resolve a palette: from a separate container if supplied (inventory cels
 	// are drawn against the active room palette), otherwise from this file.
-	byte rgb[256 * 3];
-	memset(rgb, 0, sizeof(rgb));
+	byte rgb[256 * 3] = {};
 	bool havePalette = false;
 	if (argc >= 4) {
 		Common::File palFile;
@@ -391,8 +390,7 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 
 	// Resolve a palette: from a separate container if supplied, otherwise scan
 	// the frame's own file for an embedded CLUT.
-	byte rgb[256 * 3];
-	memset(rgb, 0, sizeof(rgb));
+	byte rgb[256 * 3] = {};
 	bool havePalette = false;
 	if (argc >= 4) {
 		Common::File palFile;
@@ -496,8 +494,7 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 		}
 	}
 
-	byte rgb[256 * 3];
-	memset(rgb, 0, sizeof(rgb));
+	byte rgb[256 * 3] = {};
 	bool havePalette = loadPalette(fileData.begin(), size, rgb);
 
 	debugPrintf("Movie '%s': %u frames, showing frame %u (%ux%u), palette %s\n",
@@ -553,8 +550,7 @@ bool Console::cmdShowNode(int argc, const char **argv) {
 		return true;
 	}
 
-	byte rgb[256 * 3];
-	memset(rgb, 0, sizeof(rgb));
+	byte rgb[256 * 3] = {};
 	bool havePalette = stage.loadStagePalette(rgb);
 
 	debugPrintf("Stage '%s': %ux%u, %u node(s); showing node %u (%ux%u), palette %s\n",
@@ -627,8 +623,7 @@ bool Console::cmdShowSet(int argc, const char **argv) {
 		return true;
 	}
 
-	byte rgb[256 * 3];
-	memset(rgb, 0, sizeof(rgb));
+	byte rgb[256 * 3] = {};
 	bool havePalette = set.loadSetPalette(rgb);
 
 	debugPrintf("Showing scene %u table %u angle %u (%ux%u), palette %s\n", scene, table, angle,

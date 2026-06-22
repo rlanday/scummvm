@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/algorithm.h"
 #include "common/debug.h"
 #include "common/events.h"
 #include "common/system.h"
@@ -46,7 +47,7 @@ namespace Cyberflix {
 bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 3]) {
 	Common::String key = name;
 	key.toLowercase();
-	memset(rgb, 0, sizeof(rgb));
+	Common::fill(rgb, rgb + ARRAYSIZE(rgb), 0);
 	if (key == "black" || key.empty())
 		return true;
 	if (key == "current") {
@@ -61,8 +62,7 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 		if (!_puppetRuntime.loadPalette(rgb))
 			return false;
 		if (_puppetRuntime.grabEnabled()) {
-			byte backdrop[256 * 3];
-			memset(backdrop, 0, sizeof(backdrop));
+			byte backdrop[256 * 3] = {};
 			bool haveBackdrop = false;
 			if (_setRuntime.set() && _setRuntime.set()->isOpen())
 				haveBackdrop = _setRuntime.set()->loadSetPalette(backdrop);
@@ -73,7 +73,7 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 				int first = CLIP<int>(params[0], 0, 256);
 				int last = CLIP<int>(params[1], 0, 256);
 				if (last > first)
-					memcpy(rgb + first * 3, backdrop + first * 3, (last - first) * 3);
+					Common::copy(backdrop + first * 3, backdrop + last * 3, rgb + first * 3);
 			}
 		}
 		return true;
@@ -190,18 +190,16 @@ void CyberflixEngine::drawString(const Common::String &text, int32 packedPoint, 
 // FUN_0041b3f0) only resolves the target CLUT and interpolates the palette; it
 // does NOT re-render props. Scripts redraw first via visualeffect(plain, 0).
 void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool toBlack) {
-	byte to[256 * 3];
+	byte to[256 * 3] = {};
 	if (!resolveClut(target, to))
 		return;
 	if (steps < 1)
 		steps = 1;
 
-	byte from[256 * 3];
+	byte from[256 * 3] = {};
 	if (toBlack) {
-		memcpy(from, to, sizeof(from));
-		memset(to, 0, sizeof(to));
-	} else {
-		memset(from, 0, sizeof(from));
+		Common::copy(to, to + ARRAYSIZE(to), from);
+		Common::fill(to, to + ARRAYSIZE(to), 0);
 	}
 
 	debug(1, "Cyberflix: %s('%s', %d)", toBlack ? "screentoblack" : "blacktoscreen",

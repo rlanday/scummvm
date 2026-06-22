@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/algorithm.h"
 #include "common/debug.h"
 #include "common/endian.h"
 #include "common/ptr.h"
@@ -69,7 +70,8 @@ bool Puppet::open(const Common::String &name) {
 	_master = -1;
 	_globalResourceId = 0;
 	_baseCount = 0;
-	memset(_baseDisplayListResources, 0, sizeof(_baseDisplayListResources));
+	Common::fill(_baseDisplayListResources,
+			_baseDisplayListResources + ARRAYSIZE(_baseDisplayListResources), 0);
 	_scripts.clear();
 	_actions.clear();
 	_scriptIndexByName.clear();
