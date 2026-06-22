@@ -31,6 +31,34 @@ class SeekableReadStream;
 
 namespace Cyberflix {
 
+enum {
+	kPaletteColorCount = 256,
+	kPaletteChannelCount = 3,
+	kPaletteByteCount = kPaletteColorCount * kPaletteChannelCount
+};
+
+struct Palette {
+	typedef byte *iterator;
+	typedef const byte *const_iterator;
+
+	byte &operator[](uint index) { return _data[index]; }
+	byte operator[](uint index) const { return _data[index]; }
+	byte *data() { return _data; }
+	const byte *data() const { return _data; }
+	uint size() const { return kPaletteByteCount; }
+	iterator begin() { return _data; }
+	iterator end() { return _data + kPaletteByteCount; }
+	const_iterator begin() const { return _data; }
+	const_iterator end() const { return _data + kPaletteByteCount; }
+	void fill(byte value) {
+		for (byte &component : _data)
+			component = value;
+	}
+
+private:
+	byte _data[kPaletteByteCount] = {};
+};
+
 /**
  * A decoded CyberFlix "cel": an 8-bit palettised image with per-pixel
  * transparency. SHP shapes and SET background frames share the same cel
@@ -227,7 +255,7 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
 
 /**
  * Locate and parse the embedded Macintosh 'clut' palette in a CyberFlix
- * container and expand it to @p rgb (256 * 3 bytes, R,G,B order).
+ * container and expand it to @p rgb (256 RGB triplets, R,G,B order).
  *
  * The palette is stored as an 8-byte header followed by 256 ColorSpec entries
  * @c {uint16 value; uint16 R, G, B}; the 8-bit channel is the high byte of each
@@ -246,7 +274,7 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
  *
  * @return true if a clut was found (identified by its sequential value field).
  */
-bool loadPalette(const byte *fileData, uint32 fileSize, byte *rgb);
+bool loadPalette(const byte *fileData, uint32 fileSize, Palette &rgb);
 
 } // End of namespace Cyberflix
 

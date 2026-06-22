@@ -472,7 +472,7 @@ bool Puppet::decodeActionAudio(const ActionEntry &action, Common::Array<byte> &p
 	return pcm.size() != before;
 }
 
-bool Puppet::loadPuppetPalette(byte *rgb) const {
+bool Puppet::loadPuppetPalette(Palette &rgb) const {
 	if (_fileData.empty())
 		return false;
 	return loadPalette(_fileData.begin(), _fileData.size(), rgb);

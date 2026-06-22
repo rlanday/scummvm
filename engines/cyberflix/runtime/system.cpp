@@ -203,7 +203,7 @@ bool CyberflixEngine::handleGlobalKey(const Common::Event &event) {
 	for (int i = 0; i < 3; ++i)
 		_paletteRuntime.setGamma(i, CLIP(_paletteRuntime.gamma(i), kPaletteGammaMin, kPaletteGammaMax));
 
-	byte rgb[256 * 3];
+	Palette rgb = {};
 	_paletteRuntime.copyCurrent(rgb);
 	programPalette(rgb);
 	_system->updateScreen();

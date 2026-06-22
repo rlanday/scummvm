@@ -19,25 +19,23 @@
  *
  */
 
-#include "common/algorithm.h"
-
 #include "cyberflix/runtime/palette.h"
 
 #include <math.h>
 
 namespace Cyberflix {
 
-void PaletteRuntime::copyCurrent(byte (&rgb)[256 * 3]) const {
-	Common::copy(_currentClut, _currentClut + ARRAYSIZE(_currentClut), rgb);
+void PaletteRuntime::copyCurrent(Palette &rgb) const {
+	rgb = _currentClut;
 }
 
-void PaletteRuntime::setCurrent(const byte (&rgb)[256 * 3]) {
-	Common::copy(rgb, rgb + ARRAYSIZE(rgb), _currentClut);
+void PaletteRuntime::setCurrent(const Palette &rgb) {
+	_currentClut = rgb;
 }
 
 bool PaletteRuntime::isBlack() const {
-	for (int i = 0; i < 256 * 3; ++i)
-		if (_currentClut[i])
+	for (byte component : _currentClut)
+		if (component)
 			return false;
 	return true;
 }

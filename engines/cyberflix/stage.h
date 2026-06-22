@@ -139,7 +139,7 @@ public:
 	bool hasButton(uint32 node, const Common::String &button) const;
 
 	/** Expand the stage's embedded palette into @p rgb (256*3, R,G,B). */
-	bool loadStagePalette(byte *rgb) const;
+	bool loadStagePalette(Palette &rgb) const;
 
 private:
 	/** Engine-base pointer (record+8) of resource @p index, or nullptr. */

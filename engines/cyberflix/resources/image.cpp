@@ -546,7 +546,7 @@ uint32 decodeFrame(const byte *src, uint32 srcSize, FrameImage &out) {
 	return consumed;
 }
 
-bool loadPalette(const byte *fileData, uint32 fileSize, byte *rgb) {
+bool loadPalette(const byte *fileData, uint32 fileSize, Palette &rgb) {
 	if (fileSize < 8 + 256 * 8)
 		return false;
 

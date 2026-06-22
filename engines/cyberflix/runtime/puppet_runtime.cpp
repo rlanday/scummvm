@@ -54,7 +54,7 @@ Common::String PuppetRuntime::currentPuppet() const {
 	return isOpen() ? _puppet->sourceName() : Common::String("none");
 }
 
-bool PuppetRuntime::loadPalette(byte (&rgb)[256 * 3]) const {
+bool PuppetRuntime::loadPalette(Palette &rgb) const {
 	return isOpen() && _puppet->loadPuppetPalette(rgb);
 }
 

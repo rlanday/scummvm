@@ -476,7 +476,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// op snaps it on its first presented frame (FUN_0040eef0 preamble). This
 	// keeps the menu's authored fade-out (clut left black) intact across the
 	// movie boundary instead of flashing the palette on at movie start.
-	byte moviePal[256 * 3] = {};
+	Palette moviePal = {};
 	bool haveMoviePal = loadPalette(fileData.begin(), size, moviePal);
 	bool moviePalApplied = false;
 
@@ -631,7 +631,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				uint32 holdMs = (usePF && fi < pfHoldMs.size()) ? pfHoldMs[fi]
 						: kFallbackFrameDelayMs;
 				int steps = static_cast<int>(holdMs * 60 / 1000);
-				byte black[256 * 3] = {};
+				Palette black = {};
 				if (drawOp == 0x12) {
 					engine.fadePaletteSteps(black, moviePal, steps);
 					moviePalApplied = true;

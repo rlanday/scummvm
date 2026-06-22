@@ -310,19 +310,19 @@ private:
 	 * palette embedded in the currently open set/stage file; "current" = the
 	 * hardware palette mirror. Returns false if unresolvable.
 	 */
-	bool resolveClut(const Common::String &name, byte (&rgb)[256 * 3]);
+	bool resolveClut(const Common::String &name, Palette &rgb);
 
 	/**
 	 * Program the hardware palette and remember it as the "current" clut
 	 * (TI.EXE DAT_0045f3c8 + FUN_004010f0). All engine palette
 	 * writes funnel through here so fades always start from the true state.
 	 */
-	void programPalette(const byte (&rgb)[256 * 3]);
+	void programPalette(const Palette &rgb);
 	void updatePaletteGammaTable();
 
 	/** Linear palette fade @p from -> @p to, one step per 60 Hz tick of the
 	 *  original's scaled timer (TI.EXE FUN_0041b200 step loop). */
-	void fadePaletteSteps(const byte (&from)[256 * 3], const byte (&to)[256 * 3], int steps);
+	void fadePaletteSteps(const Palette &from, const Palette &to, int steps);
 
 	/** True if the hardware palette is currently all black (post clut('black')
 	 *  or a fade-out): renders must then leave the palette untouched so the

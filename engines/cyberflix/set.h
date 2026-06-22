@@ -313,7 +313,7 @@ public:
 	bool applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence &seq, FrameImage &out);
 
 	/** Expand the set's embedded palette into @p rgb (256*3, R,G,B). */
-	bool loadSetPalette(byte *rgb) const;
+	bool loadSetPalette(Palette &rgb) const;
 
 private:
 	/** Engine-base pointer (record+8) of resource @p index, or nullptr. */

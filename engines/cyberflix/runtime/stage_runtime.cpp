@@ -282,7 +282,7 @@ void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool
 	if (!stage()->renderNode(static_cast<uint32>(targetNode), frame))
 		return;
 
-	byte rgb[256 * 3] = {};
+	Palette rgb = {};
 	if (stage()->loadStagePalette(rgb) && !engine.paletteIsBlack())
 		engine.programPalette(rgb);
 

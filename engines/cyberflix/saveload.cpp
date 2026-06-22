@@ -417,10 +417,10 @@ static bool parsePathChunk(Common::SeekableReadStream &in, int64 end,
 }
 
 static bool parsePaletteChunk(Common::SeekableReadStream &in, int64 end,
-		byte (&screenClut)[256 * 3], double (&paletteGamma)[3]) {
-	if (in.pos() + 256 * 3 + 3 * 8 > end)
+		Palette &screenClut, double (&paletteGamma)[3]) {
+	if (in.pos() + kPaletteByteCount + kPaletteChannelCount * 8 > end)
 		return false;
-	if (in.read(screenClut, sizeof(screenClut)) != sizeof(screenClut))
+	if (in.read(screenClut.data(), screenClut.size()) != screenClut.size())
 		return false;
 	for (uint i = 0; i < 3; ++i)
 		paletteGamma[i] = in.readDoubleLE();
@@ -1127,7 +1127,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 
 	HeaderState header;
 	Common::String pathSlots[PathRuntime::kPathSlotCount];
-	byte savedClut[256 * 3] = {};
+	Palette savedClut = {};
 	double savedGamma[3] = { 0.65, 0.65, 0.65 };
 	Common::Array<ShopState> shopStates;
 	Common::Array<CastState> castStates;
@@ -1361,9 +1361,9 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
-		byte currentClut[256 * 3];
+		Palette currentClut = {};
 		_paletteRuntime.copyCurrent(currentClut);
-		payload.write(currentClut, sizeof(currentClut));
+		payload.write(currentClut.data(), currentClut.size());
 		for (uint i = 0; i < 3; ++i)
 			payload.writeDoubleLE(_paletteRuntime.gamma(i));
 		writeChunk(*saveFile, "PAL ", payload);

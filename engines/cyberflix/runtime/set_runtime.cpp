@@ -327,7 +327,7 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		return;
 	}
 
-	byte rgb[256 * 3] = {};
+	Palette rgb = {};
 	// As with stage nodes: while the screen palette is black the room is painted
 	// invisibly and revealed later by blacktoscreen('set', n).
 	if (set()->loadSetPalette(rgb) && !engine.paletteIsBlack())

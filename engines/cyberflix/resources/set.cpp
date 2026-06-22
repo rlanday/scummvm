@@ -816,7 +816,7 @@ bool Set::applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence 
 	return true;
 }
 
-bool Set::loadSetPalette(byte *rgb) const {
+bool Set::loadSetPalette(Palette &rgb) const {
 	if (_fileData.empty())
 		return false;
 	return loadPalette(_fileData.begin(), _fileData.size(), rgb);

@@ -29,6 +29,7 @@
 #include "common/str.h"
 
 #include "cyberflix/archive.h"
+#include "cyberflix/image.h"
 #include "cyberflix/script.h"
 
 namespace Graphics {
@@ -125,7 +126,7 @@ public:
 	bool renderBevelBackdrop(Graphics::Surface &screen, int screenHeight, int screenWidth) const;
 	bool decodeActionAudio(const ActionEntry &action, Common::Array<byte> &pcm) const;
 
-	bool loadPuppetPalette(byte *rgb) const;
+	bool loadPuppetPalette(Palette &rgb) const;
 
 private:
 	struct RenderLayer {

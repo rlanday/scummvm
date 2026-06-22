@@ -278,7 +278,7 @@ bool Stage::renderNode(uint32 node, FrameImage &out) {
 	return true;
 }
 
-bool Stage::loadStagePalette(byte *rgb) const {
+bool Stage::loadStagePalette(Palette &rgb) const {
 	if (_fileData.empty())
 		return false;
 	return loadPalette(_fileData.begin(), _fileData.size(), rgb);

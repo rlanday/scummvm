@@ -22,14 +22,14 @@
 #ifndef CYBERFLIX_RUNTIME_PALETTE_H
 #define CYBERFLIX_RUNTIME_PALETTE_H
 
-#include "common/scummsys.h"
+#include "cyberflix/image.h"
 
 namespace Cyberflix {
 
 class PaletteRuntime {
 public:
-	void copyCurrent(byte (&rgb)[256 * 3]) const;
-	void setCurrent(const byte (&rgb)[256 * 3]);
+	void copyCurrent(Palette &rgb) const;
+	void setCurrent(const Palette &rgb);
 	bool isBlack() const;
 
 	double &gamma(uint channel) { return _gamma[channel]; }
@@ -40,7 +40,7 @@ public:
 	byte gammaMapped(uint channel, byte value) const { return _gammaTable[channel][value]; }
 
 private:
-	byte _currentClut[256 * 3] = {};
+	Palette _currentClut = {};
 	double _gamma[3] = { 0.65, 0.65, 0.65 };
 	byte _gammaTable[3][256] = {};
 	bool _gammaTableDirty = true;

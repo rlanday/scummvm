@@ -53,7 +53,7 @@ public:
 	bool isOpen() const { return _puppet && _puppet->isOpen(); }
 	bool isVisible() const { return isOpen() && _visible; }
 	Common::String currentPuppet() const;
-	bool loadPalette(byte (&rgb)[256 * 3]) const;
+	bool loadPalette(Palette &rgb) const;
 
 	bool grabEnabled() const { return _grab; }
 	const int16 *params() const { return _params; }

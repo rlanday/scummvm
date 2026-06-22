@@ -44,10 +44,10 @@ namespace Cyberflix {
 // the built-in names "black"/"current", and "set"/"stage"/"puppet" which alias
 // the palette embedded in the currently open file of that kind. Named cluts
 // registered by scripts land later.
-bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 3]) {
+bool CyberflixEngine::resolveClut(const Common::String &name, Palette &rgb) {
 	Common::String key = name;
 	key.toLowercase();
-	Common::fill(rgb, rgb + ARRAYSIZE(rgb), 0);
+	rgb.fill(0);
 	if (key == "black" || key.empty())
 		return true;
 	if (key == "current") {
@@ -62,7 +62,7 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 		if (!_puppetRuntime.loadPalette(rgb))
 			return false;
 		if (_puppetRuntime.grabEnabled()) {
-			byte backdrop[256 * 3] = {};
+			Palette backdrop = {};
 			bool haveBackdrop = false;
 			if (_setRuntime.set() && _setRuntime.set()->isOpen())
 				haveBackdrop = _setRuntime.set()->loadSetPalette(backdrop);
@@ -73,7 +73,9 @@ bool CyberflixEngine::resolveClut(const Common::String &name, byte (&rgb)[256 * 
 				int first = CLIP<int>(params[0], 0, 256);
 				int last = CLIP<int>(params[1], 0, 256);
 				if (last > first)
-					Common::copy(backdrop + first * 3, backdrop + last * 3, rgb + first * 3);
+					Common::copy(backdrop.begin() + first * kPaletteChannelCount,
+							backdrop.begin() + last * kPaletteChannelCount,
+							rgb.begin() + first * kPaletteChannelCount);
 			}
 		}
 		return true;
@@ -103,24 +105,24 @@ void CyberflixEngine::updatePaletteGammaTable() {
 	_paletteRuntime.updateGammaTable();
 }
 
-void CyberflixEngine::programPalette(const byte (&rgb)[256 * 3]) {
+void CyberflixEngine::programPalette(const Palette &rgb) {
 	_paletteRuntime.setCurrent(rgb);
 	updatePaletteGammaTable();
 
-	byte hw[256 * 3];
-	for (int i = 0; i < 256; ++i) {
-		hw[i * 3 + 0] = _paletteRuntime.gammaMapped(0, rgb[i * 3 + 0]);
-		hw[i * 3 + 1] = _paletteRuntime.gammaMapped(1, rgb[i * 3 + 1]);
-		hw[i * 3 + 2] = _paletteRuntime.gammaMapped(2, rgb[i * 3 + 2]);
+	Palette hw;
+	for (int i = 0; i < kPaletteColorCount; ++i) {
+		hw[i * kPaletteChannelCount + 0] = _paletteRuntime.gammaMapped(0, rgb[i * kPaletteChannelCount + 0]);
+		hw[i * kPaletteChannelCount + 1] = _paletteRuntime.gammaMapped(1, rgb[i * kPaletteChannelCount + 1]);
+		hw[i * kPaletteChannelCount + 2] = _paletteRuntime.gammaMapped(2, rgb[i * kPaletteChannelCount + 2]);
 	}
-	_system->getPaletteManager()->setPalette(hw, 0, 256);
+	_system->getPaletteManager()->setPalette(hw.data(), 0, kPaletteColorCount);
 }
 
 // clut(name): snap the hardware palette to the named clut instantly
 // (FUN_00446500 -> FUN_0041ba80). Pixels are untouched, so clut('black')
 // makes whatever is (or gets) painted invisible until a fade reveals it.
 void CyberflixEngine::setClut(const Common::String &name) {
-	byte rgb[256 * 3];
+	Palette rgb = {};
 	if (!resolveClut(name, rgb))
 		return;
 	programPalette(rgb);
@@ -190,16 +192,16 @@ void CyberflixEngine::drawString(const Common::String &text, int32 packedPoint, 
 // FUN_0041b3f0) only resolves the target CLUT and interpolates the palette; it
 // does NOT re-render props. Scripts redraw first via visualeffect(plain, 0).
 void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool toBlack) {
-	byte to[256 * 3] = {};
+	Palette to = {};
 	if (!resolveClut(target, to))
 		return;
 	if (steps < 1)
 		steps = 1;
 
-	byte from[256 * 3] = {};
+	Palette from = {};
 	if (toBlack) {
-		Common::copy(to, to + ARRAYSIZE(to), from);
-		Common::fill(to, to + ARRAYSIZE(to), 0);
+		from = to;
+		to.fill(0);
 	}
 
 	debug(1, "Cyberflix: %s('%s', %d)", toBlack ? "screentoblack" : "blacktoscreen",
@@ -211,14 +213,14 @@ bool CyberflixEngine::paletteIsBlack() const {
 	return _paletteRuntime.isBlack();
 }
 
-void CyberflixEngine::fadePaletteSteps(const byte (&from)[256 * 3], const byte (&to)[256 * 3], int steps) {
+void CyberflixEngine::fadePaletteSteps(const Palette &from, const Palette &to, int steps) {
 	if (steps < 1)
 		steps = 1;
 	uint32 startMs = _system->getMillis();
 	bool reachedFinalStep = false;
 	for (int s = 1; s <= steps && !shouldQuit(); ++s) {
-		byte cur[256 * 3];
-		for (int i = 0; i < 256 * 3; ++i)
+		Palette cur;
+		for (int i = 0; i < kPaletteByteCount; ++i)
 			cur[i] = static_cast<byte>((from[i] + (static_cast<int>(to[i]) - static_cast<int>(from[i])) * s / steps));
 		programPalette(cur);
 		_system->updateScreen();
