@@ -126,7 +126,8 @@ public:
 	// VMHost methods with engine-owned logic.
 	bool actionFrame(int n) override;
 	int randomNumber(int n) override;
-	int frameRate(const int *newRate) override;
+	int getFrameRate() override;
+	int setFrameRate(int newRate) override;
 	void sendToBoot(const Common::String &message, const Common::Array<Value> &args) override;
 	Value sendToBootFx(const Common::String &message, const Common::Array<Value> &args) override;
 	Value sendToSetFx(const Common::String &message, const Common::Array<Value> &args) override;
@@ -149,8 +150,10 @@ public:
 	bool keyAborts(const Common::String *resource, const Common::String *key,
 			const bool *enabled) override;
 	bool optionKey() override;
-	Common::String pathSlot(int slot, const Common::String *newPath) override;
-	Common::String currentCD(const Common::String *requested) override;
+	Common::String getPathSlot(int slot) override;
+	Common::String setPathSlot(int slot, const Common::String &newPath) override;
+	Common::String getCurrentCD() override;
+	Common::String setCurrentCD(const Common::String &requested) override;
 	bool pointInButton(const Common::String &flat,
 			const Common::String &button, int32 packedPoint) override;
 	bool pointInPainting(const Common::String &scene, const Common::String &view,

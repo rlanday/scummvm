@@ -646,22 +646,36 @@ void AudioRuntime::themeVolume(CyberflixEngine &engine, const Common::String &na
 		engine._mixer->setChannelVolume(_themeHandle, effectiveAudioVolume(volume));
 }
 
-int AudioRuntime::waveVolume(CyberflixEngine &engine, const int *newLevel) {
-	if (newLevel) {
-		_waveVolumeLevel = CLIP(*newLevel, 0, 9);
-		applyLiveAudioVolumes(engine);
-	}
+int AudioRuntime::getWaveVolume(CyberflixEngine &) {
 	return _waveVolumeLevel;
 }
 
-int AudioRuntime::soundVolume(CyberflixEngine &engine, const Common::String &name, const int *newVolume) {
+int AudioRuntime::setWaveVolume(CyberflixEngine &engine, int newLevel) {
+	_waveVolumeLevel = CLIP(newLevel, 0, 9);
+	applyLiveAudioVolumes(engine);
+	return _waveVolumeLevel;
+}
+
+int AudioRuntime::getSoundVolume(CyberflixEngine &, const Common::String &name) {
+	ThemeTrack::Cue *cue = findMutableSfxCue(name);
+	if (!cue) {
+		ThemeTrack *track = findTrack(name);
+		if (track)
+			return track->sfxCues.empty() ? track->volume : track->sfxCues[0].volume;
+		warning("Cyberflix: soundvol('%s'): cue/track not found", name.c_str());
+		return 0;
+	}
+
+	return cue->volume;
+}
+
+int AudioRuntime::setSoundVolume(CyberflixEngine &engine, const Common::String &name, int newVolume) {
 	ThemeTrack::Cue *cue = findMutableSfxCue(name);
 	if (!cue) {
 		ThemeTrack *track = findTrack(name);
 		if (track) {
-			if (newVolume)
-				for (uint i = 0; i < track->sfxCues.size(); ++i)
-					track->sfxCues[i].volume = CLIP(*newVolume, 0, 255);
+			for (uint i = 0; i < track->sfxCues.size(); ++i)
+				track->sfxCues[i].volume = CLIP(newVolume, 0, 255);
 			applyLiveAudioVolumes(engine);
 			return track->sfxCues.empty() ? track->volume : track->sfxCues[0].volume;
 		}
@@ -669,18 +683,16 @@ int AudioRuntime::soundVolume(CyberflixEngine &engine, const Common::String &nam
 		return 0;
 	}
 
-	if (newVolume) {
-		cue->volume = CLIP(*newVolume, 0, 255);
-		for (uint i = 0; i < ARRAYSIZE(_soundSlots); ++i)
-			if (_soundSlots[i].cueName.equalsIgnoreCase(cue->name) &&
-					engine._mixer->isSoundHandleActive(_soundSlots[i].handle))
-				engine._mixer->setChannelVolume(_soundSlots[i].handle,
-						effectiveAudioVolume(cue->volume));
-		if (_voiceSlot.cueName.equalsIgnoreCase(cue->name) &&
-				engine._mixer->isSoundHandleActive(_voiceSlot.handle))
-			engine._mixer->setChannelVolume(_voiceSlot.handle,
+	cue->volume = CLIP(newVolume, 0, 255);
+	for (uint i = 0; i < ARRAYSIZE(_soundSlots); ++i)
+		if (_soundSlots[i].cueName.equalsIgnoreCase(cue->name) &&
+				engine._mixer->isSoundHandleActive(_soundSlots[i].handle))
+			engine._mixer->setChannelVolume(_soundSlots[i].handle,
 					effectiveAudioVolume(cue->volume));
-	}
+	if (_voiceSlot.cueName.equalsIgnoreCase(cue->name) &&
+			engine._mixer->isSoundHandleActive(_voiceSlot.handle))
+		engine._mixer->setChannelVolume(_voiceSlot.handle,
+				effectiveAudioVolume(cue->volume));
 	return cue->volume;
 }
 

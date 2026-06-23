@@ -61,9 +61,9 @@ bool ScriptVM::callAudioMethod(uint16 opcode, const Common::Array<Value> &args, 
 				args.size() > 1 ? args[1].intValue : 255);
 		return true;
 	case Script::kMethodWaveVolume: { // wavevolume([level 0..9]) -> FUN_00436670/FUN_00439df0
-		int level = args.empty() ? 0 : args[0].intValue;
-		const int *newLevel = args.empty() ? nullptr : &level;
-		result = Value::makeInt(_audioHost->waveVolume(newLevel));
+		result = args.empty() ?
+				Value::makeInt(_audioHost->getWaveVolume()) :
+				Value::makeInt(_audioHost->setWaveVolume(args[0].intValue));
 		return true;
 	}
 	case Script::kMethodSoundVol: { // soundvol(name[, volume 0..255]) -> FUN_00412ad0/FUN_004125c0
@@ -71,9 +71,9 @@ bool ScriptVM::callAudioMethod(uint16 opcode, const Common::Array<Value> &args, 
 			result = Value::makeInt(0);
 			return true;
 		}
-		int volume = args.size() > 1 ? args[1].intValue : 0;
-		const int *newVolume = args.size() > 1 ? &volume : nullptr;
-		result = Value::makeInt(_audioHost->soundVolume(args[0].strValue, newVolume));
+		result = args.size() > 1 ?
+				Value::makeInt(_audioHost->setSoundVolume(args[0].strValue, args[1].intValue)) :
+				Value::makeInt(_audioHost->getSoundVolume(args[0].strValue));
 		return true;
 	}
 	case Script::kMethodCurrentTheme: // currenttheme(1|2) -> FUN_00412f20: 1 = playing cue name,
@@ -122,19 +122,18 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 		result = Value::makeString(_actorHost->indexToActor(args.empty() ? 0 : args[0].intValue));
 		return true;
 	case Script::kMethodActorVisible: { // actorvisible(name[, flag]) -> FUN_00420f10/FUN_00420d30
-		bool visible = args.size() > 1 && args[1].intValue != 0;
-		const bool *newVisible = args.size() > 1 ? &visible : nullptr;
 		result = !args.empty() ?
-				Value::makeBool(_actorHost->actorVisible(args[0].strValue, newVisible)) :
+				(args.size() > 1 ?
+						Value::makeBool(_actorHost->setActorVisible(args[0].strValue, args[1].intValue != 0)) :
+						Value::makeBool(_actorHost->getActorVisible(args[0].strValue))) :
 				Value::makeBool(false);
 		return true;
 	}
 	case Script::kMethodActorDeg: { // actordeg(name[, deg]) -> FUN_0041fef0 / getter
 		if (args.size() >= 2) {
-			int deg = args[1].intValue;
-			result = Value::makeInt(_actorHost->actorDeg(args[0].strValue, &deg));
+			result = Value::makeInt(_actorHost->setActorDeg(args[0].strValue, args[1].intValue));
 		} else if (args.size() == 1) {
-			result = Value::makeInt(_actorHost->actorDeg(args[0].strValue, nullptr));
+			result = Value::makeInt(_actorHost->getActorDeg(args[0].strValue));
 		} else {
 			result = Value::makeInt(0);
 		}
@@ -142,9 +141,9 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 	}
 	case Script::kMethodActorDist: { // actordist(name[, d]) -> FUN_00420040/FUN_0041ff90
 		if (args.size() >= 2) {
-			_actorHost->actorDist(args[0].strValue, args[1].intValue);
+			_actorHost->setActorDist(args[0].strValue, args[1].intValue);
 		} else if (args.size() == 1) {
-			result = Value::makeInt(_actorHost->actorDist(args[0].strValue));
+			result = Value::makeInt(_actorHost->getActorDist(args[0].strValue));
 		} else {
 			result = Value::makeInt(0);
 		}
@@ -162,25 +161,25 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 		return true;
 	case Script::kMethodActorStar: // actorstar(name[, scene]) -> FUN_0041fbb0
 		if (args.size() >= 2)
-			result = Value::makeString(_actorHost->actorStar(args[0].strValue, &args[1].strValue));
+			result = Value::makeString(_actorHost->setActorStar(args[0].strValue, args[1].strValue));
 		else if (args.size() == 1)
-			result = Value::makeString(_actorHost->actorStar(args[0].strValue, nullptr));
+			result = Value::makeString(_actorHost->getActorStar(args[0].strValue));
 		else
 			result = Value::makeString(Common::String());
 		return true;
 	case Script::kMethodActorPose: // actorpose(name[, pose]) -> FUN_0041fd70
 		if (args.size() >= 2)
-			result = Value::makeString(_actorHost->actorPose(args[0].strValue, &args[1].strValue));
+			result = Value::makeString(_actorHost->setActorPose(args[0].strValue, args[1].strValue));
 		else if (args.size() == 1)
-			result = Value::makeString(_actorHost->actorPose(args[0].strValue, nullptr));
+			result = Value::makeString(_actorHost->getActorPose(args[0].strValue));
 		else
 			result = Value::makeString(Common::String());
 		return true;
 	case Script::kMethodActorSet: // actorset(name[, set]) -> FUN_0041f970
 		if (args.size() >= 2)
-			result = Value::makeString(_actorHost->actorSet(args[0].strValue, &args[1].strValue));
+			result = Value::makeString(_actorHost->setActorSet(args[0].strValue, args[1].strValue));
 		else if (args.size() == 1)
-			result = Value::makeString(_actorHost->actorSet(args[0].strValue, nullptr));
+			result = Value::makeString(_actorHost->getActorSet(args[0].strValue));
 		else
 			result = Value::makeString(Common::String());
 		return true;
@@ -202,18 +201,17 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 		return true;
 	case Script::kMethodActorOwner: // actorowner(name[, owner]) -> FUN_00422210
 		if (args.size() >= 2)
-			result = Value::makeString(_actorHost->actorOwner(args[0].strValue, &args[1].strValue));
+			result = Value::makeString(_actorHost->setActorOwner(args[0].strValue, args[1].strValue));
 		else if (args.size() == 1)
-			result = Value::makeString(_actorHost->actorOwner(args[0].strValue, nullptr));
+			result = Value::makeString(_actorHost->getActorOwner(args[0].strValue));
 		else
 			result = Value::makeString(Common::String());
 		return true;
 	case Script::kMethodActorValue: { // actorvalue(name[, value]) -> FUN_004222d0
 		if (args.size() >= 2) {
-			int value = args[1].intValue;
-			result = Value::makeInt(_actorHost->actorValue(args[0].strValue, &value));
+			result = Value::makeInt(_actorHost->setActorValue(args[0].strValue, args[1].intValue));
 		} else if (args.size() == 1) {
-			result = Value::makeInt(_actorHost->actorValue(args[0].strValue, nullptr));
+			result = Value::makeInt(_actorHost->getActorValue(args[0].strValue));
 		} else {
 			result = Value::makeInt(0);
 		}
@@ -282,24 +280,22 @@ bool ScriptVM::callPropMethod(uint16 opcode, const Common::Array<Value> &args, V
 		return true;
 	case Script::kMethodPropDeg: // propdeg(name[, deg]) -> FUN_00429730/FUN_00429520
 		if (args.size() >= 2) {
-			int deg = args[1].intValue;
-			result = Value::makeInt(_interactionHost->propDeg(args[0].strValue, &deg));
+			result = Value::makeInt(_interactionHost->setPropDeg(args[0].strValue, args[1].intValue));
 		} else if (args.size() == 1) {
-			result = Value::makeInt(_interactionHost->propDeg(args[0].strValue, nullptr));
+			result = Value::makeInt(_interactionHost->getPropDeg(args[0].strValue));
 		}
 		return true;
 	case Script::kMethodPropOwner: // propowner(name[, owner]) -> FUN_00428d40: get or set
 		if (args.size() >= 2)
-			result = Value::makeString(_interactionHost->propOwner(args[0].strValue, &args[1].strValue));
+			result = Value::makeString(_interactionHost->setPropOwner(args[0].strValue, args[1].strValue));
 		else if (args.size() == 1)
-			result = Value::makeString(_interactionHost->propOwner(args[0].strValue, nullptr));
+			result = Value::makeString(_interactionHost->getPropOwner(args[0].strValue));
 		return true;
 	case Script::kMethodPropValue: // propvalue(name[, value]) -> FUN_004290d0/FUN_00428e00
 		if (args.size() >= 2) {
-			int value = args[1].intValue;
-			result = Value::makeInt(_interactionHost->propValue(args[0].strValue, &value));
+			result = Value::makeInt(_interactionHost->setPropValue(args[0].strValue, args[1].intValue));
 		} else if (args.size() == 1) {
-			result = Value::makeInt(_interactionHost->propValue(args[0].strValue, nullptr));
+			result = Value::makeInt(_interactionHost->getPropValue(args[0].strValue));
 		}
 		return true;
 	case Script::kMethodCountProps: // countprops() -> FUN_0042b4f0: global count, all shops
@@ -347,22 +343,22 @@ bool ScriptVM::callPuppetMethod(uint16 opcode, const Common::Array<Value> &args,
 			return true;
 		}
 		if (args.size() >= 2) {
-			int value = args[1].intValue;
-			result = Value::makeInt(_navigationHost->puppetParam(args[0].intValue, &value));
+			result = Value::makeInt(_navigationHost->setPuppetParam(args[0].intValue, args[1].intValue));
 		} else {
-			result = Value::makeInt(_navigationHost->puppetParam(args[0].intValue, nullptr));
+			result = Value::makeInt(_navigationHost->getPuppetParam(args[0].intValue));
 		}
 		return true;
 	}
 	case Script::kMethodPuppetVisible: { // puppetvisible([flag]) -> FUN_00448550/FUN_004485b0
-		bool visible = !args.empty() && args[0].intValue != 0;
-		const bool *newVisible = args.empty() ? nullptr : &visible;
-		result = Value::makeBool(_navigationHost->puppetVisible(newVisible));
+		result = args.empty() ?
+				Value::makeBool(_navigationHost->getPuppetVisible()) :
+				Value::makeBool(_navigationHost->setPuppetVisible(args[0].intValue != 0));
 		return true;
 	}
 	case Script::kMethodPuppetBase: { // puppetbase([name]) -> FUN_00447ee0
-		const Common::String *base = args.empty() ? nullptr : &args[0].strValue;
-		result = Value::makeString(_navigationHost->puppetBase(base));
+		result = args.empty() ?
+				Value::makeString(_navigationHost->getPuppetBase()) :
+				Value::makeString(_navigationHost->setPuppetBase(args[0].strValue));
 		return true;
 	}
 	case Script::kMethodCountPuppets: // countpuppets() -> FUN_00448380: PUP resource-2 script count
@@ -408,31 +404,33 @@ bool ScriptVM::callStageSetMethod(uint16 opcode, const Common::Array<Value> &arg
 		result = Value::makeString(_navigationHost->currentStage());
 		return true;
 	case Script::kMethodStageVisible: { // stagevisible([flag]) -> DAT_00461156
-		bool visible = args.empty() ? false : (args[0].intValue != 0);
-		const bool *newVisible = args.empty() ? nullptr : &visible;
-		result = Value::makeBool(_navigationHost->stageVisible(newVisible));
+		result = args.empty() ?
+				Value::makeBool(_navigationHost->getStageVisible()) :
+				Value::makeBool(_navigationHost->setStageVisible(args[0].intValue != 0));
 		return true;
 	}
 	case Script::kMethodCurrentFlat: // currentflat() -> current stage node name or native 'None'
 		result = Value::makeString(_navigationHost->currentFlat());
 		return true;
 	case Script::kMethodCurrentView: { // currentview([name]) -> current SET view name
-		const Common::String *target = args.empty() ? nullptr : &args[0].strValue;
-		result = Value::makeString(_navigationHost->currentView(target));
+		result = args.empty() ?
+				Value::makeString(_navigationHost->getCurrentView()) :
+				Value::makeString(_navigationHost->setCurrentView(args[0].strValue));
 		return true;
 	}
 	case Script::kMethodCurrentDeg: // currentdeg() -> DAT_004611ac
 		result = Value::makeInt(_navigationHost->currentDeg());
 		return true;
 	case Script::kMethodCurrentScene: { // currentscene([name|left|right|strait])
-		const Common::String *target = args.empty() ? nullptr : &args[0].strValue;
-		result = Value::makeString(_navigationHost->currentScene(target));
+		result = args.empty() ?
+				Value::makeString(_navigationHost->getCurrentScene()) :
+				Value::makeString(_navigationHost->setCurrentScene(args[0].strValue));
 		return true;
 	}
 	case Script::kMethodSetVisible: { // setvisible([flag]) -> current SET visibility flag
-		bool visible = args.empty() ? false : (args[0].intValue != 0);
-		const bool *newVisible = args.empty() ? nullptr : &visible;
-		result = Value::makeBool(_navigationHost->setVisible(newVisible));
+		result = args.empty() ?
+				Value::makeBool(_navigationHost->getSetVisible()) :
+				Value::makeBool(_navigationHost->setSetVisible(args[0].intValue != 0));
 		return true;
 	}
 	case Script::kMethodCountPaintings: // countpaintings(scene, view) -> FUN_00431fe0
@@ -650,9 +648,9 @@ bool ScriptVM::callRuntimeMethod(uint16 opcode, const Common::Array<Value> &args
 		result = Value::makeBool(_systemHost->actionFrame(args.empty() ? 0 : args[0].intValue));
 		return true;
 	case Script::kMethodFrameRate: { // framerate([n]) -> DAT_00461126
-		int rate = args.empty() ? 0 : args[0].intValue;
-		const int *newRate = args.empty() ? nullptr : &rate;
-		result = Value::makeInt(_systemHost->frameRate(newRate));
+		result = args.empty() ?
+				Value::makeInt(_systemHost->getFrameRate()) :
+				Value::makeInt(_systemHost->setFrameRate(args[0].intValue));
 		return true;
 	}
 	case Script::kMethodFrame: // frame() -> FUN_00435a30: DAT_00461122 compositor counter
@@ -660,13 +658,15 @@ bool ScriptVM::callRuntimeMethod(uint16 opcode, const Common::Array<Value> &args
 		return true;
 	case Script::kMethodPath: { // path(slot[, value]) -> FUN_004462a0/FUN_00438450
 		int slot = args.empty() ? 0 : args[0].intValue;
-		const Common::String *newPath = args.size() >= 2 ? &args[1].strValue : nullptr;
-		result = Value::makeString(_inputHost->pathSlot(slot, newPath));
+		result = args.size() >= 2 ?
+				Value::makeString(_inputHost->setPathSlot(slot, args[1].strValue)) :
+				Value::makeString(_inputHost->getPathSlot(slot));
 		return true;
 	}
 	case Script::kMethodCurrentCD: { // currentcd([name]) -> FUN_00439df0/FUN_0043a290
-		const Common::String *requested = args.empty() ? nullptr : &args[0].strValue;
-		result = Value::makeString(_inputHost->currentCD(requested));
+		result = args.empty() ?
+				Value::makeString(_inputHost->getCurrentCD()) :
+				Value::makeString(_inputHost->setCurrentCD(args[0].strValue));
 		return true;
 	}
 	case Script::kMethodSaveGame: // savegame(signature) -> FUN_00426620/FUN_00426790

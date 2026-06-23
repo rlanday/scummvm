@@ -69,16 +69,28 @@ int CyberflixPuppetVMHost::puppetEvent(int timeout) {
 	return engine().puppetRuntime().puppetEvent(engine(), timeout);
 }
 
-Common::String CyberflixPuppetVMHost::puppetBase(const Common::String *newBase) {
-	return engine().puppetRuntime().puppetBase(newBase);
+Common::String CyberflixPuppetVMHost::getPuppetBase() {
+	return engine().puppetRuntime().getPuppetBase();
 }
 
-bool CyberflixPuppetVMHost::puppetVisible(const bool *newVisible) {
-	return engine().puppetRuntime().puppetVisible(engine(), newVisible);
+Common::String CyberflixPuppetVMHost::setPuppetBase(const Common::String &newBase) {
+	return engine().puppetRuntime().setPuppetBase(newBase);
 }
 
-int CyberflixPuppetVMHost::puppetParam(int selector, const int *newValue) {
-	return engine().puppetRuntime().puppetParam(selector, newValue);
+bool CyberflixPuppetVMHost::getPuppetVisible() {
+	return engine().puppetRuntime().getPuppetVisible();
+}
+
+bool CyberflixPuppetVMHost::setPuppetVisible(bool visible) {
+	return engine().puppetRuntime().setPuppetVisible(engine(), visible);
+}
+
+int CyberflixPuppetVMHost::getPuppetParam(int selector) {
+	return engine().puppetRuntime().getPuppetParam(selector);
+}
+
+int CyberflixPuppetVMHost::setPuppetParam(int selector, int newValue) {
+	return engine().puppetRuntime().setPuppetParam(selector, newValue);
 }
 
 int CyberflixPuppetVMHost::countPuppets() {

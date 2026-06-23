@@ -89,8 +89,10 @@ public:
 	void haltSound(CyberflixEngine &engine, int which);
 	void haltVoice(CyberflixEngine &engine);
 	void themeVolume(CyberflixEngine &engine, const Common::String &name, int volume);
-	int waveVolume(CyberflixEngine &engine, const int *newLevel);
-	int soundVolume(CyberflixEngine &engine, const Common::String &name, const int *newVolume);
+	int getWaveVolume(CyberflixEngine &engine);
+	int setWaveVolume(CyberflixEngine &engine, int newLevel);
+	int getSoundVolume(CyberflixEngine &engine, const Common::String &name);
+	int setSoundVolume(CyberflixEngine &engine, const Common::String &name, int newVolume);
 	Common::String currentTheme(CyberflixEngine &engine, int which);
 	Common::String currentSound(CyberflixEngine &engine, int which);
 	Common::String currentVoice(CyberflixEngine &engine);

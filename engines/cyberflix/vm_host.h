@@ -42,7 +42,8 @@ public:
 	void closeStageFile() override;
 	void gotoFlat(const Value &flat) override;
 	Common::String currentStage() override;
-	bool stageVisible(const bool *newVisible) override;
+	bool getStageVisible() override;
+	bool setStageVisible(bool visible) override;
 	Common::String currentFlat() override;
 	void sendToStage(const Common::String &message, const Common::Array<Value> &args) override;
 	Value sendToStageFx(const Common::String &message, const Common::Array<Value> &args) override;
@@ -59,10 +60,13 @@ public:
 			const Common::String &view = Common::String()) override;
 	void closeSetFile() override;
 	Common::String currentSet() override;
-	Common::String currentView(const Common::String *target = nullptr) override;
+	Common::String getCurrentView() override;
+	Common::String setCurrentView(const Common::String &target) override;
 	int currentDeg() override;
-	Common::String currentScene(const Common::String *target) override;
-	bool setVisible(const bool *newVisible) override;
+	Common::String getCurrentScene() override;
+	Common::String setCurrentScene(const Common::String &target) override;
+	bool getSetVisible() override;
+	bool setSetVisible(bool visible) override;
 	void sendToScene(const Common::String &scene,
 			const Common::String &message = Common::String(),
 			const Common::Array<Value> &args = Common::Array<Value>()) override;
@@ -100,9 +104,12 @@ public:
 	void puppetBevel(const Common::String &name, int mode) override;
 	void puppetGrab(bool enabled) override;
 	int puppetEvent(int timeout) override;
-	Common::String puppetBase(const Common::String *newBase) override;
-	bool puppetVisible(const bool *newVisible) override;
-	int puppetParam(int selector, const int *newValue) override;
+	Common::String getPuppetBase() override;
+	Common::String setPuppetBase(const Common::String &newBase) override;
+	bool getPuppetVisible() override;
+	bool setPuppetVisible(bool visible) override;
+	int getPuppetParam(int selector) override;
+	int setPuppetParam(int selector, int newValue) override;
 	int countPuppets() override;
 	Common::String indexToPuppet(int index) override;
 
@@ -121,8 +128,10 @@ public:
 	void haltSound(int which) override;
 	void haltVoice() override;
 	void themeVolume(const Common::String &name, int volume) override;
-	int waveVolume(const int *newLevel) override;
-	int soundVolume(const Common::String &name, const int *newVolume) override;
+	int getWaveVolume() override;
+	int setWaveVolume(int newLevel) override;
+	int getSoundVolume(const Common::String &name) override;
+	int setSoundVolume(const Common::String &name, int newVolume) override;
 	Common::String currentTheme(int which) override;
 	Common::String currentSound(int which) override;
 	Common::String currentVoice() override;
@@ -146,17 +155,24 @@ public:
 			const Common::Array<Value> &args) override;
 	int countActors() override;
 	Common::String indexToActor(int index) override;
-	bool actorVisible(const Common::String &name, const bool *newVisible) override;
-	Common::String actorSet(const Common::String &name, const Common::String *newSet) override;
-	Common::String actorStar(const Common::String &name, const Common::String *newStar) override;
-	Common::String actorPose(const Common::String &name, const Common::String *newPose) override;
+	bool getActorVisible(const Common::String &name) override;
+	bool setActorVisible(const Common::String &name, bool visible) override;
+	Common::String getActorSet(const Common::String &name) override;
+	Common::String setActorSet(const Common::String &name, const Common::String &newSet) override;
+	Common::String getActorStar(const Common::String &name) override;
+	Common::String setActorStar(const Common::String &name, const Common::String &newStar) override;
+	Common::String getActorPose(const Common::String &name) override;
+	Common::String setActorPose(const Common::String &name, const Common::String &newPose) override;
 	void actorXYZ(const Common::String &name, int x, int y, int z) override;
 	int actorXYZ(const Common::String &name, int selector) override;
-	int actorDeg(const Common::String &name, const int *newDeg) override;
-	int actorDist(const Common::String &name) override;
-	void actorDist(const Common::String &name, int newDist) override;
-	int actorValue(const Common::String &name, const int *newValue) override;
-	Common::String actorOwner(const Common::String &name, const Common::String *newOwner) override;
+	int getActorDeg(const Common::String &name) override;
+	int setActorDeg(const Common::String &name, int newDeg) override;
+	int getActorDist(const Common::String &name) override;
+	void setActorDist(const Common::String &name, int newDist) override;
+	int getActorValue(const Common::String &name) override;
+	int setActorValue(const Common::String &name, int newValue) override;
+	Common::String getActorOwner(const Common::String &name) override;
+	Common::String setActorOwner(const Common::String &name, const Common::String &newOwner) override;
 	void actorZClip(const Common::String &name, int zClip) override;
 	void actorSpeed(const Common::String &name, int speed) override;
 	void actorScale(const Common::String &name, int scale) override;
@@ -196,9 +212,12 @@ public:
 	void propScale(const Common::String &name, int scale) override;
 	void propZClip(const Common::String &name, int dist) override;
 	void propDist(const Common::String &name, int dist) override;
-	int propDeg(const Common::String &name, const int *newDeg) override;
-	Common::String propOwner(const Common::String &name, const Common::String *newOwner) override;
-	int propValue(const Common::String &name, const int *newValue) override;
+	int getPropDeg(const Common::String &name) override;
+	int setPropDeg(const Common::String &name, int newDeg) override;
+	Common::String getPropOwner(const Common::String &name) override;
+	Common::String setPropOwner(const Common::String &name, const Common::String &newOwner) override;
+	int getPropValue(const Common::String &name) override;
+	int setPropValue(const Common::String &name, int newValue) override;
 	int countProps() override;
 	Common::String indexToProp(int index) override;
 

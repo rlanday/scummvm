@@ -269,69 +269,99 @@ Common::String ActorRuntime::indexToActor(int index) const {
 	return Common::String();
 }
 
-bool ActorRuntime::actorVisible(CyberflixEngine &engine, const Common::String &name, const bool *newVisible) {
+bool ActorRuntime::getActorVisible(const Common::String &name) const {
 	ActorRef ref = findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorvisible('%s'): no such actor", name.c_str());
 		return false;
 	}
-	if (newVisible && ref.actor->visible != *newVisible) {
-		ref.actor->visible = *newVisible;
+	return ref.actor->visible;
+}
+
+bool ActorRuntime::setActorVisible(CyberflixEngine &engine, const Common::String &name, bool visible) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorvisible('%s'): no such actor", name.c_str());
+		return false;
+	}
+	if (ref.actor->visible != visible) {
+		ref.actor->visible = visible;
 		engine._propRuntime.setDirty(true);
 	}
 	return ref.actor->visible;
 }
 
-Common::String ActorRuntime::actorSet(CyberflixEngine &engine, const Common::String &name, const Common::String *newSet) {
+Common::String ActorRuntime::getActorSet(const Common::String &name) const {
 	ActorRef ref = findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorset('%s'): no such actor", name.c_str());
 		return Common::String();
 	}
-	if (newSet) {
-		Common::String key = *newSet;
-		key.toLowercase();
-		if (ref.actor->setName != key) {
-			ref.actor->setName = key;
-			engine._propRuntime.setDirty(true);
-		}
+	return ref.actor->setName;
+}
+
+Common::String ActorRuntime::setActorSet(CyberflixEngine &engine, const Common::String &name, const Common::String &newSet) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorset('%s'): no such actor", name.c_str());
+		return Common::String();
+	}
+	Common::String key = newSet;
+	key.toLowercase();
+	if (ref.actor->setName != key) {
+		ref.actor->setName = key;
+		engine._propRuntime.setDirty(true);
 	}
 	return ref.actor->setName;
 }
 
-Common::String ActorRuntime::actorStar(CyberflixEngine &engine, const Common::String &name, const Common::String *newStar) {
+Common::String ActorRuntime::getActorStar(const Common::String &name) const {
 	ActorRef ref = findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorstar('%s'): no such actor", name.c_str());
 		return Common::String();
 	}
-	if (newStar) {
-		Common::String key = *newStar;
-		key.toLowercase();
-		if (ref.actor->sceneName != key || ref.actor->mode != 1) {
-			ref.actor->sceneName = key;
-			ref.actor->mode = 1;
-			engine._propRuntime.setDirty(true);
-		}
-		resolveActorStar(engine, *ref.actor);
-	}
 	return ref.actor->sceneName;
 }
 
-Common::String ActorRuntime::actorPose(CyberflixEngine &engine, const Common::String &name, const Common::String *newPose) {
+Common::String ActorRuntime::setActorStar(CyberflixEngine &engine, const Common::String &name, const Common::String &newStar) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorstar('%s'): no such actor", name.c_str());
+		return Common::String();
+	}
+	Common::String key = newStar;
+	key.toLowercase();
+	if (ref.actor->sceneName != key || ref.actor->mode != 1) {
+		ref.actor->sceneName = key;
+		ref.actor->mode = 1;
+		engine._propRuntime.setDirty(true);
+	}
+	resolveActorStar(engine, *ref.actor);
+	return ref.actor->sceneName;
+}
+
+Common::String ActorRuntime::getActorPose(const Common::String &name) const {
 	ActorRef ref = findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorpose('%s'): no such actor", name.c_str());
 		return Common::String();
 	}
-	if (newPose) {
-		Common::String key = *newPose;
-		key.toLowercase();
-		if (ref.actor->shapeName != key) {
-			ref.actor->shapeName = key;
-			ref.actor->poseIndex = 0;
-			engine._propRuntime.setDirty(true);
-		}
+	return ref.actor->shapeName;
+}
+
+Common::String ActorRuntime::setActorPose(CyberflixEngine &engine, const Common::String &name, const Common::String &newPose) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorpose('%s'): no such actor", name.c_str());
+		return Common::String();
+	}
+	Common::String key = newPose;
+	key.toLowercase();
+	if (ref.actor->shapeName != key) {
+		ref.actor->shapeName = key;
+		ref.actor->poseIndex = 0;
+		engine._propRuntime.setDirty(true);
 	}
 	return ref.actor->shapeName;
 }
@@ -372,20 +402,29 @@ int ActorRuntime::actorXYZ(CyberflixEngine &engine, const Common::String &name, 
 	}
 }
 
-int ActorRuntime::actorDeg(CyberflixEngine &engine, const Common::String &name, const int *newDeg) {
+int ActorRuntime::getActorDeg(const Common::String &name) const {
 	ActorRef ref = findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actordeg('%s'): no such actor", name.c_str());
 		return 0;
 	}
-	if (newDeg && ref.actor->angle != static_cast<int16>(*newDeg & 0xff)) {
-		ref.actor->angle = static_cast<int16>(*newDeg & 0xff);
+	return ref.actor->angle;
+}
+
+int ActorRuntime::setActorDeg(CyberflixEngine &engine, const Common::String &name, int newDeg) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actordeg('%s'): no such actor", name.c_str());
+		return 0;
+	}
+	if (ref.actor->angle != static_cast<int16>(newDeg & 0xff)) {
+		ref.actor->angle = static_cast<int16>(newDeg & 0xff);
 		engine._propRuntime.setDirty(true);
 	}
 	return ref.actor->angle;
 }
 
-int ActorRuntime::actorDist(CyberflixEngine &engine, const Common::String &name) const {
+int ActorRuntime::getActorDist(CyberflixEngine &engine, const Common::String &name) const {
 	ActorRef ref = findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actordist('%s'): no such actor", name.c_str());
@@ -406,7 +445,7 @@ int ActorRuntime::actorDist(CyberflixEngine &engine, const Common::String &name)
 	return projected.depth;
 }
 
-void ActorRuntime::actorDist(CyberflixEngine &engine, const Common::String &name, int newDist) {
+void ActorRuntime::setActorDist(CyberflixEngine &engine, const Common::String &name, int newDist) {
 	ActorRef ref = findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actordist('%s'): no such actor", name.c_str());
@@ -419,29 +458,43 @@ void ActorRuntime::actorDist(CyberflixEngine &engine, const Common::String &name
 	}
 }
 
-int ActorRuntime::actorValue(const Common::String &name, const int *newValue) {
+int ActorRuntime::getActorValue(const Common::String &name) const {
 	ActorRef ref = findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorvalue('%s'): no such actor", name.c_str());
 		return 0;
 	}
-	if (newValue)
-		ref.actor->value = *newValue;
 	return ref.actor->value;
 }
 
-Common::String ActorRuntime::actorOwner(const Common::String &name,
-		const Common::String *newOwner) {
+int ActorRuntime::setActorValue(const Common::String &name, int newValue) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorvalue('%s'): no such actor", name.c_str());
+		return 0;
+	}
+	ref.actor->value = newValue;
+	return ref.actor->value;
+}
+
+Common::String ActorRuntime::getActorOwner(const Common::String &name) const {
 	ActorRef ref = findActorRef(name);
 	if (!ref.actor) {
 		warning("Cyberflix: actorowner('%s'): no such actor", name.c_str());
 		return Common::String();
 	}
-	if (newOwner) {
-		Common::String key = *newOwner;
-		key.toLowercase();
-		ref.actor->owner = key;
+	return ref.actor->owner;
+}
+
+Common::String ActorRuntime::setActorOwner(const Common::String &name, const Common::String &newOwner) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actorowner('%s'): no such actor", name.c_str());
+		return Common::String();
 	}
+	Common::String key = newOwner;
+	key.toLowercase();
+	ref.actor->owner = key;
 	return ref.actor->owner;
 }
 
@@ -514,7 +567,7 @@ void ActorRuntime::walkToStar(CyberflixEngine &engine, const Common::String &nam
 	// not block forever in while(iswalk(actor)) wait loops.
 	clearWalkRecord(name);
 	Common::String dest = star;
-	actorStar(engine, name, &dest);
+	setActorStar(engine, name, dest);
 }
 
 void ActorRuntime::stopWalk(const Common::String &name) {

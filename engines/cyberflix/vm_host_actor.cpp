@@ -59,20 +59,36 @@ Common::String CyberflixActorVMHost::indexToActor(int index) {
 	return engine().actorRuntime().indexToActor(index);
 }
 
-bool CyberflixActorVMHost::actorVisible(const Common::String &name, const bool *newVisible) {
-	return engine().actorRuntime().actorVisible(engine(), name, newVisible);
+bool CyberflixActorVMHost::getActorVisible(const Common::String &name) {
+	return engine().actorRuntime().getActorVisible(name);
 }
 
-Common::String CyberflixActorVMHost::actorSet(const Common::String &name, const Common::String *newSet) {
-	return engine().actorRuntime().actorSet(engine(), name, newSet);
+bool CyberflixActorVMHost::setActorVisible(const Common::String &name, bool visible) {
+	return engine().actorRuntime().setActorVisible(engine(), name, visible);
 }
 
-Common::String CyberflixActorVMHost::actorStar(const Common::String &name, const Common::String *newStar) {
-	return engine().actorRuntime().actorStar(engine(), name, newStar);
+Common::String CyberflixActorVMHost::getActorSet(const Common::String &name) {
+	return engine().actorRuntime().getActorSet(name);
 }
 
-Common::String CyberflixActorVMHost::actorPose(const Common::String &name, const Common::String *newPose) {
-	return engine().actorRuntime().actorPose(engine(), name, newPose);
+Common::String CyberflixActorVMHost::setActorSet(const Common::String &name, const Common::String &newSet) {
+	return engine().actorRuntime().setActorSet(engine(), name, newSet);
+}
+
+Common::String CyberflixActorVMHost::getActorStar(const Common::String &name) {
+	return engine().actorRuntime().getActorStar(name);
+}
+
+Common::String CyberflixActorVMHost::setActorStar(const Common::String &name, const Common::String &newStar) {
+	return engine().actorRuntime().setActorStar(engine(), name, newStar);
+}
+
+Common::String CyberflixActorVMHost::getActorPose(const Common::String &name) {
+	return engine().actorRuntime().getActorPose(name);
+}
+
+Common::String CyberflixActorVMHost::setActorPose(const Common::String &name, const Common::String &newPose) {
+	return engine().actorRuntime().setActorPose(engine(), name, newPose);
 }
 
 void CyberflixActorVMHost::actorXYZ(const Common::String &name, int x, int y, int z) {
@@ -83,25 +99,36 @@ int CyberflixActorVMHost::actorXYZ(const Common::String &name, int selector) {
 	return engine().actorRuntime().actorXYZ(engine(), name, selector);
 }
 
-int CyberflixActorVMHost::actorDeg(const Common::String &name, const int *newDeg) {
-	return engine().actorRuntime().actorDeg(engine(), name, newDeg);
+int CyberflixActorVMHost::getActorDeg(const Common::String &name) {
+	return engine().actorRuntime().getActorDeg(name);
 }
 
-int CyberflixActorVMHost::actorDist(const Common::String &name) {
-	return engine().actorRuntime().actorDist(engine(), name);
+int CyberflixActorVMHost::setActorDeg(const Common::String &name, int newDeg) {
+	return engine().actorRuntime().setActorDeg(engine(), name, newDeg);
 }
 
-void CyberflixActorVMHost::actorDist(const Common::String &name, int newDist) {
-	engine().actorRuntime().actorDist(engine(), name, newDist);
+int CyberflixActorVMHost::getActorDist(const Common::String &name) {
+	return engine().actorRuntime().getActorDist(engine(), name);
 }
 
-int CyberflixActorVMHost::actorValue(const Common::String &name, const int *newValue) {
-	return engine().actorRuntime().actorValue(name, newValue);
+void CyberflixActorVMHost::setActorDist(const Common::String &name, int newDist) {
+	engine().actorRuntime().setActorDist(engine(), name, newDist);
 }
 
-Common::String CyberflixActorVMHost::actorOwner(const Common::String &name,
-		const Common::String *newOwner) {
-	return engine().actorRuntime().actorOwner(name, newOwner);
+int CyberflixActorVMHost::getActorValue(const Common::String &name) {
+	return engine().actorRuntime().getActorValue(name);
+}
+
+int CyberflixActorVMHost::setActorValue(const Common::String &name, int newValue) {
+	return engine().actorRuntime().setActorValue(name, newValue);
+}
+
+Common::String CyberflixActorVMHost::getActorOwner(const Common::String &name) {
+	return engine().actorRuntime().getActorOwner(name);
+}
+
+Common::String CyberflixActorVMHost::setActorOwner(const Common::String &name, const Common::String &newOwner) {
+	return engine().actorRuntime().setActorOwner(name, newOwner);
 }
 
 void CyberflixActorVMHost::actorZClip(const Common::String &name, int zClip) {

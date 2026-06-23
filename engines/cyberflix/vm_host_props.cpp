@@ -99,16 +99,28 @@ void CyberflixPropVMHost::propDist(const Common::String &name, int dist) {
 	engine().propRuntime().propDist(name, dist);
 }
 
-int CyberflixPropVMHost::propDeg(const Common::String &name, const int *newDeg) {
-	return engine().propRuntime().propDeg(name, newDeg);
+int CyberflixPropVMHost::getPropDeg(const Common::String &name) {
+	return engine().propRuntime().getPropDeg(name);
 }
 
-Common::String CyberflixPropVMHost::propOwner(const Common::String &name, const Common::String *newOwner) {
-	return engine().propRuntime().propOwner(name, newOwner);
+int CyberflixPropVMHost::setPropDeg(const Common::String &name, int newDeg) {
+	return engine().propRuntime().setPropDeg(name, newDeg);
 }
 
-int CyberflixPropVMHost::propValue(const Common::String &name, const int *newValue) {
-	return engine().propRuntime().propValue(name, newValue);
+Common::String CyberflixPropVMHost::getPropOwner(const Common::String &name) {
+	return engine().propRuntime().getPropOwner(name);
+}
+
+Common::String CyberflixPropVMHost::setPropOwner(const Common::String &name, const Common::String &newOwner) {
+	return engine().propRuntime().setPropOwner(name, newOwner);
+}
+
+int CyberflixPropVMHost::getPropValue(const Common::String &name) {
+	return engine().propRuntime().getPropValue(name);
+}
+
+int CyberflixPropVMHost::setPropValue(const Common::String &name, int newValue) {
+	return engine().propRuntime().setPropValue(name, newValue);
 }
 
 int CyberflixPropVMHost::countProps() {

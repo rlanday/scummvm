@@ -25,9 +25,8 @@
 
 namespace Cyberflix {
 
-int FramePacingRuntime::frameRate(const int *newRate) {
-	if (newRate)
-		_frameRate = CLIP(*newRate, 0, 60);
+int FramePacingRuntime::setFrameRate(int newRate) {
+	_frameRate = CLIP(newRate, 0, 60);
 	return _frameRate;
 }
 

@@ -37,10 +37,12 @@ public:
 		kPathSlotCount = 9
 	};
 
-	Common::String pathSlot(int slot, const Common::String *newPath);
-	Common::String currentCD(const Common::String *requested);
+	Common::String getPathSlot(int slot) const;
+	Common::String setPathSlot(int slot, const Common::String &newPath);
+	Common::String getCurrentCD() const;
+	Common::String setCurrentCD(const Common::String &requested);
 
-	void setPathSlot(int slot, const Common::String &path);
+	void setPathSlotValue(int slot, const Common::String &path);
 	const Common::String &pathSlotValue(int slot) const { return _pathSlots[slot]; }
 	void setCurrentDiscRootName(const Common::String &name);
 

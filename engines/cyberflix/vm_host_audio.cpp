@@ -59,12 +59,20 @@ void CyberflixAudioVMHost::themeVolume(const Common::String &name, int volume) {
 	engine().audioRuntime().themeVolume(engine(), name, volume);
 }
 
-int CyberflixAudioVMHost::waveVolume(const int *newLevel) {
-	return engine().audioRuntime().waveVolume(engine(), newLevel);
+int CyberflixAudioVMHost::getWaveVolume() {
+	return engine().audioRuntime().getWaveVolume(engine());
 }
 
-int CyberflixAudioVMHost::soundVolume(const Common::String &name, const int *newVolume) {
-	return engine().audioRuntime().soundVolume(engine(), name, newVolume);
+int CyberflixAudioVMHost::setWaveVolume(int newLevel) {
+	return engine().audioRuntime().setWaveVolume(engine(), newLevel);
+}
+
+int CyberflixAudioVMHost::getSoundVolume(const Common::String &name) {
+	return engine().audioRuntime().getSoundVolume(engine(), name);
+}
+
+int CyberflixAudioVMHost::setSoundVolume(const Common::String &name, int newVolume) {
+	return engine().audioRuntime().setSoundVolume(engine(), name, newVolume);
 }
 
 Common::String CyberflixAudioVMHost::currentTheme(int which) {

@@ -36,20 +36,32 @@ Common::String CyberflixStageSetVMHost::currentSet() {
 	return engine().setRuntime().currentSet();
 }
 
-Common::String CyberflixStageSetVMHost::currentView(const Common::String *target) {
-	return engine().setRuntime().currentView(engine(), target);
+Common::String CyberflixStageSetVMHost::getCurrentView() {
+	return engine().setRuntime().getCurrentView();
+}
+
+Common::String CyberflixStageSetVMHost::setCurrentView(const Common::String &target) {
+	return engine().setRuntime().setCurrentView(engine(), target);
 }
 
 int CyberflixStageSetVMHost::currentDeg() {
 	return engine().setRuntime().currentDeg();
 }
 
-Common::String CyberflixStageSetVMHost::currentScene(const Common::String *target) {
-	return engine().setRuntime().currentScene(engine(), target);
+Common::String CyberflixStageSetVMHost::getCurrentScene() {
+	return engine().setRuntime().getCurrentScene(engine());
 }
 
-bool CyberflixStageSetVMHost::setVisible(const bool *newVisible) {
-	return engine().setRuntime().setVisible(engine(), newVisible);
+Common::String CyberflixStageSetVMHost::setCurrentScene(const Common::String &target) {
+	return engine().setRuntime().setCurrentScene(engine(), target);
+}
+
+bool CyberflixStageSetVMHost::getSetVisible() {
+	return engine().setRuntime().getSetVisible(engine());
+}
+
+bool CyberflixStageSetVMHost::setSetVisible(bool visible) {
+	return engine().setRuntime().setSetVisible(engine(), visible);
 }
 
 void CyberflixStageSetVMHost::sendToScene(const Common::String &scene,
@@ -112,8 +124,12 @@ Common::String CyberflixStageSetVMHost::currentStage() {
 	return engine().stageRuntime().currentStage();
 }
 
-bool CyberflixStageSetVMHost::stageVisible(const bool *newVisible) {
-	return engine().stageRuntime().stageVisible(newVisible);
+bool CyberflixStageSetVMHost::getStageVisible() {
+	return engine().stageRuntime().getStageVisible();
+}
+
+bool CyberflixStageSetVMHost::setStageVisible(bool visible) {
+	return engine().stageRuntime().setStageVisible(visible);
 }
 
 Common::String CyberflixStageSetVMHost::currentFlat() {

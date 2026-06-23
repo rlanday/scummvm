@@ -84,13 +84,15 @@ public:
 			const Common::String &view = Common::String());
 	void closeSetFile(CyberflixEngine &engine);
 	Common::String currentSet() const;
-	Common::String currentView() const;
-	Common::String currentView(CyberflixEngine &engine, const Common::String *target);
+	Common::String getCurrentView() const;
+	Common::String setCurrentView(CyberflixEngine &engine, const Common::String &target);
 	int currentDeg() const;
 	int cameraXYZ(int selector) const;
 	int playerXYZ(int selector) const;
-	Common::String currentScene(CyberflixEngine &engine, const Common::String *target);
-	bool setVisible(CyberflixEngine &engine, const bool *newVisible);
+	Common::String getCurrentScene(CyberflixEngine &engine) const;
+	Common::String setCurrentScene(CyberflixEngine &engine, const Common::String &target);
+	bool getSetVisible(CyberflixEngine &engine) const;
+	bool setSetVisible(CyberflixEngine &engine, bool visible);
 
 	void sendToScene(CyberflixEngine &engine, const Common::String &scene,
 			const Common::String &message, const Common::Array<Value> &args);

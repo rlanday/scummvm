@@ -101,11 +101,16 @@ Common::String StageRuntime::currentStage() const {
 	return "None";
 }
 
-bool StageRuntime::stageVisible(const bool *newVisible) {
+bool StageRuntime::getStageVisible() const {
 	if (!stage() || !stage()->isOpen())
 		return false;
-	if (newVisible)
-		visible() = *newVisible;
+	return visible();
+}
+
+bool StageRuntime::setStageVisible(bool newVisible) {
+	if (!stage() || !stage()->isOpen())
+		return false;
+	visible() = newVisible;
 	return visible();
 }
 

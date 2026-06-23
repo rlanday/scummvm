@@ -768,7 +768,7 @@ static void restoreTitanicLegacyCastState(CyberflixEngine &engine,
 	const int smethPhase = globalIntValue(vars, "smethphase");
 	if (mission > 1 || (mission == 1 && phase > 0) || smethPhase > 0) {
 		const int talkedToSmethels = 1;
-		engine.actorRuntime().actorValue("smeth", &talkedToSmethels);
+		engine.actorRuntime().setActorValue("smeth", talkedToSmethels);
 	}
 }
 

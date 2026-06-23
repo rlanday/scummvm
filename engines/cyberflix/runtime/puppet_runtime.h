@@ -70,11 +70,14 @@ public:
 	void puppetBevel(CyberflixEngine &engine, const Common::String &name, int mode);
 	void puppetGrab(bool enabled);
 	int puppetEvent(CyberflixEngine &engine, int timeout);
-	Common::String puppetBase(const Common::String *newBase);
-	bool puppetVisible(CyberflixEngine &engine, const bool *newVisible);
+	Common::String getPuppetBase() const;
+	Common::String setPuppetBase(const Common::String &newBase);
+	bool getPuppetVisible() const;
+	bool setPuppetVisible(CyberflixEngine &engine, bool visible);
 	bool renderCurrentFrame(CyberflixEngine &engine, bool present);
 	const Graphics::Font *textFont(int size);
-	int puppetParam(int selector, const int *newValue);
+	int getPuppetParam(int selector) const;
+	int setPuppetParam(int selector, int newValue);
 	int countPuppets() const;
 	Common::String indexToPuppet(int index) const;
 

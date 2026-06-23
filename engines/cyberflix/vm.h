@@ -94,7 +94,8 @@ public:
 	virtual Common::String currentStage() { return "None"; }
 
 	/** stagevisible([flag]) (0x3e88): current stage visibility flag. */
-	virtual bool stageVisible(const bool *newVisible) { return false; }
+	virtual bool getStageVisible() { return false; }
+	virtual bool setStageVisible(bool visible) { return visible; }
 
 	/** currentflat() (0x4e46): current stage node name, or native "None". */
 	virtual Common::String currentFlat() { return "None"; }
@@ -157,7 +158,8 @@ public:
 	 * currentview([name]) (0x3e8b): current SET view name, "Moving", or "none";
 	 * with a name, switch the current scene to that view.
 	 */
-	virtual Common::String currentView(const Common::String *target = nullptr) { return "none"; }
+	virtual Common::String getCurrentView() { return "none"; }
+	virtual Common::String setCurrentView(const Common::String &target) { return target; }
 
 	/** currentdeg() (0x3e9f FUN_00431d50): current SET heading, or -1. */
 	virtual int currentDeg() { return -1; }
@@ -167,14 +169,16 @@ public:
 	 * SET scene name; an arg switches scene or starts the native navigation
 	 * action named by BOOTFILE's keydown fallback.
 	 */
-	virtual Common::String currentScene(const Common::String *target) { return "none"; }
+	virtual Common::String getCurrentScene() { return "none"; }
+	virtual Common::String setCurrentScene(const Common::String &target) { return target; }
 
 	/**
 	 * setvisible([flag]) (0x3e87): with no args, read the open-set visibility
 	 * flag (TI.EXE FUN_00431ca0 / DAT_00461182); with an arg, set it
 	 * (FUN_004318d0) and invalidate/redraw the set.
 	 */
-	virtual bool setVisible(const bool *newVisible) { return false; }
+	virtual bool getSetVisible() { return false; }
+	virtual bool setSetVisible(bool visible) { return visible; }
 
 	/** currentpuppet() (0x4e51), or "none" while the puppet subsystem is absent. */
 	virtual Common::String currentPuppet() { return "none"; }
@@ -191,9 +195,12 @@ public:
 	virtual void puppetBevel(const Common::String &name, int mode) {}
 	virtual void puppetGrab(bool enabled) {}
 	virtual int puppetEvent(int timeout) { return -1; }
-	virtual Common::String puppetBase(const Common::String *newBase) { return Common::String(); }
-	virtual bool puppetVisible(const bool *newVisible) { return false; }
-	virtual int puppetParam(int selector, const int *newValue) { return 0; }
+	virtual Common::String getPuppetBase() { return Common::String(); }
+	virtual Common::String setPuppetBase(const Common::String &newBase) { return newBase; }
+	virtual bool getPuppetVisible() { return false; }
+	virtual bool setPuppetVisible(bool visible) { return visible; }
+	virtual int getPuppetParam(int selector) { return 0; }
+	virtual int setPuppetParam(int selector, int newValue) { return newValue; }
 	virtual int countPuppets() { return 0; }
 	virtual Common::String indexToPuppet(int index) { return Common::String(); }
 
@@ -250,7 +257,8 @@ public:
 	virtual int randomNumber(int n) { return 0; }
 
 	/** framerate([n]) (0x3e96): native compositor pacing in 60 Hz timer units. */
-	virtual int frameRate(const int *newRate) { return 3; }
+	virtual int getFrameRate() { return 3; }
+	virtual int setFrameRate(int newRate) { return newRate; }
 
 	/** frame() (0x4e6a FUN_00435a30): native compositor pass counter. */
 	virtual int frameCounter() { return 0; }
@@ -364,10 +372,12 @@ public:
 	virtual void themeVolume(const Common::String &name, int volume) {}
 
 	/** wavevolume([0..9]) (0x3ea1): get or set the global wave volume level. */
-	virtual int waveVolume(const int *newLevel) { return 9; }
+	virtual int getWaveVolume() { return 9; }
+	virtual int setWaveVolume(int newLevel) { return newLevel; }
 
 	/** soundvol(name[, 0..255]) (0x3ea8): get or set a named SFX cue volume. */
-	virtual int soundVolume(const Common::String &name, const int *newVolume) { return 255; }
+	virtual int getSoundVolume(const Common::String &name) { return 255; }
+	virtual int setSoundVolume(const Common::String &name, int newVolume) { return newVolume; }
 
 	/**
 	 * currenttheme(which): which==1 -> playing cue name, which==2 -> its track
@@ -400,10 +410,12 @@ public:
 	virtual bool optionKey() { return false; }
 
 	/** path(slot[, value]) (0x3e89 FUN_004462a0): get or set a native path slot. */
-	virtual Common::String pathSlot(int slot, const Common::String *newPath) { return Common::String(); }
+	virtual Common::String getPathSlot(int slot) { return Common::String(); }
+	virtual Common::String setPathSlot(int slot, const Common::String &newPath) { return newPath; }
 
 	/** currentcd([name]) (0x3ea2 FUN_00439df0/FUN_0043a290): switch/query current CD label. */
-	virtual Common::String currentCD(const Common::String *requested) { return Common::String(); }
+	virtual Common::String getCurrentCD() { return Common::String(); }
+	virtual Common::String setCurrentCD(const Common::String &requested) { return requested; }
 };
 
 class VMActorHost {
@@ -432,17 +444,24 @@ public:
 	virtual int countActors() { return 0; }
 	virtual Common::String indexToActor(int index) { return Common::String(); }
 
-	virtual bool actorVisible(const Common::String &name, const bool *newVisible) { return false; }
-	virtual Common::String actorSet(const Common::String &name, const Common::String *newSet) { return Common::String(); }
-	virtual Common::String actorStar(const Common::String &name, const Common::String *newStar) { return Common::String(); }
-	virtual Common::String actorPose(const Common::String &name, const Common::String *newPose) { return Common::String(); }
+	virtual bool getActorVisible(const Common::String &name) { return false; }
+	virtual bool setActorVisible(const Common::String &name, bool visible) { return visible; }
+	virtual Common::String getActorSet(const Common::String &name) { return Common::String(); }
+	virtual Common::String setActorSet(const Common::String &name, const Common::String &newSet) { return newSet; }
+	virtual Common::String getActorStar(const Common::String &name) { return Common::String(); }
+	virtual Common::String setActorStar(const Common::String &name, const Common::String &newStar) { return newStar; }
+	virtual Common::String getActorPose(const Common::String &name) { return Common::String(); }
+	virtual Common::String setActorPose(const Common::String &name, const Common::String &newPose) { return newPose; }
 	virtual void actorXYZ(const Common::String &name, int x, int y, int z) {}
 	virtual int actorXYZ(const Common::String &name, int selector) { return 0; }
-	virtual int actorDeg(const Common::String &name, const int *newDeg) { return 0; }
-	virtual int actorDist(const Common::String &name) { return 0; }
-	virtual void actorDist(const Common::String &name, int newDist) {}
-	virtual int actorValue(const Common::String &name, const int *newValue) { return 0; }
-	virtual Common::String actorOwner(const Common::String &name, const Common::String *newOwner) { return Common::String(); }
+	virtual int getActorDeg(const Common::String &name) { return 0; }
+	virtual int setActorDeg(const Common::String &name, int newDeg) { return newDeg; }
+	virtual int getActorDist(const Common::String &name) { return 0; }
+	virtual void setActorDist(const Common::String &name, int newDist) {}
+	virtual int getActorValue(const Common::String &name) { return 0; }
+	virtual int setActorValue(const Common::String &name, int newValue) { return newValue; }
+	virtual Common::String getActorOwner(const Common::String &name) { return Common::String(); }
+	virtual Common::String setActorOwner(const Common::String &name, const Common::String &newOwner) { return newOwner; }
 	virtual void actorZClip(const Common::String &name, int zClip) {}
 	virtual void actorSpeed(const Common::String &name, int speed) {}
 	virtual void actorScale(const Common::String &name, int scale) {}
@@ -529,14 +548,17 @@ public:
 
 	/** propdeg(name[, deg]) (0x3e90 FUN_00429730/FUN_00429520): get or set
 	 *  the prop's 0..255 view angle. */
-	virtual int propDeg(const Common::String &name, const int *newDeg) { return 0; }
+	virtual int getPropDeg(const Common::String &name) { return 0; }
+	virtual int setPropDeg(const Common::String &name, int newDeg) { return newDeg; }
 
 	/** propowner(name[, owner]) (0x3ea0 FUN_00428d40): set (2 args) or get
 	 *  (1 arg) the prop's owner string; the player is "frank". */
-	virtual Common::String propOwner(const Common::String &name, const Common::String *newOwner) { return Common::String(); }
+	virtual Common::String getPropOwner(const Common::String &name) { return Common::String(); }
+	virtual Common::String setPropOwner(const Common::String &name, const Common::String &newOwner) { return newOwner; }
 
 	/** propvalue(name[, value]) (0x3eaa FUN_004290d0/FUN_00428e00): stored int. */
-	virtual int propValue(const Common::String &name, const int *newValue) { return 0; }
+	virtual int getPropValue(const Common::String &name) { return 0; }
+	virtual int setPropValue(const Common::String &name, int newValue) { return newValue; }
 
 	/** countprops() (0x4e3f FUN_0042b4f0): total props across ALL open shops. */
 	virtual int countProps() { return 0; }

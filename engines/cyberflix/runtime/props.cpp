@@ -523,46 +523,70 @@ void PropRuntime::propDist(const Common::String &name, int dist) {
 	}
 }
 
-int PropRuntime::propDeg(const Common::String &name, const int *newDeg) {
+int PropRuntime::getPropDeg(const Common::String &name) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
+		return 0;
+	}
+	return prop->angle;
+}
+
+int PropRuntime::setPropDeg(const Common::String &name, int newDeg) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
 		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
 		return 0;
 	}
-	if (newDeg && prop->angle != static_cast<int16>(*newDeg & 0xff)) {
+	if (prop->angle != static_cast<int16>(newDeg & 0xff)) {
 		Common::Rect oldRect;
 		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
-		prop->angle = static_cast<int16>(*newDeg & 0xff);
+		prop->angle = static_cast<int16>(newDeg & 0xff);
 		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 	}
 	return prop->angle;
 }
 
-Common::String PropRuntime::propOwner(const Common::String &name, const Common::String *newOwner) {
+Common::String PropRuntime::getPropOwner(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
 		warning("Cyberflix: propowner('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
-	if (newOwner)
-		prop->owner = *newOwner; // FUN_00428d40: copy into record +0x8c
+	return prop->owner;
+}
+
+Common::String PropRuntime::setPropOwner(const Common::String &name, const Common::String &newOwner) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propowner('%s'): no such prop", name.c_str());
+		return Common::String();
+	}
+	prop->owner = newOwner; // FUN_00428d40: copy into record +0x8c
 	if (shouldLogInterfaceProp(name))
 		debug(1, "Cyberflix: propowner('%s'%s%s%s) -> '%s'", name.c_str(),
-				newOwner ? ", '" : "", newOwner ? newOwner->c_str() : "",
-				newOwner ? "'" : "",
+				", '", newOwner.c_str(), "'",
 				prop->owner.c_str());
 	return prop->owner;
 }
 
-int PropRuntime::propValue(const Common::String &name, const int *newValue) {
+int PropRuntime::getPropValue(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
 		warning("Cyberflix: propvalue('%s'): no such prop", name.c_str());
 		return 0;
 	}
-	if (newValue)
-		prop->value = *newValue; // FUN_00428e00: copy int to record +0x46
+	return prop->value;
+}
+
+int PropRuntime::setPropValue(const Common::String &name, int newValue) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propvalue('%s'): no such prop", name.c_str());
+		return 0;
+	}
+	prop->value = newValue; // FUN_00428e00: copy int to record +0x46
 	return prop->value;
 }
 

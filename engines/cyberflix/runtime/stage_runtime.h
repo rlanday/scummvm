@@ -58,7 +58,8 @@ public:
 	void closeStageFile(CyberflixEngine &engine);
 	void gotoFlat(CyberflixEngine &engine, const Value &flat);
 	Common::String currentStage() const;
-	bool stageVisible(const bool *newVisible);
+	bool getStageVisible() const;
+	bool setStageVisible(bool visible);
 	Common::String currentFlat() const;
 	const FrameImage *stageShellFrame();
 

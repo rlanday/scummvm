@@ -214,7 +214,7 @@ Common::String SetRuntime::currentSet() const {
 
 // currentview(): DAT_004611dc in TI.EXE (FUN_00431ce0), or "Moving" while a
 // panorama transition resource is active.
-Common::String SetRuntime::currentView() const {
+Common::String SetRuntime::getCurrentView() const {
 	if (transitionType() != kSetTransitionNone)
 		return "Moving";
 	if (set() && set()->isOpen() && !view().empty())
@@ -281,31 +281,31 @@ static bool chooseSceneView(const SetRuntime &runtime, int sceneIdx, const Commo
 // the requested view against the current scene (FUN_00433b30), closes the old
 // scene (FUN_00430f30), copies DAT_004611dc, normalizes the camera
 // (FUN_00433960/FUN_004425e0), then sends openscene via FUN_00430ec0.
-Common::String SetRuntime::currentView(CyberflixEngine &engine, const Common::String *target) {
-	if (!target || target->empty())
-		return currentView();
+Common::String SetRuntime::setCurrentView(CyberflixEngine &engine, const Common::String &target) {
+	if (target.empty())
+		return getCurrentView();
 	if (!set() || !set()->isOpen() || scene() < 0)
-		return currentView();
+		return getCurrentView();
 	if (transitionType() != kSetTransitionNone)
-		return currentView();
-	if (view().equalsIgnoreCase(*target))
-		return currentView();
+		return getCurrentView();
+	if (view().equalsIgnoreCase(target))
+		return getCurrentView();
 
 	const int savedScene = scene();
 	int targetAngle = 0;
 	Common::String targetView;
-	if (!chooseSceneView(*this, savedScene, *target, currentSetHeading(*this), false,
+	if (!chooseSceneView(*this, savedScene, target, currentSetHeading(*this), false,
 			targetAngle, targetView, "currentview"))
-		return currentView();
+		return getCurrentView();
 	if (!engine.closeCurrentSceneForNavigation())
-		return currentView();
+		return getCurrentView();
 	if (!set() || !set()->isOpen())
 		return "none";
 
 	renderSetScene(engine, savedScene, 0, targetAngle, targetView);
 	Common::Array<Value> noArgs;
 	engine.dispatchSceneMessage(static_cast<uint32>(savedScene), "openscene", noArgs);
-	return currentView();
+	return getCurrentView();
 }
 
 static int selectXYZ(int selector, int x, int y, int z) {
@@ -357,19 +357,26 @@ int SetRuntime::playerXYZ(int selector) const {
 // currentscene([arg]): no-arg reads DAT_004611cc. With "left"/"right"/"strait",
 // BOOTFILE res2's keydown fallback reaches TI.EXE FUN_00430c70/FUN_00442140 to
 // navigate the current set; other strings are scene names to switch to.
-Common::String SetRuntime::currentScene(CyberflixEngine &engine, const Common::String *target) {
+Common::String SetRuntime::getCurrentScene(CyberflixEngine &) const {
 	if (!set() || !set()->isOpen() || scene() < 0)
 		return "none";
 
-	if (target && !target->empty()) {
-		if (target->equalsIgnoreCase("left") || target->equalsIgnoreCase("right") ||
-				target->equalsIgnoreCase("strait")) {
-			navigateSet(engine, *target);
+	return set()->sceneName(static_cast<uint32>(scene()));
+}
+
+Common::String SetRuntime::setCurrentScene(CyberflixEngine &engine, const Common::String &target) {
+	if (!set() || !set()->isOpen() || scene() < 0)
+		return "none";
+
+	if (!target.empty()) {
+		if (target.equalsIgnoreCase("left") || target.equalsIgnoreCase("right") ||
+				target.equalsIgnoreCase("strait")) {
+			navigateSet(engine, target);
 		} else {
-			int sceneIdx = set()->findScene(*target);
+			int sceneIdx = set()->findScene(target);
 			if (sceneIdx >= 0) {
 				if (!engine.closeCurrentSceneForNavigation())
-					return currentScene(engine, nullptr);
+					return getCurrentScene(engine);
 				if (!set() || !set()->isOpen())
 					return "none";
 				int targetAngle = 0;
@@ -384,13 +391,12 @@ Common::String SetRuntime::currentScene(CyberflixEngine &engine, const Common::S
 				Common::Array<Value> noArgs;
 				engine.dispatchSceneMessage(static_cast<uint32>(sceneIdx), "openscene", noArgs);
 			} else {
-				warning("Cyberflix: currentscene('%s'): no such scene", target->c_str());
+				warning("Cyberflix: currentscene('%s'): no such scene", target.c_str());
 			}
 		}
 	}
 
-	return (set() && set()->isOpen() && scene() >= 0) ?
-			set()->sceneName(static_cast<uint32>(scene())) : Common::String("none");
+	return (set() && set()->isOpen() && scene() >= 0) ? getCurrentScene(engine) : Common::String("none");
 }
 
 int SetRuntime::countPaintings(const Common::String &scene, const Common::String &view) const {
@@ -419,23 +425,27 @@ bool SetRuntime::roadAhead(const Common::String &scene, const Common::String &vi
 	return set()->forwardTransitionForView(static_cast<uint32>(sceneIdx), viewIdx) != 0;
 }
 
-bool SetRuntime::setVisible(CyberflixEngine &engine, const bool *newVisible) {
+bool SetRuntime::getSetVisible(CyberflixEngine &) const {
 	if (!set() || !set()->isOpen())
 		return false;
-	if (newVisible) {
-		bool wasVisible = visible();
-		visible() = *newVisible;
-		if (visible()) {
-			if (!wasVisible && scene() >= 0)
-				renderSetScene(engine, scene(), table(), angle(), view());
-			else
-				engine.propRuntime().setDirty(true);
-		} else {
-			transitionType() = kSetTransitionNone;
-			engine.propRuntime().setDirty(false);
-			if (engine.stageRuntime().stage() && engine.stageRuntime().stage()->isOpen())
-				engine.stageRuntime().renderStageNode(engine, engine.stageRuntime().node(), false);
-		}
+	return visible();
+}
+
+bool SetRuntime::setSetVisible(CyberflixEngine &engine, bool newVisible) {
+	if (!set() || !set()->isOpen())
+		return false;
+	bool wasVisible = visible();
+	visible() = newVisible;
+	if (visible()) {
+		if (!wasVisible && scene() >= 0)
+			renderSetScene(engine, scene(), table(), angle(), view());
+		else
+			engine.propRuntime().setDirty(true);
+	} else {
+		transitionType() = kSetTransitionNone;
+		engine.propRuntime().setDirty(false);
+		if (engine.stageRuntime().stage() && engine.stageRuntime().stage()->isOpen())
+			engine.stageRuntime().renderStageNode(engine, engine.stageRuntime().node(), false);
 	}
 	return visible();
 }

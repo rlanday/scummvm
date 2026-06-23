@@ -28,8 +28,8 @@ namespace Cyberflix {
 
 class FramePacingRuntime {
 public:
-	int frameRate(const int *newRate);
-	int frameRate() const { return _frameRate; }
+	int setFrameRate(int newRate);
+	int getFrameRate() const { return _frameRate; }
 
 	void beginIdle() { _idleForceUpdatePresented = false; }
 	void noteForceUpdatePresented(bool presented) { _idleForceUpdatePresented = presented; }

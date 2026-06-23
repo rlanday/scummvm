@@ -275,34 +275,44 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 	}
 }
 
-Common::String PuppetRuntime::puppetBase(const Common::String *newBase) {
+Common::String PuppetRuntime::getPuppetBase() const {
 	if (!isOpen()) {
 		warning("Cyberflix: puppetbase(): no puppet open");
 		return Common::String();
 	}
-	if (newBase) {
-		if (newBase->size() > 31) {
-			warning("Cyberflix: puppetbase('%s'): name too long", newBase->c_str());
-			return _base;
-		}
-		_base = *newBase;
-		_base.toLowercase();
-		_currentAction = _base;
-		_currentFrame = 0;
-		debug(1, "Cyberflix: puppetbase('%s')", _base.c_str());
-	}
 	return _base;
 }
 
-bool PuppetRuntime::puppetVisible(CyberflixEngine &engine, const bool *newVisible) {
+Common::String PuppetRuntime::setPuppetBase(const Common::String &newBase) {
+	if (!isOpen()) {
+		warning("Cyberflix: puppetbase(): no puppet open");
+		return Common::String();
+	}
+	if (newBase.size() > 31) {
+		warning("Cyberflix: puppetbase('%s'): name too long", newBase.c_str());
+		return _base;
+	}
+	_base = newBase;
+	_base.toLowercase();
+	_currentAction = _base;
+	_currentFrame = 0;
+	debug(1, "Cyberflix: puppetbase('%s')", _base.c_str());
+	return _base;
+}
+
+bool PuppetRuntime::getPuppetVisible() const {
 	if (!isOpen())
 		return false;
-	if (newVisible) {
-		_visible = *newVisible;
-		if (_visible)
-			renderCurrentFrame(engine, true);
-		debug(1, "Cyberflix: puppetvisible(%s)", _visible ? "true" : "false");
-	}
+	return _visible;
+}
+
+bool PuppetRuntime::setPuppetVisible(CyberflixEngine &engine, bool visible) {
+	if (!isOpen())
+		return false;
+	_visible = visible;
+	if (_visible)
+		renderCurrentFrame(engine, true);
+	debug(1, "Cyberflix: puppetvisible(%s)", _visible ? "true" : "false");
 	return _visible;
 }
 
@@ -623,16 +633,22 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 		renderFrame(engine, action, _currentFrame, true, cachedBackdrop);
 }
 
-int PuppetRuntime::puppetParam(int selector, const int *newValue) {
+int PuppetRuntime::getPuppetParam(int selector) const {
+	if (selector < 1 || selector > 10) {
+		warning("Cyberflix: puppetparam(%d): selector out of range", selector);
+		return 0;
+	}
+	return _params[selector - 1];
+}
+
+int PuppetRuntime::setPuppetParam(int selector, int newValue) {
 	if (selector < 1 || selector > 10) {
 		warning("Cyberflix: puppetparam(%d): selector out of range", selector);
 		return 0;
 	}
 	int16 &slot = _params[selector - 1];
-	if (newValue) {
-		slot = static_cast<int16>(*newValue);
-		debug(1, "Cyberflix: puppetparam(%d, %d)", selector, *newValue);
-	}
+	slot = static_cast<int16>(newValue);
+	debug(1, "Cyberflix: puppetparam(%d, %d)", selector, newValue);
 	return slot;
 }
 

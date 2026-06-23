@@ -76,9 +76,12 @@ public:
 	void propScale(const Common::String &name, int scale);
 	void propZClip(const Common::String &name, int dist);
 	void propDist(const Common::String &name, int dist);
-	int propDeg(const Common::String &name, const int *newDeg);
-	Common::String propOwner(const Common::String &name, const Common::String *newOwner);
-	int propValue(const Common::String &name, const int *newValue);
+	int getPropDeg(const Common::String &name);
+	int setPropDeg(const Common::String &name, int newDeg);
+	Common::String getPropOwner(const Common::String &name);
+	Common::String setPropOwner(const Common::String &name, const Common::String &newOwner);
+	int getPropValue(const Common::String &name);
+	int setPropValue(const Common::String &name, int newValue);
 	int countProps() const;
 	Common::String indexToProp(int index) const;
 	void refreshPropsIfDirty(CyberflixEngine &engine);

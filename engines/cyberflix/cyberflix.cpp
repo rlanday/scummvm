@@ -404,8 +404,12 @@ int CyberflixEngine::randomNumber(int n) {
 	return static_cast<int>(_rnd.getRandomNumber(static_cast<uint>(n) - 1)) + 1;
 }
 
-int CyberflixEngine::frameRate(const int *newRate) {
-	return _framePacingRuntime.frameRate(newRate);
+int CyberflixEngine::getFrameRate() {
+	return _framePacingRuntime.getFrameRate();
+}
+
+int CyberflixEngine::setFrameRate(int newRate) {
+	return _framePacingRuntime.setFrameRate(newRate);
 }
 
 bool CyberflixEngine::keyAborts(const Common::String *resource, const Common::String *key,
@@ -743,7 +747,7 @@ Common::Error CyberflixEngine::run() {
 			_system->updateScreen();
 			_cursorPresentationDirty = false;
 		}
-		if (_framePacingRuntime.frameRate() == 0 && _setRuntime.transitionType() == kSetTransitionNone)
+		if (_framePacingRuntime.getFrameRate() == 0 && _setRuntime.transitionType() == kSetTransitionNone)
 			delayMillisWithCursorUpdates(10);
 	}
 
