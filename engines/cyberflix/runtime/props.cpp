@@ -129,15 +129,12 @@ void PropRuntime::collectWorldProps(CyberflixEngine &engine, Common::Array<const
 			const Shop::Prop &p = _shops[s]->prop(i);
 			if (!p.visible || p.mode == 0 || !p.setName.equalsIgnoreCase(setName))
 				continue;
-			Common::SharedPtr<CelImage> cel;
-			Common::Rect rect;
-			int16 depth = 0;
-			int16 depthBucket = 0;
-			if (!_shops[s]->renderWorldProp(p, camera, setName, cel, rect, depth, depthBucket))
+			Shop::PropRenderResult rendered = _shops[s]->renderWorldProp(p, camera, setName);
+			if (!rendered.valid)
 				continue;
 			draw.push_back(&p);
 			drawShop.push_back(_shops[s].get());
-			depths.push_back(depth);
+			depths.push_back(rendered.depth);
 		}
 	}
 
@@ -161,9 +158,10 @@ bool PropRuntime::screenPropRect(const Shop &shop, const Shop::Prop &prop, Commo
 	if (!prop.visible || prop.mode != 0)
 		return false;
 
-	Common::SharedPtr<CelImage> cel;
-	if (!shop.renderProp(prop, cel, rect))
+	Shop::PropRenderResult rendered = shop.renderProp(prop);
+	if (!rendered.valid)
 		return false;
+	rect = rendered.rect;
 	rect.clip(Common::Rect(kScreenWidth, kScreenHeight));
 	return !rect.isEmpty();
 }
@@ -384,8 +382,8 @@ void PropRuntime::propView(const Common::String &name, const Common::String &sha
 	}
 	// FUN_004293a0 validates the shape against the prop master (FUN_0042c0c0)
 	// and leaves the prop on the shape's LAST pose (+0x20 = poseCount - 1).
-	uint16 poseCount = 0;
-	if (!shop->shapePoseCount(*prop, shape, poseCount)) {
+	Shop::ShapePoseResult pose = shop->shapePoseCount(*prop, shape);
+	if (!pose.valid) {
 		warning("Cyberflix: propview('%s'): no shape '%s'", name.c_str(), shape.c_str());
 		return;
 	}
@@ -394,12 +392,12 @@ void PropRuntime::propView(const Common::String &name, const Common::String &sha
 	if (shouldLogInterfaceProp(name))
 		debug(1, "Cyberflix: propview('%s', '%s') old='%s'", name.c_str(),
 				key.c_str(), prop->shapeName.c_str());
-	uint16 newPoseIndex = poseCount ? poseCount - 1 : 0;
-	if (prop->shapeName != key || prop->poseCount != poseCount || prop->poseIndex != newPoseIndex) {
+	uint16 newPoseIndex = pose.poseCount ? pose.poseCount - 1 : 0;
+	if (prop->shapeName != key || prop->poseCount != pose.poseCount || prop->poseIndex != newPoseIndex) {
 		Common::Rect oldRect;
 		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 		prop->shapeName = key;
-		prop->poseCount = poseCount;
+		prop->poseCount = pose.poseCount;
 		prop->poseIndex = newPoseIndex;
 		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 	}

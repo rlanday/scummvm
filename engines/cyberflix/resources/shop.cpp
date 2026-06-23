@@ -117,8 +117,13 @@ bool Shop::open(const Common::String &name) {
 		}
 		// Initial view = the first shape's name (record +0x7e <- master +0x6e).
 		prop.shapeName = prop.shapes.empty() ? "none" : prop.shapes[0].name;
-		if (!prop.shapes.empty() && shapePoseCount(prop, prop.shapeName, prop.poseCount))
-			prop.poseIndex = prop.poseCount ? prop.poseCount - 1 : 0;
+		if (!prop.shapes.empty()) {
+			ShapePoseResult pose = shapePoseCount(prop, prop.shapeName);
+			if (pose.valid) {
+				prop.poseCount = pose.poseCount;
+				prop.poseIndex = prop.poseCount ? prop.poseCount - 1 : 0;
+			}
+		}
 
 		int sIdx = prop.scriptResId ? resourceIndexById(prop.scriptResId) : -1;
 		if (sIdx >= 0) {
@@ -165,7 +170,8 @@ void Shop::advancePropPoses() {
 	}
 }
 
-bool Shop::shapePoseCount(const Prop &prop, const Common::String &shape, uint16 &poseCount) const {
+Shop::ShapePoseResult Shop::shapePoseCount(const Prop &prop, const Common::String &shape) const {
+	ShapePoseResult result;
 	Common::String key = shape;
 	key.toLowercase();
 	for (uint32 i = 0; i < prop.shapes.size(); ++i) {
@@ -174,11 +180,12 @@ bool Shop::shapePoseCount(const Prop &prop, const Common::String &shape, uint16 
 		int idx = resourceIndexById(prop.shapes[i].resId);
 		const byte *sh = idx >= 0 ? engineBase(static_cast<uint32>(idx)) : nullptr;
 		if (!sh || sh + kShapeCellTableOffset > _fileData.end())
-			return false;
-		poseCount = READ_LE_UINT16(sh + kShapePoseCountOffset);
-		return true;
+			return result;
+		result.valid = true;
+		result.poseCount = READ_LE_UINT16(sh + kShapePoseCountOffset);
+		return result;
 	}
-	return false;
+	return result;
 }
 
 Common::SharedPtr<CelImage> Shop::celResource(uint32 resId) const {
@@ -208,9 +215,8 @@ Common::SharedPtr<CelImage> Shop::celResource(uint32 resId) const {
 	return cel;
 }
 
-bool Shop::resolvePropCel(const Prop &prop, int angle, Common::SharedPtr<CelImage> &cel,
-		Common::Rect &cellRect, int16 &regV, int16 &regH,
-		int16 &cellScale) const {
+Shop::PropCellResult Shop::resolvePropCel(const Prop &prop, int angle) const {
+	PropCellResult result;
 	// Resolve the current shape resource (FUN_0042bed0).
 	const Shape *shape = nullptr;
 	for (uint32 i = 0; i < prop.shapes.size(); ++i)
@@ -221,7 +227,7 @@ bool Shop::resolvePropCel(const Prop &prop, int angle, Common::SharedPtr<CelImag
 	if (!shape) {
 		debug(1, "Cyberflix: renderProp('%s'): shape '%s' not in master",
 				prop.name.c_str(), prop.shapeName.c_str());
-		return false;
+		return result;
 	}
 	int shIdx = resourceIndexById(shape->resId);
 	const byte *sh = shIdx >= 0 ? engineBase(static_cast<uint32>(shIdx)) : nullptr;
@@ -230,16 +236,16 @@ bool Shop::resolvePropCel(const Prop &prop, int angle, Common::SharedPtr<CelImag
 	if (!sh || shapeLen < kShapeCellTableOffset) {
 		debug(1, "Cyberflix: renderProp('%s'): shape res %u missing",
 				prop.name.c_str(), shape->resId);
-		return false;
+		return result;
 	}
 
 	uint16 poseCount = READ_LE_UINT16(sh + kShapePoseCountOffset);
 	uint16 cellCount = READ_LE_UINT16(sh + kShapeCellCountOffset);
 	if (!poseCount || !cellCount)
-		return false;
+		return result;
 	if (static_cast<uint64>(kShapePoseTableOffset) + static_cast<uint64>(poseCount) * 2 > shapeLen ||
 			static_cast<uint64>(kShapeCellTableOffset) + static_cast<uint64>(cellCount) * kShapeCellStride > shapeLen)
-		return false;
+		return result;
 	// Pose id from the pose table; cells store poseId-1 in their id field.
 	uint16 poseIdx = prop.poseIndex < poseCount ? prop.poseIndex : poseCount - 1;
 	uint16 poseId = READ_LE_UINT16(sh + kShapePoseTableOffset + poseIdx * 2);
@@ -262,48 +268,51 @@ bool Shop::resolvePropCel(const Prop &prop, int angle, Common::SharedPtr<CelImag
 	if (!best) {
 		debug(1, "Cyberflix: renderProp('%s'): no cell for pose %u in shape '%s'",
 				prop.name.c_str(), poseId, prop.shapeName.c_str());
-		return false;
+		return result;
 	}
 
 	// Cel frame resource: info tag packs the dimensions (width = info >> 16).
 	uint32 frameRes = READ_LE_UINT32(best + kCellFrameResOffset);
-	cel = celResource(frameRes);
-	if (!cel) {
+	result.cel = celResource(frameRes);
+	if (!result.cel) {
 		debug(1, "Cyberflix: renderProp('%s'): cel res %u decode failed",
 				prop.name.c_str(), frameRes);
-		return false;
+		return result;
 	}
 
-	cellRect.top = READ_LE_INT16(best + kCellRectOffset);
-	cellRect.left = READ_LE_INT16(best + kCellRectOffset + 2);
-	cellRect.bottom = READ_LE_INT16(best + kCellRectOffset + 4);
-	cellRect.right = READ_LE_INT16(best + kCellRectOffset + 6);
-	regV = READ_LE_INT16(best + kCellRegVOffset);
-	regH = READ_LE_INT16(best + kCellRegHOffset);
-	cellScale = READ_LE_INT16(best + kCellScaleOffset);
-	return true;
+	result.cellRect.top = READ_LE_INT16(best + kCellRectOffset);
+	result.cellRect.left = READ_LE_INT16(best + kCellRectOffset + 2);
+	result.cellRect.bottom = READ_LE_INT16(best + kCellRectOffset + 4);
+	result.cellRect.right = READ_LE_INT16(best + kCellRectOffset + 6);
+	result.regV = READ_LE_INT16(best + kCellRegVOffset);
+	result.regH = READ_LE_INT16(best + kCellRegHOffset);
+	result.cellScale = READ_LE_INT16(best + kCellScaleOffset);
+	result.valid = true;
+	return result;
 }
 
-bool Shop::renderProp(const Prop &prop, Common::SharedPtr<CelImage> &cel, Common::Rect &rect) const {
-	Common::Rect cellRect;
-	int16 regV = 0, regH = 0, cellScale = 0;
-	if (!resolvePropCel(prop, prop.angle, cel, cellRect, regV, regH, cellScale))
-		return false;
+Shop::PropRenderResult Shop::renderProp(const Prop &prop) const {
+	PropRenderResult result;
+	PropCellResult cell = resolvePropCel(prop, prop.angle);
+	if (!cell.valid)
+		return result;
 
 	// Display-item rect (FUN_0042bb90, screen mode): position minus the cell's
 	// registration point; extent from the cell bounds (the +40 bias cancels).
-	rect.top = prop.y - regV;
-	rect.left = prop.x - regH;
-	rect.bottom = rect.top + cellRect.height();
-	rect.right = rect.left + cellRect.width();
-	return true;
+	result.cel = cell.cel;
+	result.rect.top = prop.y - cell.regV;
+	result.rect.left = prop.x - cell.regH;
+	result.rect.bottom = result.rect.top + cell.cellRect.height();
+	result.rect.right = result.rect.left + cell.cellRect.width();
+	result.valid = true;
+	return result;
 }
 
-bool Shop::renderWorldProp(const Prop &prop, const WorldCamera &camera,
-		const Common::String &setName, Common::SharedPtr<CelImage> &cel,
-		Common::Rect &rect, int16 &depth, int16 &depthBucket) const {
+Shop::PropRenderResult Shop::renderWorldProp(const Prop &prop, const WorldCamera &camera,
+		const Common::String &setName) const {
+	PropRenderResult result;
 	if (!prop.visible || prop.mode == 0 || !prop.setName.equalsIgnoreCase(setName))
-		return false;
+		return result;
 
 	const int relX = prop.x - camera.cameraX;
 	const int relY = prop.y - camera.cameraY;
@@ -316,12 +325,12 @@ bool Shop::renderWorldProp(const Prop &prop, const WorldCamera &camera,
 	const int cosH = nativeTrigCos(camera.heading);
 	const int projectedDepth = fixedShift14(relY * sinH + relX * cosH);
 	if (projectedDepth < 1)
-		return false;
+		return result;
 
 	const int zClippedDepth = MAX(projectedDepth - prop.zClip, 0);
 	const int nearLimit = (camera.nearPlane + (camera.nearPlane < 0 ? 3 : 0)) >> 2;
 	if (projectedDepth <= nearLimit || zClippedDepth > camera.farPlane)
-		return false;
+		return result;
 
 	const int projectedH = fixedShift14(relY * cosH - relX * sinH);
 	const int screenX = camera.centerX + projectedH * camera.focal / projectedDepth;
@@ -330,32 +339,33 @@ bool Shop::renderWorldProp(const Prop &prop, const WorldCamera &camera,
 	const int angleToCamera = nativePointAngle(camera.cameraY - prop.y, camera.cameraX - prop.x);
 	const int viewAngle = (prop.angle - angleToCamera) & 0xff;
 
-	Common::Rect cellRect;
-	int16 regV = 0, regH = 0, cellScale = 0;
-	if (!resolvePropCel(prop, viewAngle, cel, cellRect, regV, regH, cellScale))
-		return false;
+	PropCellResult cell = resolvePropCel(prop, viewAngle);
+	if (!cell.valid)
+		return result;
 
-	const int sourceH = cellRect.height();
-	const int sourceW = cellRect.width();
+	const int sourceH = cell.cellRect.height();
+	const int sourceW = cell.cellRect.width();
 	if (sourceH <= 0 || sourceW <= 0)
-		return false;
-	const int effectiveScale = (prop.scale * cellScale) / 1000;
+		return result;
+	const int effectiveScale = (prop.scale * cell.cellScale) / 1000;
 	const int scaledH = (effectiveScale * sourceH) / projectedDepth;
 	const int scaledW = (effectiveScale * sourceW) / projectedDepth;
 	if (scaledH <= 0 || scaledW <= 0)
-		return false;
+		return result;
 
-	rect.top = screenY - (scaledH * regV) / sourceH;
-	rect.left = screenX - (scaledW * regH) / sourceW;
-	rect.bottom = rect.top + scaledH;
-	rect.right = rect.left + scaledW;
+	result.cel = cell.cel;
+	result.rect.top = screenY - (scaledH * cell.regV) / sourceH;
+	result.rect.left = screenX - (scaledW * cell.regH) / sourceW;
+	result.rect.bottom = result.rect.top + scaledH;
+	result.rect.right = result.rect.left + scaledW;
 	Common::Rect viewport(camera.viewportLeft, camera.viewportTop,
 			camera.viewportRight, camera.viewportBottom);
-	if (!rect.intersects(viewport))
-		return false;
-	depth = static_cast<int16>(projectedDepth);
-	depthBucket = camera.nearPlane ? static_cast<int16>(zClippedDepth / camera.nearPlane) : 0;
-	return true;
+	if (!result.rect.intersects(viewport))
+		return result;
+	result.depth = static_cast<int16>(projectedDepth);
+	result.depthBucket = camera.nearPlane ? static_cast<int16>(zClippedDepth / camera.nearPlane) : 0;
+	result.valid = true;
+	return result;
 }
 
 } // End of namespace Cyberflix

@@ -25,9 +25,36 @@
 
 #include "cyberflix/cast.h"
 #include "cyberflix/cyberflix.h"
+#include "cyberflix/runtime/set_helpers.h"
 #include "cyberflix/set.h"
 
 namespace Cyberflix {
+
+struct CurrentWorldCameraResult {
+	bool valid = false;
+	Shop::WorldCamera camera;
+};
+
+static CurrentWorldCameraResult currentWorldCamera(CyberflixEngine &engine) {
+	CurrentWorldCameraResult result;
+	SetRuntime &setRuntime = engine.setRuntime();
+	if (!setRuntime.set() || !setRuntime.set()->isOpen())
+		return result;
+
+	Set::CameraData cameraData;
+	if (setRuntime.transitionType() == kSetTransitionForward) {
+		result.valid = setRuntime.set()->transitionCameraData(
+				setRuntime.transitionResource(), setRuntime.transitionFrame(), cameraData);
+	} else if (setRuntime.scene() >= 0) {
+		result.valid = setRuntime.set()->cameraData(
+				static_cast<uint32>(setRuntime.scene()),
+				static_cast<uint32>(setRuntime.table()),
+				static_cast<uint32>(setRuntime.angle()), cameraData);
+	}
+	if (result.valid)
+		result.camera = makeWorldCamera(cameraData);
+	return result;
+}
 
 int ActorRuntime::findWalkRecord(const Common::String &name) const {
 	Common::String key = name;
@@ -81,10 +108,11 @@ bool ActorRuntime::resolveActorStar(CyberflixEngine &engine, Cast::Actor &actor)
 	if (!engine._setRuntime.set()->starXYZ(actor.sceneName, x, y, z))
 		return false;
 
-	if (actor.x != x || actor.y != y || actor.z != z) {
+	if (actor.x != x || actor.y != y || actor.z != z || actor.mode != 1) {
 		actor.x = x;
 		actor.y = y;
 		actor.z = z;
+		actor.mode = 1;
 		engine._propRuntime.setDirty(true);
 	}
 	return true;
@@ -111,15 +139,12 @@ void ActorRuntime::collectWorldActors(CyberflixEngine &engine, Common::Array<con
 			const Cast::Actor &actor = _casts[c]->actor(i);
 			if (!actor.visible || !actor.setName.equalsIgnoreCase(setName))
 				continue;
-			CelImage cel;
-			Common::Rect rect;
-			int16 depth = 0;
-			int16 depthBucket = 0;
-			if (!_casts[c]->renderWorldActor(actor, camera, setName, cel, rect, depth, depthBucket))
+			Cast::ActorProjectionResult projected = _casts[c]->projectWorldActor(actor, camera, setName);
+			if (!projected.valid)
 				continue;
 			draw.push_back(&actor);
 			drawCast.push_back(_casts[c].get());
-			depths.push_back(depth);
+			depths.push_back(projected.depth);
 		}
 	}
 
@@ -283,8 +308,9 @@ Common::String ActorRuntime::actorStar(CyberflixEngine &engine, const Common::St
 	if (newStar) {
 		Common::String key = *newStar;
 		key.toLowercase();
-		if (ref.actor->sceneName != key) {
+		if (ref.actor->sceneName != key || ref.actor->mode != 1) {
 			ref.actor->sceneName = key;
+			ref.actor->mode = 1;
 			engine._propRuntime.setDirty(true);
 		}
 		resolveActorStar(engine, *ref.actor);
@@ -316,10 +342,12 @@ void ActorRuntime::actorXYZ(CyberflixEngine &engine, const Common::String &name,
 		warning("Cyberflix: actorxyz('%s'): no such actor", name.c_str());
 		return;
 	}
-	if (ref.actor->x != static_cast<int16>(x) || ref.actor->y != static_cast<int16>(y) || ref.actor->z != static_cast<int16>(z)) {
+	if (ref.actor->x != static_cast<int16>(x) || ref.actor->y != static_cast<int16>(y) ||
+			ref.actor->z != static_cast<int16>(z) || ref.actor->mode != 1) {
 		ref.actor->x = static_cast<int16>(x);
 		ref.actor->y = static_cast<int16>(y);
 		ref.actor->z = static_cast<int16>(z);
+		ref.actor->mode = 1;
 		engine._propRuntime.setDirty(true);
 	}
 }
@@ -355,6 +383,40 @@ int ActorRuntime::actorDeg(CyberflixEngine &engine, const Common::String &name, 
 		engine._propRuntime.setDirty(true);
 	}
 	return ref.actor->angle;
+}
+
+int ActorRuntime::actorDist(CyberflixEngine &engine, const Common::String &name) const {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actordist('%s'): no such actor", name.c_str());
+		return 0;
+	}
+
+	if (ref.actor->mode == 0)
+		return ref.actor->depth;
+
+	CurrentWorldCameraResult camera = currentWorldCamera(engine);
+	if (!camera.valid)
+		return 32000;
+
+	Cast::ActorProjectionResult projected = ref.cast->projectWorldActor(*ref.actor,
+			camera.camera, engine._setRuntime.set()->setName());
+	if (!projected.valid)
+		return 32000;
+	return projected.depth;
+}
+
+void ActorRuntime::actorDist(CyberflixEngine &engine, const Common::String &name, int newDist) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: actordist('%s'): no such actor", name.c_str());
+		return;
+	}
+
+	if (ref.actor->mode == 0 && newDist < 0 && ref.actor->depth != static_cast<int16>(newDist)) {
+		ref.actor->depth = static_cast<int16>(newDist);
+		engine._propRuntime.setDirty(true);
+	}
 }
 
 int ActorRuntime::actorValue(const Common::String &name, const int *newValue) {

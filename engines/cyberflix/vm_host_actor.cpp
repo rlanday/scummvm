@@ -87,6 +87,14 @@ int CyberflixActorVMHost::actorDeg(const Common::String &name, const int *newDeg
 	return engine().actorRuntime().actorDeg(engine(), name, newDeg);
 }
 
+int CyberflixActorVMHost::actorDist(const Common::String &name) {
+	return engine().actorRuntime().actorDist(engine(), name);
+}
+
+void CyberflixActorVMHost::actorDist(const Common::String &name, int newDist) {
+	engine().actorRuntime().actorDist(engine(), name, newDist);
+}
+
 int CyberflixActorVMHost::actorValue(const Common::String &name, const int *newValue) {
 	return engine().actorRuntime().actorValue(name, newValue);
 }

@@ -439,6 +439,8 @@ public:
 	virtual void actorXYZ(const Common::String &name, int x, int y, int z) {}
 	virtual int actorXYZ(const Common::String &name, int selector) { return 0; }
 	virtual int actorDeg(const Common::String &name, const int *newDeg) { return 0; }
+	virtual int actorDist(const Common::String &name) { return 0; }
+	virtual void actorDist(const Common::String &name, int newDist) {}
 	virtual int actorValue(const Common::String &name, const int *newValue) { return 0; }
 	virtual Common::String actorOwner(const Common::String &name, const Common::String *newOwner) { return Common::String(); }
 	virtual void actorZClip(const Common::String &name, int zClip) {}

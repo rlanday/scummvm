@@ -186,6 +186,7 @@ public:
 		kMethodPath             = 0x3E89,
 		kMethodResult           = 0x3E8A,
 		kMethodCurrentView      = 0x3E8B,
+		kMethodActorDist        = 0x3E8C,
 		kMethodPropDist         = 0x3E8D,
 		kMethodActorPose        = 0x3E8E,
 		kMethodPropVisible      = 0x3E8F,

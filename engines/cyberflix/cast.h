@@ -61,10 +61,12 @@ public:
 		Common::SharedPtr<Script> script;
 
 		bool visible = false;
+		uint16 mode = 0;
 		int16 x = 0;
 		int16 y = 0;
 		int16 z = 0;
 		int16 angle = 0;
+		int16 depth = -1;
 		int32 scale = 1000;
 		int32 zClip = 0;
 		int32 speed = 0;
@@ -104,6 +106,31 @@ public:
 		kCellScaleOffset = 0x2a
 	};
 
+	struct ActorCellResult {
+		bool valid = false;
+		Common::Rect cellRect;
+		int16 regV = 0;
+		int16 regH = 0;
+		int16 cellScale = 0;
+		uint32 frameRes = 0;
+	};
+
+	struct ActorProjectionResult {
+		bool valid = false;
+		Common::Rect rect;
+		int16 depth = 0;
+		int16 depthBucket = 0;
+		ActorCellResult cell;
+	};
+
+	struct ActorRenderResult {
+		bool valid = false;
+		CelImage cel;
+		Common::Rect rect;
+		int16 depth = 0;
+		int16 depthBucket = 0;
+	};
+
 	Cast() {}
 
 	/** Load and parse @p name (a DATA/ basename, e.g. "gang.cst"). */
@@ -120,17 +147,16 @@ public:
 	/** Find an actor by case-insensitive runtime name, or null. */
 	Common::SharedPtr<Actor> findActor(const Common::String &name);
 
-	bool renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
-			const Common::String &setName, CelImage &cel, Common::Rect &rect,
-			int16 &depth, int16 &depthBucket) const;
+	ActorProjectionResult projectWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
+			const Common::String &setName) const;
+	ActorRenderResult renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
+			const Common::String &setName) const;
 
 private:
 	const byte *engineBase(uint32 index) const;
 	int resourceIndexById(uint32 id) const;
 	Common::String pascalString(const byte *p) const;
-	bool resolveActorCel(const Actor &actor, int angle, CelImage &cel,
-			Common::Rect &cellRect, int16 &regV, int16 &regH,
-			int16 &cellScale) const;
+	ActorCellResult resolveActorCell(const Actor &actor, int angle) const;
 
 	Common::String _name;
 	Common::Array<byte> _fileData;

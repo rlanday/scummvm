@@ -67,6 +67,8 @@ public:
 	void actorXYZ(CyberflixEngine &engine, const Common::String &name, int x, int y, int z);
 	int actorXYZ(CyberflixEngine &engine, const Common::String &name, int selector) const;
 	int actorDeg(CyberflixEngine &engine, const Common::String &name, const int *newDeg);
+	int actorDist(CyberflixEngine &engine, const Common::String &name) const;
+	void actorDist(CyberflixEngine &engine, const Common::String &name, int newDist);
 	int actorValue(const Common::String &name, const int *newValue);
 	Common::String actorOwner(const Common::String &name, const Common::String *newOwner);
 	void actorZClip(CyberflixEngine &engine, const Common::String &name, int zClip);

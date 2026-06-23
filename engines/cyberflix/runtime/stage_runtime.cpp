@@ -295,11 +295,10 @@ void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool
 	Common::Array<const Shop *> drawShop;
 	engine.propRuntime().collectScreenProps(draw, drawShop);
 	for (uint32 i = 0; i < draw.size(); ++i) {
-		Common::SharedPtr<CelImage> cel;
-		Common::Rect r;
-		if (!drawShop[i]->renderProp(*draw[i], cel, r))
+		Shop::PropRenderResult rendered = drawShop[i]->renderProp(*draw[i]);
+		if (!rendered.valid)
 			continue;
-		drawCel(screen, *cel, r, Common::Rect(kScreenWidth, kScreenHeight));
+		drawCel(screen, *rendered.cel, rendered.rect, Common::Rect(kScreenWidth, kScreenHeight));
 	}
 	engine._system->unlockScreen();
 
@@ -349,13 +348,12 @@ void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
 		}
 
 		for (uint32 i = 0; i < draw.size(); ++i) {
-			Common::SharedPtr<CelImage> cel;
-			Common::Rect propRect;
-			if (!drawShop[i]->renderProp(*draw[i], cel, propRect))
+			Shop::PropRenderResult rendered = drawShop[i]->renderProp(*draw[i]);
+			if (!rendered.valid)
 				continue;
-			if (!dirty.intersects(propRect))
+			if (!dirty.intersects(rendered.rect))
 				continue;
-			drawCel(screen, *cel, propRect, dirty);
+			drawCel(screen, *rendered.cel, rendered.rect, dirty);
 		}
 	}
 	engine._system->unlockScreen();

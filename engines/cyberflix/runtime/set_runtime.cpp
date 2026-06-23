@@ -381,20 +381,17 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		while (propIndex < worldDraw.size() || actorIndex < actorDraw.size()) {
 			const bool drawActor = actorIndex < actorDraw.size() &&
 					(propIndex >= worldDraw.size() || actorDepths[actorIndex] >= worldDepths[propIndex]);
-			CelImage actorCel;
-			Common::SharedPtr<CelImage> propCel;
-			Common::Rect r;
-			int16 depth = 0;
-			int16 depthBucket = 0;
 			if (drawActor) {
-				if (actorCast[actorIndex]->renderWorldActor(*actorDraw[actorIndex],
-						camera, set()->setName(), actorCel, r, depth, depthBucket))
-					drawScaledCel(screen, actorCel, r, viewport, depthFrame, depthBucket);
+				Cast::ActorRenderResult rendered = actorCast[actorIndex]->renderWorldActor(*actorDraw[actorIndex],
+						camera, set()->setName());
+				if (rendered.valid)
+					drawScaledCel(screen, rendered.cel, rendered.rect, viewport, depthFrame, rendered.depthBucket);
 				++actorIndex;
 			} else {
-				if (worldShop[propIndex]->renderWorldProp(*worldDraw[propIndex], camera,
-						set()->setName(), propCel, r, depth, depthBucket))
-					drawScaledCel(screen, *propCel, r, viewport, depthFrame, depthBucket);
+				Shop::PropRenderResult rendered = worldShop[propIndex]->renderWorldProp(*worldDraw[propIndex],
+						camera, set()->setName());
+				if (rendered.valid)
+					drawScaledCel(screen, *rendered.cel, rendered.rect, viewport, depthFrame, rendered.depthBucket);
 				++propIndex;
 			}
 		}
@@ -410,11 +407,10 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		Common::Array<const Shop *> drawShop;
 		engine.propRuntime().collectScreenProps(draw, drawShop);
 		for (uint32 i = 0; i < draw.size(); ++i) {
-			Common::SharedPtr<CelImage> cel;
-			Common::Rect r;
-			if (!drawShop[i]->renderProp(*draw[i], cel, r))
+			Shop::PropRenderResult rendered = drawShop[i]->renderProp(*draw[i]);
+			if (!rendered.valid)
 				continue;
-			drawCel(screen, *cel, r, Common::Rect(kScreenWidth, kScreenHeight));
+			drawCel(screen, *rendered.cel, rendered.rect, Common::Rect(kScreenWidth, kScreenHeight));
 		}
 	}
 	engine.propRuntime().setDirty(false);

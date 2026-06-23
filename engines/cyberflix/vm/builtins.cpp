@@ -140,6 +140,16 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 		}
 		return true;
 	}
+	case Script::kMethodActorDist: { // actordist(name[, d]) -> FUN_00420040/FUN_0041ff90
+		if (args.size() >= 2) {
+			_actorHost->actorDist(args[0].strValue, args[1].intValue);
+		} else if (args.size() == 1) {
+			result = Value::makeInt(_actorHost->actorDist(args[0].strValue));
+		} else {
+			result = Value::makeInt(0);
+		}
+		return true;
+	}
 	case Script::kMethodActorXYZ: // actorxyz(name, x, y, z) or actorxyz(name, selector)
 		if (args.size() >= 4) {
 			_actorHost->actorXYZ(args[0].strValue, args[1].intValue,

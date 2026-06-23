@@ -153,6 +153,8 @@ public:
 	void actorXYZ(const Common::String &name, int x, int y, int z) override;
 	int actorXYZ(const Common::String &name, int selector) override;
 	int actorDeg(const Common::String &name, const int *newDeg) override;
+	int actorDist(const Common::String &name) override;
+	void actorDist(const Common::String &name, int newDist) override;
 	int actorValue(const Common::String &name, const int *newValue) override;
 	Common::String actorOwner(const Common::String &name, const Common::String *newOwner) override;
 	void actorZClip(const Common::String &name, int zClip) override;

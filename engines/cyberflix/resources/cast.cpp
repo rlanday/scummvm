@@ -152,9 +152,8 @@ Common::SharedPtr<Cast::Actor> Cast::findActor(const Common::String &name) {
 	return Common::SharedPtr<Actor>();
 }
 
-bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
-		Common::Rect &cellRect, int16 &regV, int16 &regH,
-		int16 &cellScale) const {
+Cast::ActorCellResult Cast::resolveActorCell(const Actor &actor, int angle) const {
+	ActorCellResult result;
 	const Actor::Shape *shape = nullptr;
 	for (uint32 i = 0; i < actor.shapes.size(); ++i) {
 		if (actor.shapes[i].name == actor.shapeName) {
@@ -165,7 +164,7 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 	if (!shape) {
 		debug(1, "Cyberflix: renderActor('%s'): shape '%s' not in master",
 				actor.name.c_str(), actor.shapeName.c_str());
-		return false;
+		return result;
 	}
 	int shIdx = resourceIndexById(shape->resId);
 	const byte *sh = shIdx >= 0 ? engineBase(static_cast<uint32>(shIdx)) : nullptr;
@@ -174,16 +173,16 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 	if (!sh || shapeLen < kShapeCellTableOffset) {
 		debug(1, "Cyberflix: renderActor('%s'): shape res %u missing",
 				actor.name.c_str(), shape->resId);
-		return false;
+		return result;
 	}
 
 	uint16 poseCount = READ_LE_UINT16(sh + kShapePoseCountOffset);
 	uint16 cellCount = READ_LE_UINT16(sh + kShapeCellCountOffset);
 	if (!poseCount || !cellCount)
-		return false;
+		return result;
 	if (static_cast<uint64>(kShapePoseTableOffset) + static_cast<uint64>(poseCount) * 2 > shapeLen ||
 			static_cast<uint64>(kShapeCellTableOffset) + static_cast<uint64>(cellCount) * kShapeCellStride > shapeLen)
-		return false;
+		return result;
 	uint16 poseIdx = actor.poseIndex < poseCount ? actor.poseIndex : 0;
 	uint16 poseId = READ_LE_UINT16(sh + kShapePoseTableOffset + poseIdx * 2);
 
@@ -205,41 +204,30 @@ bool Cast::resolveActorCel(const Actor &actor, int angle, CelImage &cel,
 	if (!best) {
 		debug(1, "Cyberflix: renderActor('%s'): no cell for pose %u in shape '%s'",
 				actor.name.c_str(), poseId, actor.shapeName.c_str());
-		return false;
+		return result;
 	}
 
-	uint32 frameRes = READ_LE_UINT32(best + kCellFrameResOffset);
-	int fIdx = resourceIndexById(frameRes);
+	result.frameRes = READ_LE_UINT32(best + kCellFrameResOffset);
+	int fIdx = resourceIndexById(result.frameRes);
 	if (fIdx < 0)
-		return false;
-	const Archive::Resource &fres = _archive.getResource(static_cast<uint32>(fIdx));
-	uint16 w = static_cast<uint16>(fres.info >> 16);
-	uint16 h = static_cast<uint16>(fres.info & 0xffff);
-	Common::ScopedPtr<Common::SeekableReadStream> fs(_archive.createReadStreamForResource(static_cast<uint32>(fIdx)));
-	if (!fs)
-		return false;
-	bool ok = decodeCel(*fs, w, h, cel);
-	if (!ok) {
-		debug(1, "Cyberflix: renderActor('%s'): cel res %u decode failed",
-				actor.name.c_str(), frameRes);
-		return false;
-	}
+		return result;
 
-	cellRect.top = READ_LE_INT16(best + kCellRectOffset);
-	cellRect.left = READ_LE_INT16(best + kCellRectOffset + 2);
-	cellRect.bottom = READ_LE_INT16(best + kCellRectOffset + 4);
-	cellRect.right = READ_LE_INT16(best + kCellRectOffset + 6);
-	regV = READ_LE_INT16(best + kCellRegVOffset);
-	regH = READ_LE_INT16(best + kCellRegHOffset);
-	cellScale = READ_LE_INT16(best + kCellScaleOffset);
-	return true;
+	result.cellRect.top = READ_LE_INT16(best + kCellRectOffset);
+	result.cellRect.left = READ_LE_INT16(best + kCellRectOffset + 2);
+	result.cellRect.bottom = READ_LE_INT16(best + kCellRectOffset + 4);
+	result.cellRect.right = READ_LE_INT16(best + kCellRectOffset + 6);
+	result.regV = READ_LE_INT16(best + kCellRegVOffset);
+	result.regH = READ_LE_INT16(best + kCellRegHOffset);
+	result.cellScale = READ_LE_INT16(best + kCellScaleOffset);
+	result.valid = true;
+	return result;
 }
 
-bool Cast::renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
-		const Common::String &setName, CelImage &cel, Common::Rect &rect,
-		int16 &depth, int16 &depthBucket) const {
-	if (!actor.visible || !actor.setName.equalsIgnoreCase(setName))
-		return false;
+Cast::ActorProjectionResult Cast::projectWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
+		const Common::String &setName) const {
+	ActorProjectionResult result;
+	if (!actor.visible || actor.mode == 0 || !actor.setName.equalsIgnoreCase(setName))
+		return result;
 
 	const int relX = actor.x - camera.cameraX;
 	const int relY = actor.y - camera.cameraY;
@@ -252,12 +240,12 @@ bool Cast::renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
 	const int cosH = nativeTrigCos(camera.heading);
 	const int projectedDepth = fixedShift14(relY * sinH + relX * cosH);
 	if (projectedDepth < 1)
-		return false;
+		return result;
 
 	const int zClippedDepth = MAX(projectedDepth - actor.zClip, 0);
 	const int nearLimit = (camera.nearPlane + (camera.nearPlane < 0 ? 3 : 0)) >> 2;
 	if (projectedDepth <= nearLimit || zClippedDepth > camera.farPlane)
-		return false;
+		return result;
 
 	const int projectedH = fixedShift14(relY * cosH - relX * sinH);
 	const int screenX = camera.centerX + projectedH * camera.focal / projectedDepth;
@@ -266,32 +254,62 @@ bool Cast::renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
 	const int angleToCamera = nativePointAngle(camera.cameraY - actor.y, camera.cameraX - actor.x);
 	const int viewAngle = (actor.angle - angleToCamera) & 0xff;
 
-	Common::Rect cellRect;
-	int16 regV = 0, regH = 0, cellScale = 0;
-	if (!resolveActorCel(actor, viewAngle, cel, cellRect, regV, regH, cellScale))
-		return false;
+	result.cell = resolveActorCell(actor, viewAngle);
+	if (!result.cell.valid)
+		return result;
 
-	const int sourceH = cellRect.height();
-	const int sourceW = cellRect.width();
+	const int sourceH = result.cell.cellRect.height();
+	const int sourceW = result.cell.cellRect.width();
 	if (sourceH <= 0 || sourceW <= 0)
-		return false;
-	const int effectiveScale = (actor.scale * cellScale) / 1000;
+		return result;
+	const int effectiveScale = (actor.scale * result.cell.cellScale) / 1000;
 	const int scaledH = (effectiveScale * sourceH) / projectedDepth;
 	const int scaledW = (effectiveScale * sourceW) / projectedDepth;
 	if (scaledH <= 0 || scaledW <= 0)
-		return false;
+		return result;
 
-	rect.top = screenY - (scaledH * regV) / sourceH;
-	rect.left = screenX - (scaledW * regH) / sourceW;
-	rect.bottom = rect.top + scaledH;
-	rect.right = rect.left + scaledW;
+	result.rect.top = screenY - (scaledH * result.cell.regV) / sourceH;
+	result.rect.left = screenX - (scaledW * result.cell.regH) / sourceW;
+	result.rect.bottom = result.rect.top + scaledH;
+	result.rect.right = result.rect.left + scaledW;
 	Common::Rect viewport(camera.viewportLeft, camera.viewportTop,
 			camera.viewportRight, camera.viewportBottom);
-	if (!rect.intersects(viewport))
-		return false;
-	depth = static_cast<int16>(projectedDepth);
-	depthBucket = camera.nearPlane ? static_cast<int16>(zClippedDepth / camera.nearPlane) : 0;
-	return true;
+	if (!result.rect.intersects(viewport))
+		return result;
+	result.depth = static_cast<int16>(projectedDepth);
+	result.depthBucket = camera.nearPlane ? static_cast<int16>(zClippedDepth / camera.nearPlane) : 0;
+	result.valid = true;
+	return result;
+}
+
+Cast::ActorRenderResult Cast::renderWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
+		const Common::String &setName) const {
+	ActorRenderResult result;
+	ActorProjectionResult projected = projectWorldActor(actor, camera, setName);
+	if (!projected.valid)
+		return result;
+
+	int fIdx = resourceIndexById(projected.cell.frameRes);
+	if (fIdx < 0)
+		return result;
+	const Archive::Resource &fres = _archive.getResource(static_cast<uint32>(fIdx));
+	uint16 w = static_cast<uint16>(fres.info >> 16);
+	uint16 h = static_cast<uint16>(fres.info & 0xffff);
+	Common::ScopedPtr<Common::SeekableReadStream> fs(_archive.createReadStreamForResource(static_cast<uint32>(fIdx)));
+	if (!fs)
+		return result;
+	bool ok = decodeCel(*fs, w, h, result.cel);
+	if (!ok) {
+		debug(1, "Cyberflix: renderActor('%s'): cel res %u decode failed",
+				actor.name.c_str(), projected.cell.frameRes);
+		return result;
+	}
+
+	result.rect = projected.rect;
+	result.depth = projected.depth;
+	result.depthBucket = projected.depthBucket;
+	result.valid = true;
+	return result;
 }
 
 } // End of namespace Cyberflix

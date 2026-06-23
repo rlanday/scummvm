@@ -155,13 +155,12 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 	Common::Array<const Shop *> drawShop;
 	propRuntime().collectScreenProps(draw, drawShop);
 	for (int i = static_cast<int>(draw.size()) - 1; i >= 0; --i) {
-		Common::SharedPtr<CelImage> cel;
-		Common::Rect r;
-		if (!drawShop[i]->renderProp(*draw[i], cel, r))
+		Shop::PropRenderResult rendered = drawShop[i]->renderProp(*draw[i]);
+		if (!rendered.valid)
 			continue;
-		if (x < r.left || x >= r.right || y < r.top || y >= r.bottom)
+		if (x < rendered.rect.left || x >= rendered.rect.right || y < rendered.rect.top || y >= rendered.rect.bottom)
 			continue;
-		if (!cel->isOpaque(x - r.left, y - r.top))
+		if (!rendered.cel->isOpaque(x - rendered.rect.left, y - rendered.rect.top))
 			continue;
 		_hitKind = "prop";
 		return draw[i]->name;
@@ -193,24 +192,29 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 			for (int i = static_cast<int>(itemType.size()) - 1; i >= 0; --i) {
 				const CelImage *cel = nullptr;
 				CelImage actorCel;
-				Common::SharedPtr<CelImage> propCel;
 				Common::Rect r;
-				int16 depth = 0;
 				int16 depthBucket = 0;
 				Common::String name;
 				if (itemType[static_cast<uint>(i)]) {
 					uint32 idx = itemIndex[static_cast<uint>(i)];
-					if (!actorCast[idx]->renderWorldActor(*actorDraw[idx], camera,
-							_setRuntime.set()->setName(), actorCel, r, depth, depthBucket))
+					Cast::ActorRenderResult rendered = actorCast[idx]->renderWorldActor(*actorDraw[idx],
+							camera, _setRuntime.set()->setName());
+					if (!rendered.valid)
 						continue;
+					actorCel = rendered.cel;
 					cel = &actorCel;
+					r = rendered.rect;
+					depthBucket = rendered.depthBucket;
 					name = actorDraw[idx]->name;
 				} else {
 					uint32 idx = itemIndex[static_cast<uint>(i)];
-					if (!worldShop[idx]->renderWorldProp(*worldDraw[idx], camera,
-							_setRuntime.set()->setName(), propCel, r, depth, depthBucket))
+					Shop::PropRenderResult rendered = worldShop[idx]->renderWorldProp(*worldDraw[idx],
+							camera, _setRuntime.set()->setName());
+					if (!rendered.valid)
 						continue;
-					cel = propCel.get();
+					cel = rendered.cel.get();
+					r = rendered.rect;
+					depthBucket = rendered.depthBucket;
 					name = worldDraw[idx]->name;
 				}
 				if (x < r.left || x >= r.right || y < r.top || y >= r.bottom)

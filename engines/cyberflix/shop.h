@@ -150,6 +150,28 @@ public:
 		int16 focal = 0;
 	};
 
+	struct ShapePoseResult {
+		bool valid = false;
+		uint16 poseCount = 0;
+	};
+
+	struct PropCellResult {
+		bool valid = false;
+		Common::SharedPtr<CelImage> cel;
+		Common::Rect cellRect;
+		int16 regV = 0;
+		int16 regH = 0;
+		int16 cellScale = 0;
+	};
+
+	struct PropRenderResult {
+		bool valid = false;
+		Common::SharedPtr<CelImage> cel;
+		Common::Rect rect;
+		int16 depth = 0;
+		int16 depthBucket = 0;
+	};
+
 	Shop() {}
 
 	/**
@@ -176,17 +198,16 @@ public:
 
 	/** True if @p prop's master lists a shape named @p shape (propview's
 	 *  validation, FUN_0042c0c0). Returns its pose count via the shape res. */
-	bool shapePoseCount(const Prop &prop, const Common::String &shape, uint16 &poseCount) const;
+	ShapePoseResult shapePoseCount(const Prop &prop, const Common::String &shape) const;
 
 	/**
 	 * Resolve @p prop's current shape/pose/angle to a decoded cel and its
 	 * screen rectangle (top = y - regV, left = x - regH; FUN_0042bed0 +
-	 * FUN_0042bb90). Returns false if the prop has no drawable cell.
+	 * FUN_0042bb90). Returns an invalid result if the prop has no drawable cell.
 	 */
-	bool renderProp(const Prop &prop, Common::SharedPtr<CelImage> &cel, Common::Rect &rect) const;
-	bool renderWorldProp(const Prop &prop, const WorldCamera &camera,
-			const Common::String &setName, Common::SharedPtr<CelImage> &cel,
-			Common::Rect &rect, int16 &depth, int16 &depthBucket) const;
+	PropRenderResult renderProp(const Prop &prop) const;
+	PropRenderResult renderWorldProp(const Prop &prop, const WorldCamera &camera,
+			const Common::String &setName) const;
 
 private:
 	const byte *engineBase(uint32 index) const;
@@ -194,9 +215,7 @@ private:
 	/** Read the Pascal string at @p p (bounded by the file buffer). */
 	Common::String pascalString(const byte *p) const;
 	Common::SharedPtr<CelImage> celResource(uint32 resId) const;
-	bool resolvePropCel(const Prop &prop, int angle, Common::SharedPtr<CelImage> &cel,
-			Common::Rect &cellRect, int16 &regV, int16 &regH,
-			int16 &cellScale) const;
+	PropCellResult resolvePropCel(const Prop &prop, int angle) const;
 
 	Common::String _name;
 	Common::Array<byte> _fileData; ///< Outlives _archive (streams point in).
