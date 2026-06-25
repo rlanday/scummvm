@@ -258,6 +258,10 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// over any button whose flag bit 0x2 is set and back to "CURS.ARROW"
 	// otherwise. Disabled wholesale by master header flag +0x18 bit 0x10.
 	bool movieHoverCursor = true;
+	// Native FUN_0040ca80 selects the Win32 cursor state from master byte +6:
+	// bit 0x10 hides it with FUN_00405210; otherwise FUN_004051b0 loads and
+	// shows CURS.ARROW. Titanic's shipped movies use the visible-arrow path.
+	bool movieShowsCursor = true;
 
 	// Action-cue frame indices, resolved from the master header's two cue-name
 	// fields at +0x40/+0x50 (TI.EXE FUN_0040ca80 resolves them via FUN_0040e050
@@ -288,6 +292,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		if (hdr && hdr + 0x87c <= fileData.end()) {
 			movieSkippable = (hdr[0x18] & 1) != 0;
 			movieHoverCursor = (hdr[0x18] & 0x10) == 0;
+			movieShowsCursor = (hdr[6] & 0x10) == 0;
 			// Dest position: rect {t,l} @+0x86c plus origin @+0x24/+0x26.
 			movieX = static_cast<int16>(READ_LE_UINT16(hdr + 0x86e)) + static_cast<int16>(READ_LE_UINT16(hdr + 0x24));
 			movieY = static_cast<int16>(READ_LE_UINT16(hdr + 0x86c)) + static_cast<int16>(READ_LE_UINT16(hdr + 0x26));
@@ -507,11 +512,10 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	bool skip = false;
 	Common::Event event;
 
-	// The original movie player shows the Windows arrow cursor while an
-	// interactive frame (the menu) is up and hides it during linear playback
-	// (FUN_004051b0/FUN_00405210, gated by movie flag bit 0x10). Mirror that:
-	// the arrow is decoded on demand from the user's TI.EXE.
-	if (hasInteractive && engine.setGameCursor("CURS.ARROW"))
+	// Mirror the movie player's Win32 cursor setup: most Titanic movies show the
+	// arrow even during linear playback, so keep ScummVM's software cursor active
+	// instead of letting the host cursor appear over the movie surface.
+	if (movieShowsCursor && engine.setGameCursor("CURS.ARROW"))
 		CursorMan.showMouse(true);
 	else
 		CursorMan.showMouse(false);
@@ -823,8 +827,13 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		// Wait until this frame's authored end time on the playback clock, then
 		// run the same nav command interpreter path as FUN_0040d710.
 		for (;;) {
-			while (engine._eventMan->pollEvent(event))
+			bool cursorDirty = false;
+			const Common::Point oldMouse = engine._eventMan->getMousePos();
+			while (engine._eventMan->pollEvent(event)) {
+				if (movieShowsCursor && event.type == Common::EVENT_MOUSEMOVE)
+					cursorDirty = true;
 				wallStartMs += engine.handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
+			}
 			if (engine.shouldQuit() || skip)
 				break;
 			uint32 t = (hasMovieAudio && engine._mixer->isSoundHandleActive(audioHandle))
@@ -832,12 +841,19 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 					: (engine._system->getMillis() - wallStartMs);
 			if (t >= frameEndMs)
 				break;
-			// Linear movies hide the cursor, so there is no software-cursor
-			// motion to present between frames. Keep skippable movies at ~60 Hz
-			// polling for responsive Esc/Ctrl+Q, but non-skippable movies only
-			// need to notice pause/quit/global keys promptly. Polling those at
-			// ~30 Hz avoids waking SDL/Cocoa's event pump twice as often in the
-			// sampled scripted movie path without affecting cursor responsiveness.
+			if (movieShowsCursor)
+				CursorMan.showMouse(true);
+			const Common::Point newMouse = engine._eventMan->getMousePos();
+			if (movieShowsCursor && (cursorDirty || oldMouse.x != newMouse.x || oldMouse.y != newMouse.y)) {
+				engine._console->onFrame();
+				engine._system->updateScreen();
+			}
+			// Hidden-cursor movies have no software-cursor motion to present
+			// between frames. Keep skippable movies at ~60 Hz polling for
+			// responsive Esc/Ctrl+Q, but non-skippable movies only need to notice
+			// pause/quit/global keys promptly. Polling those at ~30 Hz avoids
+			// waking SDL/Cocoa's event pump twice as often in the sampled
+			// scripted movie path without affecting cursor responsiveness.
 			const uint32 pollCapMs = movieSkippable ? 16 : 33;
 			const uint64 remaining = frameEndMs - t;
 			engine._system->delayMillis(MIN<uint32>(
@@ -858,6 +874,8 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	for (uint i = 0; i < frameSfxHandles.size(); ++i)
 		engine._mixer->stopHandle(frameSfxHandles[i]);
 	engine._eventMan->purgeKeyboardEvents();
+	if (!movieShowsCursor)
+		CursorMan.showMouse(true);
 	if (!nextMovieName.empty()) {
 		pendingMovieName = nextMovieName;
 		pendingStartFrame = nextMovieStartFrame;
@@ -865,10 +883,6 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	}
 	break;
 	}
-
-	// Leave the cursor hidden when we hand control back; the next interactive
-	// movie/node re-shows it.
-	CursorMan.showMouse(false);
 }
 
 
