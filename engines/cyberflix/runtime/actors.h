@@ -101,6 +101,7 @@ private:
 
 	int findWalkRecord(const Common::String &name) const;
 	void clearWalkRecord(const Common::String &name);
+	bool recoverGeneratedExtraActor(CyberflixEngine &engine, const Common::String &name);
 
 	/** Open cast files and the global actor list they contribute. */
 	Common::Array<Common::SharedPtr<Cast> > _casts;

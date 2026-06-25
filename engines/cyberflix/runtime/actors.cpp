@@ -28,6 +28,8 @@
 #include "cyberflix/runtime/set_helpers.h"
 #include "cyberflix/set.h"
 
+#include <cstring>
+
 namespace Cyberflix {
 
 struct CurrentWorldCameraResult {
@@ -54,6 +56,42 @@ static CurrentWorldCameraResult currentWorldCamera(CyberflixEngine &engine) {
 	if (result.valid)
 		result.camera = makeWorldCamera(cameraData);
 	return result;
+}
+
+static bool parseGeneratedExtraActorName(const Common::String &name, Common::String &source,
+		Common::String &where) {
+	Common::String key = name;
+	key.toLowercase();
+
+	static const char *const bases[] = {
+		"bruce1",
+		"jim1",
+		"jay1",
+		"brown1",
+		"paul1",
+		"ani1",
+		"molly1"
+	};
+
+	for (uint i = 0; i < ARRAYSIZE(bases); ++i) {
+		const char *base = bases[i];
+		const uint len = strlen(base);
+		if (key.size() <= len + 1 || strncmp(key.c_str(), base, len))
+			continue;
+
+		const char *suffix = key.c_str() + len;
+		if (suffix[0] != 'a' && suffix[0] != 'b' && suffix[0] != 'c')
+			continue;
+		for (const char *p = suffix + 1; *p; ++p)
+			if (*p < '0' || *p > '9')
+				return false;
+
+		source = base;
+		where = Common::String::format("ex.%c.%s", suffix[0], suffix + 1);
+		return true;
+	}
+
+	return false;
 }
 
 int ActorRuntime::findWalkRecord(const Common::String &name) const {
@@ -97,6 +135,29 @@ ActorRuntime::ActorRef ActorRuntime::findActorRef(const Common::String &name) co
 		}
 	}
 	return ref;
+}
+
+bool ActorRuntime::recoverGeneratedExtraActor(CyberflixEngine &engine, const Common::String &name) {
+	Common::String sourceName;
+	Common::String where;
+	if (!parseGeneratedExtraActorName(name, sourceName, where))
+		return false;
+
+	if (!findCastShared("extra.cst"))
+		openCastFile(engine, "extra.cst");
+
+	ActorRef source = findActorRef(sourceName);
+	if (!source.actor)
+		return false;
+
+	// Heals saves made before actorinstance() existed: replay the same
+	// EXTRA.CST setup path that originally creates and places the clone.
+	Common::Array<Value> args;
+	args.push_back(Value::makeString(where));
+	debug(1, "Cyberflix: recovering generated extra actor '%s' via %s.setupactor('%s')",
+			name.c_str(), sourceName.c_str(), where.c_str());
+	sendToActor(engine, sourceName, "setupactor", args);
+	return findActorRef(name).actor;
 }
 
 bool ActorRuntime::resolveActorStar(CyberflixEngine &engine, Cast::Actor &actor) {
@@ -248,6 +309,10 @@ void ActorRuntime::sendToActor(CyberflixEngine &engine, const Common::String &ac
 			message.c_str(), args.size());
 	ActorRef ref = findActorRef(actorName);
 	if (!ref.actor) {
+		if (recoverGeneratedExtraActor(engine, actorName))
+			ref = findActorRef(actorName);
+	}
+	if (!ref.actor) {
 		warning("Cyberflix: sendtoactor('%s'): no such actor", actorName.c_str());
 		return;
 	}
@@ -263,6 +328,10 @@ Value ActorRuntime::sendToActorFx(CyberflixEngine &engine, const Common::String 
 	debug(1, "Cyberflix: sendtoactorfx('%s') -> %s(%u args)", actorName.c_str(),
 			message.c_str(), args.size());
 	ActorRef ref = findActorRef(actorName);
+	if (!ref.actor) {
+		if (recoverGeneratedExtraActor(engine, actorName))
+			ref = findActorRef(actorName);
+	}
 	if (!ref.actor) {
 		warning("Cyberflix: sendtoactorfx('%s'): no such actor", actorName.c_str());
 		return Value();
