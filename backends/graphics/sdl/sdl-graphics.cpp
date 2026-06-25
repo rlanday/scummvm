@@ -235,6 +235,8 @@ bool SdlGraphicsManager::showMouse(bool visible) {
 		// instead
 		int x, y;
 		getMouseState(&x, &y);
+		// _activeArea is in drawable coordinates; SDL mouse state is in window
+		// coordinates on HiDPI displays.
 		const float dpiScale = _window->getSdlDpiScalingFactor();
 		const Common::Point mouse(static_cast<int>(x * dpiScale + 0.5f),
 				static_cast<int>(y * dpiScale + 0.5f));
@@ -244,6 +246,8 @@ bool SdlGraphicsManager::showMouse(bool visible) {
 	}
 	showSystemMouseCursor(showCursor);
 
+	// The OS cursor can become stale after focus or mode transitions, so update
+	// it even when the software-cursor visibility flag is unchanged.
 	if (visible == _cursorVisible) {
 		return visible;
 	}
