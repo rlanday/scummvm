@@ -239,6 +239,7 @@ public:
 		kMethodCountProps       = 0x4E3F,
 		kMethodIndexToProp      = 0x4E40,
 		kMethodCurrentFlat      = 0x4E46,
+		kMethodPointInProp      = 0x4E48,
 		kMethodPointInButton    = 0x4E4B,
 		kMethodCountPuppets     = 0x4E4E,
 		kMethodIndexToPuppet    = 0x4E4F,

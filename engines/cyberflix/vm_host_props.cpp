@@ -131,4 +131,8 @@ Common::String CyberflixPropVMHost::indexToProp(int index) {
 	return engine().propRuntime().indexToProp(index);
 }
 
+bool CyberflixPropVMHost::pointInProp(const Common::String &name, int32 packedPoint) {
+	return engine().propRuntime().pointInProp(name, packedPoint);
+}
+
 } // End of namespace Cyberflix

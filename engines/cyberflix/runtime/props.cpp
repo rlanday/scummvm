@@ -608,6 +608,34 @@ Common::String PropRuntime::indexToProp(int index) const {
 	return Common::String();
 }
 
+bool PropRuntime::pointInProp(const Common::String &name, int32 packedPoint) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop || !shop) {
+		warning("Cyberflix: pointinprop('%s'): no such prop", name.c_str());
+		return false;
+	}
+	if (!prop->visible || prop->mode != 0)
+		return false;
+
+	Shop::PropRenderResult rendered = shop->renderProp(*prop);
+	if (!rendered.valid || !rendered.cel)
+		return false;
+
+	const int16 x = static_cast<int16>(packedPoint >> 16);
+	const int16 y = static_cast<int16>(packedPoint & 0xffff);
+	if (x < rendered.rect.left || x >= rendered.rect.right ||
+			y < rendered.rect.top || y >= rendered.rect.bottom)
+		return false;
+
+	const int celX = x - rendered.rect.left;
+	const int celY = y - rendered.rect.top;
+	if (celX < 0 || celY < 0 ||
+			celX >= rendered.cel->width || celY >= rendered.cel->height)
+		return false;
+	return rendered.cel->isOpaque(celX, celY);
+}
+
 void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine) {
 	// The original recomposites the display list every tick; this engine
 	// renders on demand, so repaint the current room after a dispatch that

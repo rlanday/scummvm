@@ -84,6 +84,7 @@ public:
 	int setPropValue(const Common::String &name, int newValue);
 	int countProps() const;
 	Common::String indexToProp(int index) const;
+	bool pointInProp(const Common::String &name, int32 packedPoint);
 	void refreshPropsIfDirty(CyberflixEngine &engine);
 
 	Common::Array<Common::SharedPtr<Shop> > &shops() { return _shops; }

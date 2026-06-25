@@ -220,6 +220,7 @@ public:
 	int setPropValue(const Common::String &name, int newValue) override;
 	int countProps() override;
 	Common::String indexToProp(int index) override;
+	bool pointInProp(const Common::String &name, int32 packedPoint) override;
 
 private:
 	CyberflixEngine &engine();

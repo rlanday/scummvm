@@ -577,6 +577,10 @@ public:
 			const Common::String &view, const Common::String &painting,
 			int32 packedPoint) { return false; }
 
+	/** pointinprop(prop, point) (0x4e48 FUN_00434af1): named screen prop
+	 *  containment through the current cel opacity mask. */
+	virtual bool pointInProp(const Common::String &prop, int32 packedPoint) { return false; }
+
 	/**
 	 * hittest(point) (0x4e66 FUN_00435e70). @p packedPoint packs the screen
 	 * point as (x << 16) | (y & 0xffff) (the in-rect test FUN_0041ac60 checks

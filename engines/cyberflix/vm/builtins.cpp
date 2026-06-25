@@ -507,6 +507,12 @@ bool ScriptVM::callInputMethod(uint16 opcode, const Common::Array<Value> &args, 
 						args[1].strValue, args[2].strValue, args[3].intValue)) :
 				Value::makeBool(false);
 		return true;
+	case Script::kMethodPointInProp: // pointinprop(prop, point) -> FUN_00434af1
+		result = args.size() >= 2 ?
+				Value::makeBool(_interactionHost->pointInProp(args[0].strValue,
+						args[1].intValue)) :
+				Value::makeBool(false);
+		return true;
 	case Script::kMethodHitTest: // hittest(point) -> FUN_00435e70: name of the topmost item
 	             // under the packed point; kind stored for result()
 		if (!args.empty())
