@@ -522,7 +522,7 @@ static bool parseCueArray(Common::SeekableReadStream &in, int64 end, Common::Arr
 	cues.clear();
 	for (uint32 i = 0; i < count; ++i) {
 		CueState cue;
-		if (!readSaveString(in, end, cue.name) || in.pos() + 17 > end)
+		if (!readSaveString(in, end, cue.name) || in.pos() + 13 > end)
 			return false;
 		cue.resId = in.readUint32LE();
 		cue.flags = in.readByte();
