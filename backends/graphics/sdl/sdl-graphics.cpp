@@ -228,10 +228,6 @@ void SdlGraphicsManager::initSizeHint(const Graphics::ModeList &modes) {
 }
 
 bool SdlGraphicsManager::showMouse(bool visible) {
-	if (visible == _cursorVisible) {
-		return visible;
-	}
-
 	bool showCursor = false;
 	if (visible) {
 		// _cursorX and _cursorY are currently always clipped to the active
@@ -247,6 +243,10 @@ bool SdlGraphicsManager::showMouse(bool visible) {
 		}
 	}
 	showSystemMouseCursor(showCursor);
+
+	if (visible == _cursorVisible) {
+		return visible;
+	}
 
 	return WindowedGraphicsManager::showMouse(visible);
 }
