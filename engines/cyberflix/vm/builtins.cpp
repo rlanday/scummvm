@@ -102,6 +102,10 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 	case Script::kMethodCloseCastFile: // closecastfile('name.cst') -> FUN_004211b0
 		_actorHost->closeCastFile(args.empty() ? Common::String() : args[0].strValue);
 		return true;
+	case Script::kMethodActorInstance: // actorinstance(source, newName) -> FUN_0041f6a0
+		if (args.size() >= 2)
+			_actorHost->actorInstance(args[0].strValue, args[1].strValue);
+		return true;
 	case Script::kMethodWalkToStar: // walktostar(actor, star) -> FUN_00424410
 		if (args.size() >= 2)
 			_actorHost->walkToStar(args[0].strValue, args[1].strValue);

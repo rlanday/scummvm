@@ -50,6 +50,7 @@ public:
 			const Shop::WorldCamera &camera) const;
 	void openCastFile(CyberflixEngine &engine, const Common::String &name);
 	void closeCastFile(CyberflixEngine &engine, const Common::String &name);
+	void actorInstance(CyberflixEngine &engine, const Common::String &source, const Common::String &newName);
 	void sendToCast(CyberflixEngine &engine, const Common::String &castName,
 			const Common::String &message, const Common::Array<Value> &args);
 	Value sendToCastFx(CyberflixEngine &engine, const Common::String &castName,

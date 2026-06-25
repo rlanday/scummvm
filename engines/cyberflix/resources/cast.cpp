@@ -152,6 +152,29 @@ Common::SharedPtr<Cast::Actor> Cast::findActor(const Common::String &name) {
 	return Common::SharedPtr<Actor>();
 }
 
+Common::SharedPtr<Cast::Actor> Cast::findActorByMasterResId(uint32 masterResId) {
+	for (uint32 i = 0; i < _actors.size(); ++i) {
+		if (_actors[i]->masterResId == masterResId)
+			return _actors[i];
+	}
+	return Common::SharedPtr<Actor>();
+}
+
+bool Cast::addActorInstance(const Actor &source, const Common::String &newName) {
+	if (newName.empty())
+		return false;
+	Common::String key = newName;
+	key.toLowercase();
+	if (_actorIndexByName.contains(key))
+		return false;
+
+	Common::SharedPtr<Actor> clone(new Actor(source));
+	clone->name = key;
+	_actorIndexByName[clone->name] = _actors.size();
+	_actors.push_back(clone);
+	return true;
+}
+
 Cast::ActorCellResult Cast::resolveActorCell(const Actor &actor, int angle) const {
 	ActorCellResult result;
 	const Actor::Shape *shape = nullptr;

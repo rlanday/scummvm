@@ -721,6 +721,11 @@ static void restoreCastState(ActorRuntime &actorRuntime, const Common::Array<Cas
 		for (uint a = 0; a < castStates[i].actors.size(); ++a) {
 			const ActorState &state = castStates[i].actors[a];
 			Common::SharedPtr<Cast::Actor> actor = cast->findActor(state.name);
+			if (!actor && state.masterResId) {
+				Common::SharedPtr<Cast::Actor> source = cast->findActorByMasterResId(state.masterResId);
+				if (source && cast->addActorInstance(*source, state.name))
+					actor = cast->findActor(state.name);
+			}
 			if (!actor) {
 				warning("Cyberflix: load cast '%s' missing actor '%s'",
 						castStates[i].name.c_str(), state.name.c_str());

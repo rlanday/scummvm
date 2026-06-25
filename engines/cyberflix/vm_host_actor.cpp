@@ -31,6 +31,10 @@ void CyberflixActorVMHost::closeCastFile(const Common::String &name) {
 	engine().actorRuntime().closeCastFile(engine(), name);
 }
 
+void CyberflixActorVMHost::actorInstance(const Common::String &source, const Common::String &newName) {
+	engine().actorRuntime().actorInstance(engine(), source, newName);
+}
+
 void CyberflixActorVMHost::sendToCast(const Common::String &castName, const Common::String &message,
 		const Common::Array<Value> &args) {
 	engine().actorRuntime().sendToCast(engine(), castName, message, args);

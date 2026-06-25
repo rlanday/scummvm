@@ -146,6 +146,8 @@ public:
 
 	/** Find an actor by case-insensitive runtime name, or null. */
 	Common::SharedPtr<Actor> findActor(const Common::String &name);
+	Common::SharedPtr<Actor> findActorByMasterResId(uint32 masterResId);
+	bool addActorInstance(const Actor &source, const Common::String &newName);
 
 	ActorProjectionResult projectWorldActor(const Actor &actor, const Shop::WorldCamera &camera,
 			const Common::String &setName) const;

@@ -171,6 +171,7 @@ public:
 		kMethodTurnToDeg        = 0x2F28,
 		kMethodFlushEvents      = 0x2F29,
 		kMethodPuppetGrab       = 0x2F2A,
+		kMethodActorInstance    = 0x2F2B,
 		kMethodPropInstance     = 0x2F2C,
 		kMethodSaveGame         = 0x2F2D,
 		kMethodOpenGame         = 0x2F2E,

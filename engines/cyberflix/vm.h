@@ -428,6 +428,9 @@ public:
 	/** closecastfile('name.cst') (0x2eee FUN_004211b0): remove a cast and actors. */
 	virtual void closeCastFile(const Common::String &name) {}
 
+	/** actorinstance(source, newName) (0x2f2b FUN_0041f6a0): clone a runtime actor record. */
+	virtual void actorInstance(const Common::String &source, const Common::String &newName) {}
+
 	/** sendtocast('file.cst', message(args)): dispatch against the cast script. */
 	virtual void sendToCast(const Common::String &cast, const Common::String &message,
 			const Common::Array<Value> &args) {}

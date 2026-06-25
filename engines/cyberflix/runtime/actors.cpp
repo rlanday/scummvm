@@ -194,6 +194,28 @@ void ActorRuntime::closeCastFile(CyberflixEngine &engine, const Common::String &
 	debug(1, "Cyberflix: closecastfile('%s'): cast not open", key.c_str());
 }
 
+void ActorRuntime::actorInstance(CyberflixEngine &engine, const Common::String &source, const Common::String &newName) {
+	ActorRef ref = findActorRef(source);
+	if (!ref.actor || !ref.cast) {
+		warning("Cyberflix: actorinstance('%s', '%s'): source actor not found",
+				source.c_str(), newName.c_str());
+		return;
+	}
+	if (newName.size() > 15) {
+		warning("Cyberflix: actorinstance('%s', '%s'): name too long",
+				source.c_str(), newName.c_str());
+		return;
+	}
+	if (findActorRef(newName).actor)
+		return;
+
+	if (ref.cast->addActorInstance(*ref.actor, newName)) {
+		debug(1, "Cyberflix: actorinstance('%s', '%s')", source.c_str(), newName.c_str());
+		refreshActorStarPositions(engine);
+		engine._propRuntime.setDirty(true);
+	}
+}
+
 void ActorRuntime::sendToCast(CyberflixEngine &engine, const Common::String &castName, const Common::String &message,
 		const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtocast('%s') -> %s(%u args)", castName.c_str(),

@@ -145,6 +145,7 @@ class CyberflixActorVMHost : public virtual VMActorHost {
 public:
 	void openCastFile(const Common::String &name) override;
 	void closeCastFile(const Common::String &name) override;
+	void actorInstance(const Common::String &source, const Common::String &newName) override;
 	void sendToCast(const Common::String &cast, const Common::String &message,
 			const Common::Array<Value> &args) override;
 	Value sendToCastFx(const Common::String &cast, const Common::String &message,
