@@ -44,6 +44,7 @@ public:
 	void collectScreenProps(Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop) const;
 	void advancePropPoses();
+	void advancePropPosesAndMarkDirtyRects();
 	bool hasAnimatedScreenProps() const;
 	void collectWorldProps(CyberflixEngine &engine, Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,

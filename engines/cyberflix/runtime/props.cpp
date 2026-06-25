@@ -107,6 +107,36 @@ void PropRuntime::advancePropPoses() {
 		_shops[i]->advancePropPoses();
 }
 
+void PropRuntime::advancePropPosesAndMarkDirtyRects() {
+	Common::Array<Common::Rect> oldRects;
+	Common::Array<bool> hadOldRects;
+	Common::Array<const Shop::Prop *> props;
+	Common::Array<const Shop *> shops;
+	for (uint32 s = 0; s < _shops.size(); ++s) {
+		for (uint32 i = 0; i < _shops[s]->propCount(); ++i) {
+			const Shop::Prop &prop = _shops[s]->prop(i);
+			if (!prop.visible || prop.mode != 0 || prop.poseCount <= 1)
+				continue;
+			Common::Rect oldRect;
+			bool hadOldRect = screenPropRect(*_shops[s], prop, oldRect);
+			oldRects.push_back(oldRect);
+			hadOldRects.push_back(hadOldRect);
+			props.push_back(&prop);
+			shops.push_back(_shops[s].get());
+		}
+	}
+
+	advancePropPoses();
+
+	for (uint32 i = 0; i < oldRects.size(); ++i) {
+		if (hadOldRects[i])
+			queueDirtyRect(oldRects[i]);
+		Common::Rect newRect;
+		if (screenPropRect(*shops[i], *props[i], newRect))
+			queueDirtyRect(newRect);
+	}
+}
+
 bool PropRuntime::hasAnimatedScreenProps() const {
 	for (uint32 s = 0; s < _shops.size(); ++s) {
 		for (uint32 i = 0; i < _shops[s]->propCount(); ++i) {
@@ -676,14 +706,11 @@ void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine) {
 	const bool replacementStage = isReplacementStageForProps(engine._stageRuntime.stage());
 	if (!engine._setRuntime.visible() || replacementStage) {
 		if (engine._stageRuntime.stage() && engine._stageRuntime.stage()->isOpen()) {
-			const bool fullAnimatedStagePass = replacementStage && hasAnimatedScreenProps();
-			if (!_dirtyRects.empty() && !fullAnimatedStagePass) {
+			if (!_dirtyRects.empty() || (replacementStage && hasAnimatedScreenProps())) {
 				engine.stageRuntime().repaintDirtyStageRects(engine);
 			} else {
 				// Prop refresh without dirty bounds is still a compositor repaint,
 				// not navigation to a new flat, so keep the current script cursor.
-				// Animated screen props need the same full pass because their
-				// next pose can touch pixels outside the queued state-change rects.
 				engine.stageRuntime().renderStageNode(engine, engine.stageRuntime().node(), false);
 			}
 		}

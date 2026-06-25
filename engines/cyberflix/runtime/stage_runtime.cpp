@@ -31,6 +31,42 @@
 
 namespace Cyberflix {
 
+// Dispatch a flat script message without ScummVM's normal post-dispatch prop
+// refresh. This is intentionally different from public sendToFlat(): a script
+// sendtoflat("name", message(...)) is a complete script-visible dispatch in our
+// runtime, so sendToFlat() refreshes dirty props after the handler just like the
+// other sendto* entry points.
+//
+// gotoflat() is different in the original executable. Native FUN_00409460
+// switches flats as one indivisible operation: FUN_00409660 dispatches the old
+// flat's closeflat, FUN_0040b180 renders the target node, then FUN_004095a0
+// dispatches the new flat's openflat. The close/open helpers only construct the
+// message string and route it through FUN_0040a860; they do not run
+// forceupdate()/FUN_00423a60 and therefore do not rebuild or present the prop
+// display list between closeflat and the target-node render.
+//
+// Using sendToFlat() for gotoflat's internal closeflat made ScummVM insert an
+// extra repaint at exactly that forbidden point. BOIL.SHP's coal-gate scripts
+// hide/show the animated gate prop immediately before gotoflat(); the extra
+// refresh could present that transient prop state against the old flat for one
+// frame, producing a coal flash before the target flat was rendered. This helper
+// keeps gotoflat's internal close/open messages on the native no-refresh path.
+bool StageRuntime::dispatchFlatMessage(CyberflixEngine &engine, const Common::SharedPtr<Stage> &dispatchStage,
+		int dispatchNode, const Common::String &message, const Common::Array<Value> &args) {
+	if (!dispatchStage || !dispatchStage->isOpen())
+		return false;
+	if (dispatchNode < 0 || static_cast<uint32>(dispatchNode) >= dispatchStage->nodeCount()) {
+		warning("Cyberflix: stage '%s' has no flat index %d",
+				dispatchStage->name().c_str(), dispatchNode);
+		return false;
+	}
+
+	Common::String flatName = dispatchStage->nodeName(static_cast<uint32>(dispatchNode));
+	engine.dispatchWithScopes(dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)),
+			dispatchStage->stageScript(), flatName, flatName, message, args, "flat");
+	return true;
+}
+
 void StageRuntime::openStageFile(CyberflixEngine &engine, const Common::String &name) {
 	if (name.empty())
 		return;
@@ -85,14 +121,15 @@ void StageRuntime::gotoFlat(CyberflixEngine &engine, const Value &flat) {
 	debug(1, "Cyberflix: gotoflat(%s) resolved node %d", flat.toString().c_str(), targetNode);
 	Common::String openedName = stage()->name();
 	uint32 openedCount = stage()->nodeCount();
-	Common::String oldFlat = currentFlat();
+	Common::SharedPtr<Stage> dispatchStage = stage();
+	int oldNode = node();
 	Common::Array<Value> noArgs;
-	sendToFlat(engine, oldFlat, "closeflat", noArgs);
+	dispatchFlatMessage(engine, dispatchStage, oldNode, "closeflat", noArgs);
 	if (!stage() || !stage()->isOpen() || stage()->name() != openedName ||
 			stage()->nodeCount() != openedCount)
 		return;
 	renderStageNode(engine, targetNode);
-	sendToFlat(engine, currentFlat(), "openflat", noArgs);
+	dispatchFlatMessage(engine, dispatchStage, targetNode, "openflat", noArgs);
 }
 
 Common::String StageRuntime::currentStage() const {
@@ -198,9 +235,7 @@ void StageRuntime::sendToFlat(CyberflixEngine &engine, const Common::String &fla
 				dispatchStage->name().c_str(), flat.c_str());
 		return;
 	}
-	Common::String flatName = dispatchStage->nodeName(static_cast<uint32>(dispatchNode));
-	engine.dispatchWithScopes(dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)),
-			dispatchStage->stageScript(), flatName, flatName, message, args, "flat");
+	dispatchFlatMessage(engine, dispatchStage, dispatchNode, message, args);
 	engine.propRuntime().refreshPropsIfDirty(engine);
 }
 
@@ -322,7 +357,11 @@ void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool
 }
 
 void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
-	if (!stage() || !stage()->isOpen() || engine.propRuntime().dirtyRects().empty())
+	if (!stage() || !stage()->isOpen())
+		return;
+
+	engine.propRuntime().advancePropPosesAndMarkDirtyRects();
+	if (engine.propRuntime().dirtyRects().empty())
 		return;
 
 	FrameImage frame;
@@ -331,7 +370,6 @@ void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
 		return;
 	}
 
-	engine.propRuntime().advancePropPoses();
 	Common::Array<const Shop::Prop *> draw;
 	Common::Array<const Shop *> drawShop;
 	engine.propRuntime().collectScreenProps(draw, drawShop);
