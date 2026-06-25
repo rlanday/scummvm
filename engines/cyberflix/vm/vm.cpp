@@ -66,12 +66,19 @@ static bool shouldLogEnigmaVariable(const Common::String &key) {
 			key == "countdial";
 }
 
-static bool shouldLogEnigmaDispatch(const Common::String &name) {
+static bool isEnigmaStageContext(const Common::String &self) {
+	return self.equalsIgnoreCase("enigma.stg") ||
+			self.equalsIgnoreCase("enigma 1");
+}
+
+static bool shouldLogEnigmaDispatch(const Common::String &name, const Common::String &self) {
 	return name.equalsIgnoreCase("checkey") ||
 			name.equalsIgnoreCase("advancedial") ||
 			name.equalsIgnoreCase("dialset") ||
 			name.equalsIgnoreCase("goodkey") ||
-			name.equalsIgnoreCase("badkey");
+			name.equalsIgnoreCase("badkey") ||
+			((name.equalsIgnoreCase("keydown") || name.equalsIgnoreCase("keyrepeat")) &&
+					isEnigmaStageContext(self));
 }
 
 static int32 stringToNum(const Common::String &text) {
@@ -766,19 +773,17 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 		*handled = false;
 	Value result;
 	const bool logTransitionDispatch = shouldLogTransitionDispatch(name);
-	const bool logEnigmaDispatch = shouldLogEnigmaDispatch(name) ||
-			((name.equalsIgnoreCase("keydown") || name.equalsIgnoreCase("keyrepeat")) &&
-					_ctxSelf.equalsIgnoreCase("enigma.stg"));
+	const bool logEnigmaDispatch = shouldLogEnigmaDispatch(name, _ctxSelf);
+	Common::String enigmaArgText;
 
 	if (logEnigmaDispatch) {
-		Common::String argText;
 		for (uint32 i = 0; i < args.size(); ++i) {
 			if (i)
-				argText += ", ";
-			argText += args[i].toString();
+				enigmaArgText += ", ";
+			enigmaArgText += args[i].toString();
 		}
 		debug(1, "Cyberflix: Enigma script %s(%s) ctx self='%s' prop='%s'",
-				name.c_str(), argText.c_str(), _ctxSelf.c_str(), _ctxProp.c_str());
+				name.c_str(), enigmaArgText.c_str(), _ctxSelf.c_str(), _ctxProp.c_str());
 	}
 
 	if (_callDepth >= 64) { // TI.EXE has no explicit guard; protect the engine
@@ -811,6 +816,9 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 		if (logTransitionDispatch)
 			debug(1, "Cyberflix: script '%s' handled by scope %d -> %s",
 					name.c_str(), li, result.toString().c_str());
+		if (logEnigmaDispatch)
+			debug(1, "Cyberflix: Enigma script %s(%s) -> %s",
+					name.c_str(), enigmaArgText.c_str(), result.toString().c_str());
 		if (_trace)
 			debug(0, "  dispatch %s(%u args) -> %s", name.c_str(), args.size(),
 					result.toString().c_str());
