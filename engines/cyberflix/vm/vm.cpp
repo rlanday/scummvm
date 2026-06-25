@@ -128,6 +128,23 @@ static Common::String putWord(const Common::String &text, const Common::String &
 	return Common::String();
 }
 
+static int32 substringPosition(const Common::String &text, const Common::String &needle) {
+	if (needle.empty() || needle.size() > text.size())
+		return -1;
+
+	Common::String foldedText = text;
+	Common::String foldedNeedle = needle;
+	foldedText.toLowercase();
+	foldedNeedle.toLowercase();
+
+	for (uint32 i = 0; i + foldedNeedle.size() <= foldedText.size(); ++i) {
+		if (!memcmp(foldedText.c_str() + i, foldedNeedle.c_str(), foldedNeedle.size()))
+			return static_cast<int32>(i + 1);
+	}
+
+	return -1;
+}
+
 Value ScriptVM::getVar(const Common::String &name) const {
 	// Scope lookup: innermost local scope first (TI.EXE 0x004138f0 against the
 	// per-call scope object), then the global object ([0x45f010]). Names are
@@ -630,6 +647,10 @@ bool ScriptVM::callCoreMethod(uint16 opcode, const Common::Array<Value> &args, V
 		result = Value::makeString(findWord(args.size() > 0 ? args[0].strValue : Common::String(),
 				args.size() > 1 ? args[1].strValue : Common::String(),
 				args.size() > 2 ? args[2].intValue : 0));
+		return true;
+	case Script::kMethodSubstring: // substring(str, needle) -> FUN_00437300, 1-based index or -1
+		result = Value::makeInt(substringPosition(args.size() > 0 ? args[0].strValue : Common::String(),
+				args.size() > 1 ? args[1].strValue : Common::String()));
 		return true;
 	case Script::kMethodStringLength: // stringlength(str) -> FUN_004373e0
 		result = Value::makeInt(args.empty() ? 0 : args[0].strValue.size());

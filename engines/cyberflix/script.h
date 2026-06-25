@@ -247,6 +247,7 @@ public:
 		kMethodCurrentPuppet    = 0x4E51,
 		kMethodCurrentSet       = 0x4E55,
 		kMethodFindWord         = 0x4E56,
+		kMethodSubstring        = 0x4E57,
 		kMethodStringLength     = 0x4E58,
 		kMethodPutWord          = 0x4E59,
 		kMethodOptionKey        = 0x4E5A,
