@@ -424,22 +424,9 @@ bool CyberflixEngine::optionKey() {
 }
 
 bool CyberflixEngine::pollInputStateEvents() {
-	const Common::Point oldMouse = _eventMan->getMousePos();
-	Common::Event event;
-
-	while (_eventMan->pollEvent(event)) {
-		if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
-			quitGame();
-			return false;
-		}
-	}
-
-	const Common::Point newMouse = _eventMan->getMousePos();
-	if (oldMouse.x != newMouse.x || oldMouse.y != newMouse.y) {
-		_cursorPresentationDirty = true;
+	if (pumpCursorMotionEvents())
 		presentCursorIfDirty();
-	}
-	return true;
+	return !shouldQuit();
 }
 
 bool CyberflixEngine::pumpCursorMotionEvents() {
