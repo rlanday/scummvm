@@ -39,18 +39,20 @@ namespace Cyberflix {
 //
 // gotoflat() is different in the original executable. Native FUN_00409460
 // switches flats as one indivisible operation: FUN_00409660 dispatches the old
-// flat's closeflat, FUN_0040b180 renders the target node, then FUN_004095a0
-// dispatches the new flat's openflat. The close/open helpers only construct the
-// message string and route it through FUN_0040a860; they do not run
-// forceupdate()/FUN_00423a60 and therefore do not rebuild or present the prop
-// display list between closeflat and the target-node render.
+// flat's closeflat, FUN_0040b180 decodes the target node into the stage backing
+// buffer and marks a full-screen dirty redraw, then FUN_004095a0 dispatches the
+// new flat's openflat. The close/open helpers only construct the message string
+// and route it through FUN_0040a860; they do not run forceupdate()/FUN_00423a60
+// or present through FUN_00407000. The marked redraw is presented later by the
+// normal compositor pass, which also rebuilds the prop display list.
 //
 // Using sendToFlat() for gotoflat's internal closeflat made ScummVM insert an
-// extra repaint at exactly that forbidden point. BOIL.SHP's coal-gate scripts
-// hide/show the animated gate prop immediately before gotoflat(); the extra
-// refresh could present that transient prop state against the old flat for one
-// frame, producing a coal flash before the target flat was rendered. This helper
-// keeps gotoflat's internal close/open messages on the native no-refresh path.
+// extra repaint at exactly that forbidden point, and using renderStageNode()
+// inside gotoflat presented the target background before the script's next
+// forceupdate() animation frame. BOIL.SHP's coal-gate scripts hide/show the
+// animated gate prop immediately before gotoflat(); either premature present can
+// expose coal for one frame. This helper keeps gotoflat's internal close/open
+// messages on the native no-refresh path.
 bool StageRuntime::dispatchFlatMessage(CyberflixEngine &engine, const Common::SharedPtr<Stage> &dispatchStage,
 		int dispatchNode, const Common::String &message, const Common::Array<Value> &args) {
 	if (!dispatchStage || !dispatchStage->isOpen())
@@ -64,6 +66,25 @@ bool StageRuntime::dispatchFlatMessage(CyberflixEngine &engine, const Common::Sh
 	Common::String flatName = dispatchStage->nodeName(static_cast<uint32>(dispatchNode));
 	engine.dispatchWithScopes(dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)),
 			dispatchStage->stageScript(), flatName, flatName, message, args, "flat");
+	return true;
+}
+
+bool StageRuntime::queueStageNodeRedraw(CyberflixEngine &engine, int targetNode) {
+	if (!stage() || !stage()->isOpen()) {
+		warning("Cyberflix: gotoflat(%d) with no stage open", targetNode + 1);
+		return false;
+	}
+
+	node() = targetNode;
+	if (targetNode == 0) {
+		if (stage()->renderNode(0, shellFrameData()))
+			shellFrameValid() = true;
+		else
+			clearShellFrame();
+	}
+
+	engine.propRuntime().queueDirtyRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight));
+	engine.propRuntime().setDirty(true);
 	return true;
 }
 
@@ -128,7 +149,8 @@ void StageRuntime::gotoFlat(CyberflixEngine &engine, const Value &flat) {
 	if (!stage() || !stage()->isOpen() || stage()->name() != openedName ||
 			stage()->nodeCount() != openedCount)
 		return;
-	renderStageNode(engine, targetNode);
+	if (!queueStageNodeRedraw(engine, targetNode))
+		return;
 	dispatchFlatMessage(engine, dispatchStage, targetNode, "openflat", noArgs);
 }
 

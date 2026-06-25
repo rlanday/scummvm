@@ -97,6 +97,7 @@ public:
 private:
 	bool dispatchFlatMessage(CyberflixEngine &engine, const Common::SharedPtr<Stage> &dispatchStage,
 			int dispatchNode, const Common::String &message, const Common::Array<Value> &args);
+	bool queueStageNodeRedraw(CyberflixEngine &engine, int targetNode);
 
 	Common::SharedPtr<Stage> _stage;
 	bool _visible = false;
