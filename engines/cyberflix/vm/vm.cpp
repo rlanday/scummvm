@@ -75,14 +75,51 @@ static Common::String findWord(const Common::String &text, const Common::String 
 		return Common::String(text.c_str() + wordIndex - 1, 1);
 	}
 
+	Common::String terminated = text;
+	terminated += delimiter;
 	uint32 wordStart = 0;
 	int32 remaining = wordIndex;
-	for (uint32 i = 0; i + delimiter.size() <= text.size(); ++i) {
+	for (uint32 i = 0; i + delimiter.size() <= terminated.size(); ++i) {
 		bool atDelimiter =
-				!memcmp(text.c_str() + i, delimiter.c_str(), delimiter.size());
+				!memcmp(terminated.c_str() + i, delimiter.c_str(), delimiter.size());
 		if (atDelimiter) {
 			if (--remaining <= 0)
-				return Common::String(text.c_str() + wordStart, i - wordStart);
+				return Common::String(terminated.c_str() + wordStart, i - wordStart);
+			i += delimiter.size() - 1;
+			wordStart = i + 1;
+		}
+	}
+
+	return Common::String();
+}
+
+static Common::String putWord(const Common::String &text, const Common::String &delimiter,
+		int32 wordIndex, const Common::String &replacement) {
+	if (wordIndex < 1)
+		return Common::String();
+
+	if (delimiter.empty()) {
+		const uint32 replaceIndex = static_cast<uint32>(wordIndex - 1);
+		if (replaceIndex > text.size())
+			return Common::String();
+		Common::String result(text.c_str(), replaceIndex);
+		result += replacement;
+		result += Common::String(text.c_str() + replaceIndex, text.size() - replaceIndex);
+		return result;
+	}
+
+	Common::String terminated = text;
+	terminated += delimiter;
+	uint32 wordStart = 0;
+	int32 remaining = wordIndex;
+	for (uint32 i = 0; i + delimiter.size() <= terminated.size(); ++i) {
+		if (!memcmp(terminated.c_str() + i, delimiter.c_str(), delimiter.size())) {
+			if (--remaining <= 0) {
+				Common::String result(terminated.c_str(), wordStart);
+				result += replacement;
+				result += Common::String(terminated.c_str() + i, terminated.size() - i);
+				return result;
+			}
 			i += delimiter.size() - 1;
 			wordStart = i + 1;
 		}
@@ -596,6 +633,12 @@ bool ScriptVM::callCoreMethod(uint16 opcode, const Common::Array<Value> &args, V
 		return true;
 	case Script::kMethodStringLength: // stringlength(str) -> FUN_004373e0
 		result = Value::makeInt(args.empty() ? 0 : args[0].strValue.size());
+		return true;
+	case Script::kMethodPutWord: // putword(str, delimiter, index, value) -> FUN_00437450
+		result = Value::makeString(putWord(args.size() > 0 ? args[0].strValue : Common::String(),
+				args.size() > 1 ? args[1].strValue : Common::String(),
+				args.size() > 2 ? args[2].intValue : 0,
+				args.size() > 3 ? args[3].strValue : Common::String()));
 		return true;
 	default:
 		return false;

@@ -248,6 +248,7 @@ public:
 		kMethodCurrentSet       = 0x4E55,
 		kMethodFindWord         = 0x4E56,
 		kMethodStringLength     = 0x4E58,
+		kMethodPutWord          = 0x4E59,
 		kMethodOptionKey        = 0x4E5A,
 		kMethodCalcVectX        = 0x4E5D,
 		kMethodCalcVectY        = 0x4E5E,
