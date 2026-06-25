@@ -66,6 +66,14 @@ static bool shouldLogEnigmaVariable(const Common::String &key) {
 			key == "countdial";
 }
 
+static bool shouldLogEnigmaDispatch(const Common::String &name) {
+	return name.equalsIgnoreCase("checkey") ||
+			name.equalsIgnoreCase("advancedial") ||
+			name.equalsIgnoreCase("dialset") ||
+			name.equalsIgnoreCase("goodkey") ||
+			name.equalsIgnoreCase("badkey");
+}
+
 static int32 stringToNum(const Common::String &text) {
 	return static_cast<int32>(strtol(text.c_str(), nullptr, 10));
 }
@@ -758,6 +766,20 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 		*handled = false;
 	Value result;
 	const bool logTransitionDispatch = shouldLogTransitionDispatch(name);
+	const bool logEnigmaDispatch = shouldLogEnigmaDispatch(name) ||
+			((name.equalsIgnoreCase("keydown") || name.equalsIgnoreCase("keyrepeat")) &&
+					_ctxSelf.equalsIgnoreCase("enigma.stg"));
+
+	if (logEnigmaDispatch) {
+		Common::String argText;
+		for (uint32 i = 0; i < args.size(); ++i) {
+			if (i)
+				argText += ", ";
+			argText += args[i].toString();
+		}
+		debug(1, "Cyberflix: Enigma script %s(%s) ctx self='%s' prop='%s'",
+				name.c_str(), argText.c_str(), _ctxSelf.c_str(), _ctxProp.c_str());
+	}
 
 	if (_callDepth >= 64) { // TI.EXE has no explicit guard; protect the engine
 		warning("Cyberflix: script call depth overflow at '%s'", name.c_str());
@@ -778,7 +800,7 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 			_locals.back()[def->params[i]] = (i < args.size()) ? args[i] : Value();
 
 		_callDepth++;
-		RunResult rr = runBody(*lib, def->bodyStart, result, 100000);
+		RunResult rr = runBody(*lib, def->bodyStart, result, 0);
 		_callDepth--;
 		_locals.pop_back();
 
@@ -814,7 +836,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 	uint32 whileBase = _whileStack.size();
 	uint32 forBase = _forStack.size();
 
-	while (pc < count && executed < maxSteps) {
+	while (pc < count && (maxSteps == 0 || executed < maxSteps)) {
 		uint32 here = pc;
 		uint16 op = script.getInstruction(pc).opcode;
 
@@ -1136,6 +1158,8 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 done:
 	_whileStack.resize(whileBase);
 	_forStack.resize(forBase);
+	if (pc < count && maxSteps != 0)
+		warning("Cyberflix: script body stopped after %u statements at pc %u", maxSteps, pc);
 	return kRunDone;
 }
 

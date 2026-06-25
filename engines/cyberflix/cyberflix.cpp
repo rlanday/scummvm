@@ -425,6 +425,7 @@ bool CyberflixEngine::optionKey() {
 
 bool CyberflixEngine::pollInputStateEvents() {
 	const Common::Point oldMouse = _eventMan->getMousePos();
+	Common::Array<Common::Event> deferred;
 	Common::Event event;
 	bool sawMouseButtonEvent = false;
 
@@ -447,9 +448,13 @@ bool CyberflixEngine::pollInputStateEvents() {
 			quitGame();
 			return false;
 		default:
+			deferred.push_back(event);
 			break;
 		}
 	}
+
+	for (uint i = 0; i < deferred.size(); ++i)
+		_eventMan->pushEvent(deferred[i]);
 
 	const Common::Point newMouse = _eventMan->getMousePos();
 	if (oldMouse.x != newMouse.x || oldMouse.y != newMouse.y) {
