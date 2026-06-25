@@ -1166,7 +1166,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 done:
 	_whileStack.resize(whileBase);
 	_forStack.resize(forBase);
-	if (pc < count && maxSteps != 0)
+	if (pc < count && maxSteps != 0 && executed >= maxSteps)
 		warning("Cyberflix: script body stopped after %u statements at pc %u", maxSteps, pc);
 	return kRunDone;
 }
