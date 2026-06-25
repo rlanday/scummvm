@@ -239,7 +239,10 @@ bool SdlGraphicsManager::showMouse(bool visible) {
 		// instead
 		int x, y;
 		getMouseState(&x, &y);
-		if (!_activeArea.drawRect.contains(Common::Point(x, y))) {
+		const float dpiScale = _window->getSdlDpiScalingFactor();
+		const Common::Point mouse(static_cast<int>(x * dpiScale + 0.5f),
+				static_cast<int>(y * dpiScale + 0.5f));
+		if (!_activeArea.drawRect.contains(mouse)) {
 			showCursor = true;
 		}
 	}
