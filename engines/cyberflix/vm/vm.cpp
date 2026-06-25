@@ -60,6 +60,12 @@ static bool shouldLogTransitionDispatch(const Common::String &name) {
 			name.equalsIgnoreCase("closeflat");
 }
 
+static bool shouldLogEnigmaVariable(const Common::String &key) {
+	return key == "dialmess" ||
+			key == "goodmess" ||
+			key == "countdial";
+}
+
 static int32 stringToNum(const Common::String &text) {
 	return static_cast<int32>(strtol(text.c_str(), nullptr, 10));
 }
@@ -183,8 +189,16 @@ void ScriptVM::setVar(const Common::String &name, const Value &v) {
 	Common::String key = name;
 	key.toLowercase();
 	if (!_locals.empty() && _locals.back().contains(key)) {
+		if (shouldLogEnigmaVariable(key))
+			debug(1, "Cyberflix: Enigma var %s local %s -> %s",
+					key.c_str(), _locals.back()[key].toString().c_str(), v.toString().c_str());
 		_locals.back()[key] = v;
 		return;
+	}
+	if (shouldLogEnigmaVariable(key)) {
+		Common::String oldValue = _vars.contains(key) ? _vars[key].toString() : Common::String("<unset>");
+		debug(1, "Cyberflix: Enigma var %s global %s -> %s",
+				key.c_str(), oldValue.c_str(), v.toString().c_str());
 	}
 	_vars[key] = v;
 }

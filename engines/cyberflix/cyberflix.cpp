@@ -424,8 +424,38 @@ bool CyberflixEngine::optionKey() {
 }
 
 bool CyberflixEngine::pollInputStateEvents() {
-	if (pumpCursorMotionEvents())
+	const Common::Point oldMouse = _eventMan->getMousePos();
+	Common::Event event;
+	bool sawMouseButtonEvent = false;
+
+	while (!sawMouseButtonEvent && _eventMan->pollEvent(event)) {
+		switch (event.type) {
+		case Common::EVENT_MOUSEMOVE:
+			break;
+		case Common::EVENT_LBUTTONDOWN:
+		case Common::EVENT_LBUTTONUP:
+		case Common::EVENT_RBUTTONDOWN:
+		case Common::EVENT_RBUTTONUP:
+			if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen() &&
+					_stageRuntime.stage()->name().equalsIgnoreCase("enigma.stg"))
+				debug(1, "Cyberflix: Enigma input poll mouse event %d at (%d,%d), buttons=0x%x",
+						event.type, event.mouse.x, event.mouse.y, _eventMan->getButtonState());
+			sawMouseButtonEvent = true;
+			break;
+		case Common::EVENT_QUIT:
+		case Common::EVENT_RETURN_TO_LAUNCHER:
+			quitGame();
+			return false;
+		default:
+			break;
+		}
+	}
+
+	const Common::Point newMouse = _eventMan->getMousePos();
+	if (oldMouse.x != newMouse.x || oldMouse.y != newMouse.y) {
+		_cursorPresentationDirty = true;
 		presentCursorIfDirty();
+	}
 	return !shouldQuit();
 }
 
@@ -706,10 +736,19 @@ Common::Error CyberflixEngine::run() {
 					break;
 				}
 				if (!key.empty()) {
+					if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen() &&
+							_stageRuntime.stage()->name().equalsIgnoreCase("enigma.stg"))
+						debug(1, "Cyberflix: Enigma key event %s key='%s' ascii=%d keycode=%d flags=0x%x",
+								event.kbdRepeat ? "keyrepeat" : "keydown", key.c_str(),
+								event.kbd.ascii, event.kbd.keycode, event.kbd.flags);
 					Common::Array<Value> args;
 					args.push_back(Value::makeString(key));
 					bool handled = false;
 					_vm.callFunction(event.kbdRepeat ? "keyrepeat" : "keydown", args, &handled);
+					if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen() &&
+							_stageRuntime.stage()->name().equalsIgnoreCase("enigma.stg"))
+						debug(1, "Cyberflix: Enigma key event handled=%s",
+								handled ? "true" : "false");
 					scriptEventHandled = true;
 					if (!handled)
 						warning("Cyberflix: boot script has no %s handler",

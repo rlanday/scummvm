@@ -331,13 +331,28 @@ static bool shouldLogInterfaceProp(const Common::String &name) {
 			name.equalsIgnoreCase("invenhelp");
 }
 
+static bool shouldLogEnigmaProp(const Common::String &name) {
+	return name.equalsIgnoreCase("dial1") ||
+			name.equalsIgnoreCase("dial2") ||
+			name.equalsIgnoreCase("dial3") ||
+			name.equalsIgnoreCase("dial4") ||
+			name.equalsIgnoreCase("zeitgram") ||
+			name.equalsIgnoreCase("enigsw") ||
+			name.equalsIgnoreCase("enigswlight") ||
+			name.equalsIgnoreCase("enigwirer") ||
+			name.equalsIgnoreCase("enigwireg") ||
+			name.equalsIgnoreCase("enigdecode") ||
+			name.equalsIgnoreCase("enigmess") ||
+			name.equalsIgnoreCase("reset");
+}
+
 bool PropRuntime::propVisible(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
 		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
 		return false;
 	}
-	if (shouldLogInterfaceProp(name))
+	if (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name))
 		debug(1, "Cyberflix: propvisible('%s') -> %s", name.c_str(),
 				prop->visible ? "true" : "false");
 	return prop->visible;
@@ -350,7 +365,7 @@ void PropRuntime::propVisible(const Common::String &name, bool visible) {
 		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
 		return;
 	}
-	if (shouldLogInterfaceProp(name))
+	if (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name))
 		debug(1, "Cyberflix: propvisible('%s', %s) old=%s", name.c_str(),
 				visible ? "true" : "false", prop->visible ? "true" : "false");
 	if (prop->visible != visible) {
@@ -367,7 +382,7 @@ Common::String PropRuntime::propView(const Common::String &name) {
 		warning("Cyberflix: propview('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
-	if (shouldLogInterfaceProp(name))
+	if (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name))
 		debug(1, "Cyberflix: propview('%s') -> '%s'", name.c_str(),
 				prop->shapeName.c_str());
 	return prop->shapeName;
@@ -389,7 +404,7 @@ void PropRuntime::propView(const Common::String &name, const Common::String &sha
 	}
 	Common::String key = shape;
 	key.toLowercase();
-	if (shouldLogInterfaceProp(name))
+	if (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name))
 		debug(1, "Cyberflix: propview('%s', '%s') old='%s'", name.c_str(),
 				key.c_str(), prop->shapeName.c_str());
 	uint16 newPoseIndex = pose.poseCount ? pose.poseCount - 1 : 0;
@@ -529,6 +544,8 @@ int PropRuntime::getPropDeg(const Common::String &name) {
 		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
 		return 0;
 	}
+	if (shouldLogEnigmaProp(name))
+		debug(1, "Cyberflix: propdeg('%s') -> %d", name.c_str(), prop->angle);
 	return prop->angle;
 }
 
@@ -539,6 +556,9 @@ int PropRuntime::setPropDeg(const Common::String &name, int newDeg) {
 		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
 		return 0;
 	}
+	if (shouldLogEnigmaProp(name))
+		debug(1, "Cyberflix: propdeg('%s', %d) old=%d",
+				name.c_str(), newDeg & 0xff, prop->angle);
 	if (prop->angle != static_cast<int16>(newDeg & 0xff)) {
 		Common::Rect oldRect;
 		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
