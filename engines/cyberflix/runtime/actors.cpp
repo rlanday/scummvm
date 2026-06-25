@@ -58,23 +58,35 @@ static CurrentWorldCameraResult currentWorldCamera(CyberflixEngine &engine) {
 	return result;
 }
 
+static const char *const kExtraBaseActorNames[] = {
+	"bruce1",
+	"jim1",
+	"jay1",
+	"brown1",
+	"paul1",
+	"ani1",
+	"molly1",
+	"life1"
+};
+
+static bool isExtraBaseActorName(const Common::String &name) {
+	Common::String key = name;
+	key.toLowercase();
+	for (uint i = 0; i < ARRAYSIZE(kExtraBaseActorNames); ++i)
+		if (key == kExtraBaseActorNames[i])
+			return true;
+	return false;
+}
+
 static bool parseGeneratedExtraActorName(const Common::String &name, Common::String &source,
 		Common::String &where) {
 	Common::String key = name;
 	key.toLowercase();
 
-	static const char *const bases[] = {
-		"bruce1",
-		"jim1",
-		"jay1",
-		"brown1",
-		"paul1",
-		"ani1",
-		"molly1"
-	};
-
-	for (uint i = 0; i < ARRAYSIZE(bases); ++i) {
-		const char *base = bases[i];
+	for (uint i = 0; i < ARRAYSIZE(kExtraBaseActorNames); ++i) {
+		const char *base = kExtraBaseActorNames[i];
+		if (!strcmp(base, "life1"))
+			continue;
 		const uint len = strlen(base);
 		if (key.size() <= len + 1 || strncmp(key.c_str(), base, len))
 			continue;
@@ -135,6 +147,21 @@ ActorRuntime::ActorRef ActorRuntime::findActorRef(const Common::String &name) co
 		}
 	}
 	return ref;
+}
+
+bool ActorRuntime::recoverExtraBaseActor(CyberflixEngine &engine, const Common::String &name) {
+	if (!isExtraBaseActorName(name))
+		return false;
+
+	if (!findCastShared("extra.cst"))
+		openCastFile(engine, "extra.cst");
+
+	if (!findActorRef(name).actor)
+		return false;
+
+	debug(1, "Cyberflix: recovering extra base actor '%s' by opening extra.cst",
+			name.c_str());
+	return true;
 }
 
 bool ActorRuntime::recoverGeneratedExtraActor(CyberflixEngine &engine, const Common::String &name) {
@@ -309,7 +336,7 @@ void ActorRuntime::sendToActor(CyberflixEngine &engine, const Common::String &ac
 			message.c_str(), args.size());
 	ActorRef ref = findActorRef(actorName);
 	if (!ref.actor) {
-		if (recoverGeneratedExtraActor(engine, actorName))
+		if (recoverExtraBaseActor(engine, actorName) || recoverGeneratedExtraActor(engine, actorName))
 			ref = findActorRef(actorName);
 	}
 	if (!ref.actor) {
@@ -329,7 +356,7 @@ Value ActorRuntime::sendToActorFx(CyberflixEngine &engine, const Common::String 
 			message.c_str(), args.size());
 	ActorRef ref = findActorRef(actorName);
 	if (!ref.actor) {
-		if (recoverGeneratedExtraActor(engine, actorName))
+		if (recoverExtraBaseActor(engine, actorName) || recoverGeneratedExtraActor(engine, actorName))
 			ref = findActorRef(actorName);
 	}
 	if (!ref.actor) {
