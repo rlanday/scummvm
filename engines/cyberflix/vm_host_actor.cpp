@@ -159,6 +159,15 @@ void CyberflixActorVMHost::walkToStar(const Common::String &name, const Common::
 	engine().actorRuntime().walkToStar(engine(), name, star);
 }
 
+void CyberflixActorVMHost::walkOnPath(const Common::String &name, const Common::String &path,
+		const Common::String &dest) {
+	engine().actorRuntime().walkOnPath(engine(), name, path, dest);
+}
+
+void CyberflixActorVMHost::walkToXYZ(const Common::String &name, int x, int y, int z) {
+	engine().actorRuntime().walkToXYZ(engine(), name, x, y, z);
+}
+
 void CyberflixActorVMHost::stopWalk(const Common::String &name) {
 	engine().actorRuntime().stopWalk(name);
 }

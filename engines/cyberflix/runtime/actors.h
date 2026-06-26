@@ -85,6 +85,9 @@ public:
 	void actorTurn(const Common::String &name, int turn);
 	void turnToDeg(CyberflixEngine &engine, const Common::String &name, int deg);
 	void walkToStar(CyberflixEngine &engine, const Common::String &name, const Common::String &star);
+	void walkOnPath(CyberflixEngine &engine, const Common::String &name, const Common::String &path,
+			const Common::String &dest);
+	void walkToXYZ(CyberflixEngine &engine, const Common::String &name, int x, int y, int z);
 	void stopWalk(const Common::String &name);
 	bool isWalk(const Common::String &name) const;
 	Common::String walkDest(const Common::String &name) const;
@@ -101,6 +104,7 @@ private:
 
 	int findWalkRecord(const Common::String &name) const;
 	void clearWalkRecord(const Common::String &name);
+	void dispatchWalkComplete(CyberflixEngine &engine, const Common::String &name);
 	bool recoverExtraBaseActor(CyberflixEngine &engine, const Common::String &name);
 	bool recoverGeneratedExtraActor(CyberflixEngine &engine, const Common::String &name);
 

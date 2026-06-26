@@ -471,6 +471,8 @@ public:
 	virtual void actorTurn(const Common::String &name, int turn) {}
 	virtual void turnToDeg(const Common::String &name, int deg) {}
 	virtual void walkToStar(const Common::String &name, const Common::String &star) {}
+	virtual void walkOnPath(const Common::String &name, const Common::String &path, const Common::String &dest) {}
+	virtual void walkToXYZ(const Common::String &name, int x, int y, int z) {}
 	virtual void stopWalk(const Common::String &name) {}
 	virtual bool isWalk(const Common::String &name) { return false; }
 	virtual Common::String walkDest(const Common::String &name) { return "None"; }

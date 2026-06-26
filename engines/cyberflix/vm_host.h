@@ -180,6 +180,8 @@ public:
 	void actorTurn(const Common::String &name, int turn) override;
 	void turnToDeg(const Common::String &name, int deg) override;
 	void walkToStar(const Common::String &name, const Common::String &star) override;
+	void walkOnPath(const Common::String &name, const Common::String &path, const Common::String &dest) override;
+	void walkToXYZ(const Common::String &name, int x, int y, int z) override;
 	void stopWalk(const Common::String &name) override;
 	bool isWalk(const Common::String &name) override;
 	Common::String walkDest(const Common::String &name) override;

@@ -178,6 +178,8 @@ public:
 		kMethodNoteDialog       = 0x2F2F,
 		kMethodDrawString       = 0x2F30,
 		kMethodSendToBoot       = 0x2F31,
+		kMethodWalkOnPath       = 0x2F44,
+		kMethodWalkToXYZ        = 0x2F45,
 		kMethodActorVisible     = 0x3E81,
 		kMethodActorDeg         = 0x3E82,
 		kMethodActorXYZ         = 0x3E83,

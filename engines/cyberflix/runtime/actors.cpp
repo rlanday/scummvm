@@ -127,6 +127,14 @@ void ActorRuntime::clearWalkRecord(const Common::String &name) {
 		_walks.remove_at(static_cast<uint32>(index));
 }
 
+void ActorRuntime::dispatchWalkComplete(CyberflixEngine &engine, const Common::String &name) {
+	// Native movement service FUN_004250b0 clears the walk slot and dispatches
+	// "<actor>, endwalk()" when queued walktostar/walktoxyz/walkonpath motion
+	// finishes. Our temporary immediate-walk subset must still send that
+	// callback so authored locks such as B-70 Georgia's lockevents are released.
+	sendToActor(engine, name, "endwalk", Common::Array<Value>());
+}
+
 Common::SharedPtr<Cast> ActorRuntime::findCastShared(const Common::String &name) const {
 	Common::String key = name;
 	key.toLowercase();
@@ -682,10 +690,42 @@ void ActorRuntime::walkToStar(CyberflixEngine &engine, const Common::String &nam
 	// Native queues a 16-slot actor walk record (FUN_00424410 -> FUN_004243b0)
 	// and movement service FUN_004250b0 later advances it. Until the full path
 	// system exists, resolve the destination immediately so authored scripts do
-	// not block forever in while(iswalk(actor)) wait loops.
+	// not block forever in while(iswalk(actor)) wait loops, then emit the native
+	// completion callback that those scripts use for cleanup.
 	clearWalkRecord(name);
 	Common::String dest = star;
 	setActorStar(engine, name, dest);
+	dispatchWalkComplete(engine, name);
+}
+
+void ActorRuntime::walkOnPath(CyberflixEngine &engine, const Common::String &name,
+		const Common::String &, const Common::String &dest) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: walkonpath('%s'): no such actor", name.c_str());
+		return;
+	}
+
+	// Native FUN_00424640 queues a path walk from the middle argument to the
+	// destination star. Until path interpolation exists, land on the authored
+	// destination immediately but keep the same endwalk() completion signal.
+	clearWalkRecord(name);
+	setActorStar(engine, name, dest);
+	dispatchWalkComplete(engine, name);
+}
+
+void ActorRuntime::walkToXYZ(CyberflixEngine &engine, const Common::String &name, int x, int y, int z) {
+	ActorRef ref = findActorRef(name);
+	if (!ref.actor) {
+		warning("Cyberflix: walktoxyz('%s'): no such actor", name.c_str());
+		return;
+	}
+
+	// Native FUN_00424540 queues coordinate motion and completes through the
+	// same FUN_004250b0 endwalk() path as walktostar.
+	clearWalkRecord(name);
+	actorXYZ(engine, name, x, y, z);
+	dispatchWalkComplete(engine, name);
 }
 
 void ActorRuntime::stopWalk(const Common::String &name) {

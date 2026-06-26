@@ -110,6 +110,15 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 		if (args.size() >= 2)
 			_actorHost->walkToStar(args[0].strValue, args[1].strValue);
 		return true;
+	case Script::kMethodWalkOnPath: // walkonpath(actor, pathStart, destStar) -> FUN_00424640
+		if (args.size() >= 3)
+			_actorHost->walkOnPath(args[0].strValue, args[1].strValue, args[2].strValue);
+		return true;
+	case Script::kMethodWalkToXYZ: // walktoxyz(actor, x, y, z) -> FUN_00424540
+		if (args.size() >= 4)
+			_actorHost->walkToXYZ(args[0].strValue, args[1].intValue,
+					args[2].intValue, args[3].intValue);
+		return true;
 	case Script::kMethodStopWalk: // stopwalk(actor|'all') -> FUN_00423b50
 		_actorHost->stopWalk(args.empty() ? Common::String() : args[0].strValue);
 		return true;
