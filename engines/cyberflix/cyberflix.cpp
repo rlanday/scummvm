@@ -73,6 +73,19 @@ namespace Cyberflix {
 
 static const uint32 kCursorPollIntervalMs = 2;
 
+// Temporary diagnostics for the Grand Staircase pop-in investigation; the
+// warnings are intentionally visible without requiring ScummVM debug flags.
+static bool isGrandStaircaseSetName(const Common::String &name) {
+	return name.equalsIgnoreCase("gstair1") ||
+			name.equalsIgnoreCase("gstair2") ||
+			name.equalsIgnoreCase("gstair3");
+}
+
+static bool isGrandStaircaseActive(const CyberflixEngine &engine) {
+	return engine.setRuntime().set() && engine.setRuntime().set()->isOpen() &&
+			isGrandStaircaseSetName(engine.setRuntime().set()->setName());
+}
+
 CyberflixEngine::CyberflixEngine(OSystem *syst, const CyberflixGameDescription *gameDesc) :
 		Engine(syst), _gameDescription(gameDesc), _rnd("cyberflix"), _console(nullptr) {
 }
@@ -518,6 +531,10 @@ bool CyberflixEngine::delayMillisWithCursorUpdates(uint32 delayMillis) {
 
 void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String &target,
 		const Common::String &message, int delay) {
+	if (isGrandStaircaseActive(*this) && kind.equalsIgnoreCase("actor"))
+		warning("Cyberflix: GSTAIR diag: t=%u makeloop actor target=%s message=%s delay=%d tick=%d paletteBlack=%d dirty=%d",
+				_system->getMillis(), target.c_str(), message.c_str(), delay,
+				tick(), paletteIsBlack() ? 1 : 0, propRuntime().dirty() ? 1 : 0);
 	_loopRuntime.makeLoop(kind, target, message, delay);
 }
 

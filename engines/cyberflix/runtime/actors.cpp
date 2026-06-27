@@ -106,6 +106,42 @@ static bool parseGeneratedExtraActorName(const Common::String &name, Common::Str
 	return false;
 }
 
+// Temporary diagnostics for the Grand Staircase pop-in investigation; these
+// track when EXTRA.CST actors are created, posed, and later touched by loops.
+static bool isGrandStaircaseSetName(const Common::String &name) {
+	return name.equalsIgnoreCase("gstair1") ||
+			name.equalsIgnoreCase("gstair2") ||
+			name.equalsIgnoreCase("gstair3");
+}
+
+static bool isGrandStaircaseActive(CyberflixEngine &engine) {
+	return engine.setRuntime().set() && engine.setRuntime().set()->isOpen() &&
+			isGrandStaircaseSetName(engine.setRuntime().set()->setName());
+}
+
+static bool isExtraDiagnosticActorName(const Common::String &name) {
+	Common::String sourceName;
+	Common::String where;
+	return isExtraBaseActorName(name) || parseGeneratedExtraActorName(name, sourceName, where);
+}
+
+static int countVisibleActorsInCurrentSet(CyberflixEngine &engine) {
+	if (!engine.setRuntime().set() || !engine.setRuntime().set()->isOpen())
+		return 0;
+
+	const Common::String &setName = engine.setRuntime().set()->setName();
+	int count = 0;
+	const Common::Array<Common::SharedPtr<Cast> > &casts = engine.actorRuntime().casts();
+	for (uint32 c = 0; c < casts.size(); ++c) {
+		for (uint32 i = 0; i < casts[c]->actorCount(); ++i) {
+			const Cast::Actor &actor = casts[c]->actor(i);
+			if (actor.visible && actor.setName.equalsIgnoreCase(setName))
+				++count;
+		}
+	}
+	return count;
+}
+
 int ActorRuntime::findWalkRecord(const Common::String &name) const {
 	Common::String key = name;
 	key.toLowercase();
@@ -274,6 +310,10 @@ void ActorRuntime::openCastFile(CyberflixEngine &engine, const Common::String &n
 	_casts.push_back(cast);
 	refreshActorStarPositions(engine);
 	engine._propRuntime.setDirty(true);
+	if (key == "extra.cst" && isGrandStaircaseActive(engine))
+		warning("Cyberflix: GSTAIR diag: t=%u opened extra.cst actors=%u visibleInSet=%d dirty=1 paletteBlack=%d",
+				engine._system->getMillis(), cast->actorCount(),
+				countVisibleActorsInCurrentSet(engine), engine.paletteIsBlack() ? 1 : 0);
 }
 
 void ActorRuntime::closeCastFile(CyberflixEngine &engine, const Common::String &name) {
@@ -309,6 +349,10 @@ void ActorRuntime::actorInstance(CyberflixEngine &engine, const Common::String &
 		debug(1, "Cyberflix: actorinstance('%s', '%s')", source.c_str(), newName.c_str());
 		refreshActorStarPositions(engine);
 		engine._propRuntime.setDirty(true);
+		if (isGrandStaircaseActive(engine) && isExtraDiagnosticActorName(newName))
+			warning("Cyberflix: GSTAIR diag: t=%u actorinstance source=%s new=%s visibleInSet=%d dirty=1 paletteBlack=%d",
+					engine._system->getMillis(), source.c_str(), newName.c_str(),
+					countVisibleActorsInCurrentSet(engine), engine.paletteIsBlack() ? 1 : 0);
 	}
 }
 
@@ -316,6 +360,12 @@ void ActorRuntime::sendToCast(CyberflixEngine &engine, const Common::String &cas
 		const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtocast('%s') -> %s(%u args)", castName.c_str(),
 			message.c_str(), args.size());
+	const bool diag = castName.equalsIgnoreCase("extra.cst") && isGrandStaircaseActive(engine);
+	const uint32 startMs = diag ? engine._system->getMillis() : 0;
+	if (diag)
+		warning("Cyberflix: GSTAIR diag: t=%u sendtocast extra.cst -> %s(%u) begin visibleInSet=%d dirty=%d paletteBlack=%d",
+				startMs, message.c_str(), args.size(), countVisibleActorsInCurrentSet(engine),
+				engine.propRuntime().dirty() ? 1 : 0, engine.paletteIsBlack() ? 1 : 0);
 	Common::SharedPtr<Cast> cast = findCastShared(castName);
 	if (!cast) {
 		warning("Cyberflix: sendtocast('%s'): cast not open", castName.c_str());
@@ -323,6 +373,13 @@ void ActorRuntime::sendToCast(CyberflixEngine &engine, const Common::String &cas
 	}
 	engine.dispatchWithScopes(cast->castScript(), nullptr, cast->name(), Common::String(),
 			message, args, "cast");
+	if (diag) {
+		const uint32 nowMs = engine._system->getMillis();
+		warning("Cyberflix: GSTAIR diag: t=%u sendtocast extra.cst -> %s end elapsed=%u visibleInSet=%d dirty=%d paletteBlack=%d",
+				nowMs, message.c_str(), nowMs - startMs,
+				countVisibleActorsInCurrentSet(engine), engine.propRuntime().dirty() ? 1 : 0,
+				engine.paletteIsBlack() ? 1 : 0);
+	}
 }
 
 Value ActorRuntime::sendToCastFx(CyberflixEngine &engine, const Common::String &castName, const Common::String &message,
@@ -342,6 +399,14 @@ void ActorRuntime::sendToActor(CyberflixEngine &engine, const Common::String &ac
 		const Common::Array<Value> &args) {
 	debug(1, "Cyberflix: sendtoactor('%s') -> %s(%u args)", actorName.c_str(),
 			message.c_str(), args.size());
+	const bool diag = isGrandStaircaseActive(engine) &&
+			(isExtraDiagnosticActorName(actorName) || message.equalsIgnoreCase("setupactor"));
+	const uint32 startMs = diag ? engine._system->getMillis() : 0;
+	if (diag)
+		warning("Cyberflix: GSTAIR diag: t=%u sendtoactor %s -> %s(%u) begin visibleInSet=%d dirty=%d paletteBlack=%d",
+				startMs, actorName.c_str(), message.c_str(), args.size(),
+				countVisibleActorsInCurrentSet(engine), engine.propRuntime().dirty() ? 1 : 0,
+				engine.paletteIsBlack() ? 1 : 0);
 	ActorRef ref = findActorRef(actorName);
 	if (!ref.actor) {
 		if (recoverExtraBaseActor(engine, actorName) || recoverGeneratedExtraActor(engine, actorName))
@@ -356,6 +421,20 @@ void ActorRuntime::sendToActor(CyberflixEngine &engine, const Common::String &ac
 	// Avoid the generic scope-chain array in the sampled actor->puppet cascade.
 	engine.dispatchWithScopes(ref.actor->script.get(), ref.cast->castScript(),
 			ref.actor->name, ref.actor->name, message, args, "actor");
+	if (diag) {
+		ref = findActorRef(actorName);
+		if (ref.actor) {
+			const uint32 nowMs = engine._system->getMillis();
+			warning("Cyberflix: GSTAIR diag: t=%u sendtoactor %s -> %s end elapsed=%u actorState set=%s star=%s pose=%s poseIndex=%u visible=%d xyz=(%d,%d,%d) deg=%d scale=%d zclip=%d visibleInSet=%d dirty=%d paletteBlack=%d",
+					nowMs, actorName.c_str(), message.c_str(), nowMs - startMs,
+					ref.actor->setName.c_str(), ref.actor->sceneName.c_str(),
+					ref.actor->shapeName.c_str(), ref.actor->poseIndex,
+					ref.actor->visible ? 1 : 0, ref.actor->x, ref.actor->y,
+					ref.actor->z, ref.actor->angle, ref.actor->scale, ref.actor->zClip,
+					countVisibleActorsInCurrentSet(engine), engine.propRuntime().dirty() ? 1 : 0,
+					engine.paletteIsBlack() ? 1 : 0);
+		}
+	}
 }
 
 Value ActorRuntime::sendToActorFx(CyberflixEngine &engine, const Common::String &actorName, const Common::String &message,
@@ -413,6 +492,10 @@ bool ActorRuntime::setActorVisible(CyberflixEngine &engine, const Common::String
 	if (ref.actor->visible != visible) {
 		ref.actor->visible = visible;
 		engine._propRuntime.setDirty(true);
+		if (isGrandStaircaseActive(engine) && isExtraDiagnosticActorName(name))
+			warning("Cyberflix: GSTAIR diag: t=%u actorvisible %s -> %d visibleInSet=%d dirty=1 paletteBlack=%d",
+					engine._system->getMillis(), name.c_str(), visible ? 1 : 0,
+					countVisibleActorsInCurrentSet(engine), engine.paletteIsBlack() ? 1 : 0);
 	}
 	return ref.actor->visible;
 }
@@ -437,6 +520,10 @@ Common::String ActorRuntime::setActorSet(CyberflixEngine &engine, const Common::
 	if (ref.actor->setName != key) {
 		ref.actor->setName = key;
 		engine._propRuntime.setDirty(true);
+		if (isGrandStaircaseActive(engine) && isExtraDiagnosticActorName(name))
+			warning("Cyberflix: GSTAIR diag: t=%u actorset %s -> %s visibleInSet=%d dirty=1 paletteBlack=%d",
+					engine._system->getMillis(), name.c_str(), key.c_str(),
+					countVisibleActorsInCurrentSet(engine), engine.paletteIsBlack() ? 1 : 0);
 	}
 	return ref.actor->setName;
 }
@@ -462,6 +549,10 @@ Common::String ActorRuntime::setActorStar(CyberflixEngine &engine, const Common:
 		ref.actor->sceneName = key;
 		ref.actor->mode = 1;
 		engine._propRuntime.setDirty(true);
+		if (isGrandStaircaseActive(engine) && isExtraDiagnosticActorName(name))
+			warning("Cyberflix: GSTAIR diag: t=%u actorstar %s -> %s visibleInSet=%d dirty=1 paletteBlack=%d",
+					engine._system->getMillis(), name.c_str(), key.c_str(),
+					countVisibleActorsInCurrentSet(engine), engine.paletteIsBlack() ? 1 : 0);
 	}
 	resolveActorStar(engine, *ref.actor);
 	return ref.actor->sceneName;
@@ -488,6 +579,10 @@ Common::String ActorRuntime::setActorPose(CyberflixEngine &engine, const Common:
 		ref.actor->shapeName = key;
 		ref.actor->poseIndex = 0;
 		engine._propRuntime.setDirty(true);
+		if (isGrandStaircaseActive(engine) && isExtraDiagnosticActorName(name))
+			warning("Cyberflix: GSTAIR diag: t=%u actorpose %s -> %s poseIndex=0 visibleInSet=%d dirty=1 paletteBlack=%d",
+					engine._system->getMillis(), name.c_str(), key.c_str(),
+					countVisibleActorsInCurrentSet(engine), engine.paletteIsBlack() ? 1 : 0);
 	}
 	return ref.actor->shapeName;
 }
@@ -505,6 +600,10 @@ void ActorRuntime::actorXYZ(CyberflixEngine &engine, const Common::String &name,
 		ref.actor->z = static_cast<int16>(z);
 		ref.actor->mode = 1;
 		engine._propRuntime.setDirty(true);
+		if (isGrandStaircaseActive(engine) && isExtraDiagnosticActorName(name))
+			warning("Cyberflix: GSTAIR diag: t=%u actorxyz %s -> (%d,%d,%d) visibleInSet=%d dirty=1 paletteBlack=%d",
+					engine._system->getMillis(), name.c_str(), x, y, z,
+					countVisibleActorsInCurrentSet(engine), engine.paletteIsBlack() ? 1 : 0);
 	}
 }
 

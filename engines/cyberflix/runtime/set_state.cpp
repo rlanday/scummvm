@@ -21,12 +21,38 @@
 
 #include "common/debug.h"
 
+#include "cyberflix/cast.h"
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/resource_helpers.h"
 #include "cyberflix/set.h"
 #include "cyberflix/stage.h"
 
 namespace Cyberflix {
+
+// Temporary diagnostics for the Grand Staircase pop-in investigation; these
+// bracket the native opensetfile/openset/render/openscene sequence.
+static bool isGrandStaircaseSetName(const Common::String &name) {
+	return name.equalsIgnoreCase("gstair1") ||
+			name.equalsIgnoreCase("gstair2") ||
+			name.equalsIgnoreCase("gstair3");
+}
+
+static int countVisibleActorsInCurrentSet(CyberflixEngine &engine) {
+	if (!engine.setRuntime().set() || !engine.setRuntime().set()->isOpen())
+		return 0;
+
+	const Common::String &setName = engine.setRuntime().set()->setName();
+	int count = 0;
+	const Common::Array<Common::SharedPtr<Cast> > &casts = engine.actorRuntime().casts();
+	for (uint32 c = 0; c < casts.size(); ++c) {
+		for (uint32 i = 0; i < casts[c]->actorCount(); ++i) {
+			const Cast::Actor &actor = casts[c]->actor(i);
+			if (actor.visible && actor.setName.equalsIgnoreCase(setName))
+				++count;
+		}
+	}
+	return count;
+}
 
 void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name,
 		const Common::String &sceneName, const Common::String &viewName) {
@@ -51,6 +77,12 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 		return;
 	}
 	set().reset(newSet.release());
+	const bool diag = isGrandStaircaseSetName(set()->setName());
+	const uint32 startMs = diag ? engine._system->getMillis() : 0;
+	if (diag)
+		warning("Cyberflix: GSTAIR diag: t=%u opensetfile begin name=%s set=%s requestedScene=%s requestedView=%s paletteBlack=%d",
+				startMs, name.c_str(), set()->setName().c_str(),
+				sceneName.c_str(), viewName.c_str(), engine.paletteIsBlack() ? 1 : 0);
 	this->scene() = -1;
 	table() = 0;
 	angle() = 0;
@@ -78,6 +110,11 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 	Common::Array<Value> noArgs;
 	Common::String openedName = set()->setName();
 	engine.dispatchSetMessage("openset", noArgs);
+	if (diag)
+		warning("Cyberflix: GSTAIR diag: t=%u opensetfile after openset elapsed=%u visibleActors=%d dirty=%d pending=%d paletteBlack=%d",
+				engine._system->getMillis(), engine._system->getMillis() - startMs,
+				countVisibleActorsInCurrentSet(engine), engine.propRuntime().dirty() ? 1 : 0,
+				screenUpdatePending() ? 1 : 0, engine.paletteIsBlack() ? 1 : 0);
 
 	if (set() && set()->setName() == openedName && !useScene.empty()) {
 		int sceneIdx = set()->findScene(useScene);
@@ -118,7 +155,17 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 			}
 		}
 		renderSetScene(engine, sceneIdx, 0, angle, activeView);
+		if (diag)
+			warning("Cyberflix: GSTAIR diag: t=%u opensetfile after initial render elapsed=%u visibleActors=%d dirty=%d pending=%d paletteBlack=%d",
+					engine._system->getMillis(), engine._system->getMillis() - startMs,
+					countVisibleActorsInCurrentSet(engine), engine.propRuntime().dirty() ? 1 : 0,
+					screenUpdatePending() ? 1 : 0, engine.paletteIsBlack() ? 1 : 0);
 		engine.dispatchSceneMessage(static_cast<uint32>(sceneIdx), "openscene", noArgs);
+		if (diag)
+			warning("Cyberflix: GSTAIR diag: t=%u opensetfile end elapsed=%u visibleActors=%d dirty=%d pending=%d paletteBlack=%d",
+					engine._system->getMillis(), engine._system->getMillis() - startMs,
+					countVisibleActorsInCurrentSet(engine), engine.propRuntime().dirty() ? 1 : 0,
+					screenUpdatePending() ? 1 : 0, engine.paletteIsBlack() ? 1 : 0);
 	}
 }
 

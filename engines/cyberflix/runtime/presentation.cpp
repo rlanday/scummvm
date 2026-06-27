@@ -40,6 +40,19 @@
 
 namespace Cyberflix {
 
+// Temporary diagnostics for the Grand Staircase pop-in investigation; these
+// show whether any SET upload remains pending during palette-only fades.
+static bool isGrandStaircaseSetName(const Common::String &name) {
+	return name.equalsIgnoreCase("gstair1") ||
+			name.equalsIgnoreCase("gstair2") ||
+			name.equalsIgnoreCase("gstair3");
+}
+
+static bool isGrandStaircaseActive(const CyberflixEngine &engine) {
+	return engine.setRuntime().set() && engine.setRuntime().set()->isOpen() &&
+			isGrandStaircaseSetName(engine.setRuntime().set()->setName());
+}
+
 // Resolve a clut name the way TI.EXE's registry lookup does (FUN_004470b0):
 // the built-in names "black"/"current", and "set"/"stage"/"puppet" which alias
 // the palette embedded in the currently open file of that kind. Named cluts
@@ -206,7 +219,17 @@ void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool 
 
 	debug(1, "Cyberflix: %s('%s', %d)", toBlack ? "screentoblack" : "blacktoscreen",
 			target.c_str(), steps);
+	if (isGrandStaircaseActive(*this))
+		warning("Cyberflix: GSTAIR diag: t=%u %s('%s', %d) begin pending=%d paletteBlack=%d",
+				_system->getMillis(), toBlack ? "screentoblack" : "blacktoscreen",
+				target.c_str(), steps, setRuntime().screenUpdatePending() ? 1 : 0,
+				paletteIsBlack() ? 1 : 0);
 	fadePaletteSteps(from, to, steps);
+	if (isGrandStaircaseActive(*this))
+		warning("Cyberflix: GSTAIR diag: t=%u %s('%s', %d) end pending=%d paletteBlack=%d",
+				_system->getMillis(), toBlack ? "screentoblack" : "blacktoscreen",
+				target.c_str(), steps, setRuntime().screenUpdatePending() ? 1 : 0,
+				paletteIsBlack() ? 1 : 0);
 }
 
 bool CyberflixEngine::paletteIsBlack() const {
@@ -224,6 +247,10 @@ void CyberflixEngine::fadePaletteSteps(const Palette &from, const Palette &to, i
 			cur[i] = static_cast<byte>((from[i] + (static_cast<int>(to[i]) - static_cast<int>(from[i])) * s / steps));
 		programPalette(cur);
 		_system->updateScreen();
+		if (isGrandStaircaseActive(*this))
+			warning("Cyberflix: GSTAIR diag: t=%u fadePaletteSteps step=%d/%d pending=%d paletteBlack=%d",
+					_system->getMillis(), s, steps, setRuntime().screenUpdatePending() ? 1 : 0,
+					paletteIsBlack() ? 1 : 0);
 		if (s == steps)
 			reachedFinalStep = true;
 		// One step per 60 Hz tick of the original's scaled timer.
@@ -256,6 +283,13 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 		duration = 1;
 	else if (duration > 1000)
 		duration = 1000;
+
+	const bool diag = isGrandStaircaseActive(*this);
+	const uint32 startMs = diag ? _system->getMillis() : 0;
+	if (diag)
+		warning("Cyberflix: GSTAIR diag: t=%u visualeffect(%#x,%d) begin pending=%d dirty=%d paletteBlack=%d",
+				startMs, effect, duration, setRuntime().screenUpdatePending() ? 1 : 0,
+				propRuntime().dirty() ? 1 : 0, paletteIsBlack() ? 1 : 0);
 
 	propRuntime().refreshPropsIfDirty(*this);
 	if (_puppetRuntime.isVisible()) {
@@ -307,6 +341,13 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 	}
 
 	debug(1, "Cyberflix: visualeffect(%#x, %d)", effect, duration);
+	if (diag) {
+		const uint32 nowMs = _system->getMillis();
+		warning("Cyberflix: GSTAIR diag: t=%u visualeffect(%#x,%d) end elapsed=%u pending=%d dirty=%d paletteBlack=%d",
+				nowMs, effect, duration, nowMs - startMs,
+				setRuntime().screenUpdatePending() ? 1 : 0, propRuntime().dirty() ? 1 : 0,
+				paletteIsBlack() ? 1 : 0);
+	}
 }
 
 } // End of namespace Cyberflix
