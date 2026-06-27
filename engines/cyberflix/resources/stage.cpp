@@ -245,6 +245,10 @@ bool Stage::open(const Common::String &name) {
 		parseScriptResource(res.id);
 	}
 
+	// Stage metadata is authoritative for script identity. We first hit this in
+	// BLKJACK.STG: node 0's script resource is referenced from the node table,
+	// but its directory info word is 0x1F44 because it starts with comment
+	// opcodes rather than the usual script tag 0x0FA1.
 	parseScriptResource(_stageScriptId);
 	for (uint32 node = 0; node < _nodeCount; ++node) {
 		const byte *rec = nodeRecord(node);
