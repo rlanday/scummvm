@@ -209,6 +209,7 @@ private:
 	void reassertCursorVisibility();
 	void presentCursorIfDirty();
 	bool delayMillisWithCursorUpdates(uint32 delayMillis);
+	void debugCargoPaintingTimer();
 
 	/**
 	 * Process the global/movie keyboard shortcuts that the original handles
@@ -305,6 +306,8 @@ private:
 	void processScheduledLoops();
 	FramePacingRuntime _framePacingRuntime;
 	int _frameCounter = 0;
+	int _lastCargoPaintingTimerLogBucket = -1;
+	bool _cargoPaintingTimerExpiredLogged = false;
 
 	PathRuntime _pathRuntime;
 

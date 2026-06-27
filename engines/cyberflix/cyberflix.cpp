@@ -72,6 +72,16 @@
 namespace Cyberflix {
 
 static const uint32 kCursorPollIntervalMs = 2;
+static const int kCargoPaintingTimerFrames = 10000;
+static const int kCargoPaintingTimerLogSeconds = 10;
+
+static int getGlobalIntValue(const ScriptVM &vm, const char *name) {
+	Common::String key(name);
+	key.toLowercase();
+	const Common::HashMap<Common::String, Value> &vars = vm.globalVars();
+	Common::HashMap<Common::String, Value>::const_iterator it = vars.find(key);
+	return it == vars.end() ? 0 : it->_value.intValue;
+}
 
 CyberflixEngine::CyberflixEngine(OSystem *syst, const CyberflixGameDescription *gameDesc) :
 		Engine(syst), _gameDescription(gameDesc), _rnd("cyberflix"), _console(nullptr) {
@@ -561,6 +571,7 @@ void CyberflixEngine::forceUpdate() {
 	bool presented = false;
 	processScheduledLoops();
 	_frameCounter++;
+	debugCargoPaintingTimer();
 	if (!_propRuntime.dirty() && isReplacementStage(_stageRuntime.stage()) && propRuntime().hasAnimatedScreenProps())
 		_propRuntime.setDirty(true);
 	propRuntime().refreshPropsIfDirty(*this);
@@ -604,6 +615,49 @@ void CyberflixEngine::forceUpdate() {
 	}
 	_framePacingRuntime.noteFrameTick(tick());
 	debug(2, "Cyberflix: forceupdate()");
+}
+
+void CyberflixEngine::debugCargoPaintingTimer() {
+	if (getGameType() != GType_Titanic)
+		return;
+
+	const int mission = getGlobalIntValue(_vm, "mission");
+	const int phase = getGlobalIntValue(_vm, "phase");
+	const int paintFrame = getGlobalIntValue(_vm, "paintframe");
+	Shop::Prop *painting = _propRuntime.findProp("painting");
+	if (mission != 2 || phase != 0 || paintFrame <= 0 || !painting ||
+			!painting->owner.equalsIgnoreCase("none")) {
+		_lastCargoPaintingTimerLogBucket = -1;
+		_cargoPaintingTimerExpiredLogged = false;
+		return;
+	}
+
+	int elapsedFrames = _frameCounter - paintFrame;
+	if (elapsedFrames < 0)
+		elapsedFrames = 0;
+	const int remainingFrames = kCargoPaintingTimerFrames - elapsedFrames;
+	if (remainingFrames <= 0) {
+		if (!_cargoPaintingTimerExpiredLogged) {
+			debug(1, "Cyberflix: cargo painting timer expired after %d frames; BINL.SET will give the painting to Hack on the cargo-bin click",
+					elapsedFrames);
+			_cargoPaintingTimerExpiredLogged = true;
+		}
+		return;
+	}
+
+	_cargoPaintingTimerExpiredLogged = false;
+	const int frameRate = MAX(1, _framePacingRuntime.getFrameRate());
+	const int remainingSeconds = (remainingFrames * frameRate + 59) / 60;
+	const int logBucket = (remainingSeconds + kCargoPaintingTimerLogSeconds - 1) / kCargoPaintingTimerLogSeconds;
+	if (logBucket == _lastCargoPaintingTimerLogBucket)
+		return;
+
+	_lastCargoPaintingTimerLogBucket = logBucket;
+	// PENNY1.PUP res6 starts this by advancing mission 1 phase 4: BOOTFILE
+	// records paintframe = frame(). BINL.SET res58 later expires the cargo
+	// painting if frame() - paintframe > 10000 before the player opens the bin.
+	debug(1, "Cyberflix: cargo painting timer remaining about %d:%02d (%d/%d script frames)",
+			remainingSeconds / 60, remainingSeconds % 60, remainingFrames, kCargoPaintingTimerFrames);
 }
 
 Common::Error CyberflixEngine::run() {
