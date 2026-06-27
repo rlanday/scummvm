@@ -41,6 +41,8 @@ public:
 		Common::SharedPtr<Cast::Actor> actor;
 	};
 
+	static bool isGeneratedExtraActorName(const Common::String &name);
+
 	Common::SharedPtr<Cast> findCastShared(const Common::String &name) const;
 	ActorRef findActorRef(const Common::String &name) const;
 	bool resolveActorStar(CyberflixEngine &engine, Cast::Actor &actor);

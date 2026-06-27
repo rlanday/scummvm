@@ -823,12 +823,27 @@ static void restoreCueVolumes(AudioRuntime &audioRuntime, const Common::Array<Cu
 	}
 }
 
-static void restoreLoopState(LoopRuntime &loopRuntime, bool loopsPaused,
+static bool isStaleGeneratedExtraActorLoop(const ActorRuntime &actorRuntime,
+		const LoopRuntime::ScheduledLoop &loop) {
+	// Older ScummVM saves can contain generated EXTRA.CST idle loops that native
+	// closecastfile would have removed with the actor record.
+	return loop.kindId == LoopRuntime::ScheduledLoop::kActor &&
+			loop.message.equalsIgnoreCase("extraidle") &&
+			ActorRuntime::isGeneratedExtraActorName(loop.target) &&
+			!actorRuntime.findActorRef(loop.target).actor;
+}
+
+static void restoreLoopState(LoopRuntime &loopRuntime, const ActorRuntime &actorRuntime,
+		bool removeStaleGeneratedExtraActorLoops, bool loopsPaused,
 		const Common::Array<LoopRuntime::ScheduledLoop> &loopStates,
 		bool cricketsPaused, const Common::Array<LoopRuntime::CricketState> &cricketStates) {
 	loopRuntime.setLoopsPaused(loopsPaused);
-	for (uint i = 0; i < loopStates.size(); ++i)
+	for (uint i = 0; i < loopStates.size(); ++i) {
+		if (removeStaleGeneratedExtraActorLoops &&
+				isStaleGeneratedExtraActorLoop(actorRuntime, loopStates[i]))
+			continue;
 		loopRuntime.restoreLoop(loopStates[i]);
+	}
 
 	loopRuntime.setCricketsPaused(cricketsPaused);
 	for (uint i = 0; i < cricketStates.size(); ++i)
@@ -1266,7 +1281,11 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		// transient one-shot SFX or voice playback buffers.
 	}
 
-	restoreLoopState(_loopRuntime, loopsPaused, loopStates, cricketsPaused, cricketStates);
+	// Empty CAST chunks are older compatibility saves that still rely on the
+	// missing-actor recovery path; only prune impossible loops once actor state is
+	// present and can prove the target actor was not saved.
+	restoreLoopState(_loopRuntime, _actorRuntime, !castStates.empty(), loopsPaused,
+			loopStates, cricketsPaused, cricketStates);
 
 	StageRuntime::Snapshot stageSnapshot;
 	stageSnapshot.stageName = header.stageName;

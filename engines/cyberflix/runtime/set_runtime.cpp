@@ -37,31 +37,6 @@
 
 namespace Cyberflix {
 
-// Temporary diagnostics for the Grand Staircase pop-in investigation; these
-// record each compositor pass and the actors included in that pass.
-static bool isGrandStaircaseSetName(const Common::String &name) {
-	return name.equalsIgnoreCase("gstair1") ||
-			name.equalsIgnoreCase("gstair2") ||
-			name.equalsIgnoreCase("gstair3");
-}
-
-static int countVisibleActorsInCurrentSet(CyberflixEngine &engine) {
-	if (!engine.setRuntime().set() || !engine.setRuntime().set()->isOpen())
-		return 0;
-
-	const Common::String &setName = engine.setRuntime().set()->setName();
-	int count = 0;
-	const Common::Array<Common::SharedPtr<Cast> > &casts = engine.actorRuntime().casts();
-	for (uint32 c = 0; c < casts.size(); ++c) {
-		for (uint32 i = 0; i < casts[c]->actorCount(); ++i) {
-			const Cast::Actor &actor = casts[c]->actor(i);
-			if (actor.visible && actor.setName.equalsIgnoreCase(setName))
-				++count;
-		}
-	}
-	return count;
-}
-
 // sendtoscene(name, message): dispatch the message against [scene script, set
 // script, BOOTFILE res2] for the named scene, without changing the currently
 // rendered scene (TI.EXE FUN_004311e0/FUN_00431200).
@@ -297,14 +272,6 @@ void SetRuntime::renderSetScene(CyberflixEngine &engine, int sceneIdx, int table
 		warning("Cyberflix: renderSetScene with no set open");
 		return;
 	}
-	const bool diag = isGrandStaircaseSetName(set()->setName());
-	const uint32 startMs = diag ? engine._system->getMillis() : 0;
-	if (diag)
-		warning("Cyberflix: GSTAIR diag: t=%u renderSetScene begin set=%s scene=%d table=%d angle=%d viewArg=%s visibleActors=%d dirty=%d pending=%d paletteBlack=%d",
-				startMs, set()->setName().c_str(), sceneIdx, tableIdx, angleIdx,
-				viewName.c_str(), countVisibleActorsInCurrentSet(engine),
-				engine.propRuntime().dirty() ? 1 : 0, screenUpdatePending() ? 1 : 0,
-				engine.paletteIsBlack() ? 1 : 0);
 
 	if (!set()->renderScene(static_cast<uint32>(sceneIdx), static_cast<uint32>(tableIdx), static_cast<uint32>(angleIdx), frameSequence()))
 		return;
@@ -338,13 +305,6 @@ void SetRuntime::renderSetScene(CyberflixEngine &engine, int sceneIdx, int table
 	debug(1, "Cyberflix: rendered set '%s' scene %d '%s' angle %d (%ux%u)",
 			set()->name().c_str(), sceneIdx, set()->sceneName(static_cast<uint32>(sceneIdx)).c_str(),
 			angleIdx, frameSequence().width(), frameSequence().height());
-	if (diag) {
-		const uint32 nowMs = engine._system->getMillis();
-		warning("Cyberflix: GSTAIR diag: t=%u renderSetScene end elapsed=%u activeView=%s visibleActors=%d dirty=%d pending=%d paletteBlack=%d",
-				nowMs, nowMs - startMs, view().c_str(), countVisibleActorsInCurrentSet(engine),
-				engine.propRuntime().dirty() ? 1 : 0, screenUpdatePending() ? 1 : 0,
-				engine.paletteIsBlack() ? 1 : 0);
-	}
 }
 
 void SetRuntime::displaySetFrame(CyberflixEngine &engine, const FrameImage &frame) {
@@ -361,13 +321,6 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		const FrameSequence *depthFrame) {
 	if (!visible() || !set() || !set()->isOpen())
 		return;
-	const bool diag = isGrandStaircaseSetName(set()->setName());
-	const uint32 startMs = diag ? engine._system->getMillis() : 0;
-	if (diag)
-		warning("Cyberflix: GSTAIR diag: t=%u displaySetFrame begin set=%s scene=%d view=%s size=%ux%u visibleActors=%d dirty=%d pending=%d paletteBlack=%d",
-				startMs, set()->setName().c_str(), scene(), view().c_str(), width, height,
-				countVisibleActorsInCurrentSet(engine), engine.propRuntime().dirty() ? 1 : 0,
-				screenUpdatePending() ? 1 : 0, engine.paletteIsBlack() ? 1 : 0);
 	if (engine.puppetRuntime().isVisible()) {
 		screenUpdatePending() = false;
 		engine.propRuntime().setDirty(true);
@@ -422,11 +375,6 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		Common::Array<int16> actorDepths;
 		engine.propRuntime().collectWorldProps(engine, worldDraw, worldShop, worldDepths, camera);
 		engine.actorRuntime().collectWorldActors(engine, actorDraw, actorCast, actorDepths, camera);
-		if (diag)
-			warning("Cyberflix: GSTAIR diag: t=%u displaySetFrame collected worldProps=%u worldActors=%u cameraHeading=%d camera=(%d,%d,%d) viewport=(%d,%d,%d,%d)",
-					engine._system->getMillis(), worldDraw.size(), actorDraw.size(),
-					camera.heading, camera.cameraX, camera.cameraY, camera.cameraZ,
-					camera.viewportLeft, camera.viewportTop, camera.viewportRight, camera.viewportBottom);
 		Common::Rect viewport(camera.viewportLeft, camera.viewportTop,
 				camera.viewportRight, camera.viewportBottom);
 		uint32 propIndex = 0, actorIndex = 0;
@@ -436,16 +384,6 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 			if (drawActor) {
 				Cast::ActorRenderResult rendered = actorCast[actorIndex]->renderWorldActor(*actorDraw[actorIndex],
 						camera, set()->setName());
-				if (diag)
-					warning("Cyberflix: GSTAIR diag: t=%u renderActor[%u/%u] name=%s cast=%s star=%s pose=%s poseIndex=%u visible=%d xyz=(%d,%d,%d) deg=%d scale=%d depth=%d rendered=%d rect=(%d,%d,%d,%d)",
-							engine._system->getMillis(), actorIndex + 1, actorDraw.size(),
-							actorDraw[actorIndex]->name.c_str(), actorCast[actorIndex]->name().c_str(),
-							actorDraw[actorIndex]->sceneName.c_str(), actorDraw[actorIndex]->shapeName.c_str(),
-							actorDraw[actorIndex]->poseIndex, actorDraw[actorIndex]->visible ? 1 : 0,
-							actorDraw[actorIndex]->x, actorDraw[actorIndex]->y, actorDraw[actorIndex]->z,
-							actorDraw[actorIndex]->angle, actorDraw[actorIndex]->scale,
-							actorDepths[actorIndex], rendered.valid ? 1 : 0,
-							rendered.rect.left, rendered.rect.top, rendered.rect.right, rendered.rect.bottom);
 				if (rendered.valid)
 					drawScaledCel(screen, rendered.cel, rendered.rect, viewport, depthFrame, rendered.depthBucket);
 				++actorIndex;
@@ -488,22 +426,11 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 	// implemented. Views are the scene's hotspot lists.
 	if (engine.setGameCursor("CURS.ARROW"))
 		CursorMan.showMouse(true);
-	if (diag) {
-		const uint32 nowMs = engine._system->getMillis();
-		warning("Cyberflix: GSTAIR diag: t=%u displaySetFrame end elapsed=%u visibleActors=%d dirty=%d pending=%d paletteBlack=%d",
-				nowMs, nowMs - startMs, countVisibleActorsInCurrentSet(engine),
-				engine.propRuntime().dirty() ? 1 : 0, screenUpdatePending() ? 1 : 0,
-				engine.paletteIsBlack() ? 1 : 0);
-	}
 }
 
 bool SetRuntime::presentPendingScreenUpdate(CyberflixEngine &engine) {
 	if (!screenUpdatePending())
 		return false;
-	if (set() && set()->isOpen() && isGrandStaircaseSetName(set()->setName()))
-		warning("Cyberflix: GSTAIR diag: t=%u presentPendingScreenUpdate set=%s scene=%d view=%s paletteBlack=%d",
-				engine._system->getMillis(), set()->setName().c_str(), scene(),
-				view().c_str(), engine.paletteIsBlack() ? 1 : 0);
 	engine._system->updateScreen();
 	screenUpdatePending() = false;
 	return true;
