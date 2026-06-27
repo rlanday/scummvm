@@ -265,6 +265,38 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 			setRuntime().advanceSetTransition(*this);
 		else
 			setRuntime().renderSetScene(*this, _setRuntime.scene(), _setRuntime.table(), _setRuntime.angle(), _setRuntime.view());
+		// Room-change scripts hide the expensive destination setup behind a
+		// black palette. BOOTFILE changeset(), for example, does:
+		//
+		//   screentoblack() -> opensetfile()/actor setup -> visualeffect(plain)
+		//   -> blacktoscreen("set")
+		//
+		// In TI.EXE, visualeffect() is the handoff point between "build the new
+		// room" and "reveal the new room": it runs the SET compositor and copies
+		// one complete finished image to the visible surface while the hardware
+		// palette is still black. blacktoscreen("set") then only interpolates the
+		// palette from black to the SET CLUT; it does not redraw the panorama,
+		// re-run actor scripts, or load actors during the fade.
+		//
+		// ScummVM's SET compositor writes that same finished image into the locked
+		// screen surface, but normally leaves the backend upload pending so a burst
+		// of script-driven repaints can collapse to one updateScreen(). If we keep
+		// that optimization across visualeffect(), the final Grand Staircase image
+		// is still pending when blacktoscreen() starts. The first non-black fade
+		// step then becomes both the palette change and the first backend upload of
+		// a room that contains many newly-created EXTRA.CST actors. On slow/heavy
+		// actor compositions this makes the setup work visible as apparent
+		// one-by-one actor pop-in: the player is watching the destination room get
+		// presented instead of watching a palette fade over an already-presented
+		// destination room.
+		//
+		// Presenting here fixes the ordering without inventing new game behavior.
+		// All actor setup and compositing has already happened; this only uploads
+		// the completed pixels while palette index colors are black. Afterward the
+		// pending flag is clear, so blacktoscreen() has no SET image change left to
+		// reveal and can remain the native palette-only fade.
+		if (setRuntime().presentPendingScreenUpdate(*this))
+			_cursorPresentationDirty = false;
 	} else if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) {
 		// visualeffect() reaches the same update/compositor path as forceupdate();
 		// it repaints pixels but native cursor state remains script-controlled.
