@@ -214,6 +214,7 @@ public:
 	void setPropXY(const Common::String &name, int x, int y) override;
 	void propScale(const Common::String &name, int scale) override;
 	void propZClip(const Common::String &name, int dist) override;
+	int getPropDist(const Common::String &name) override;
 	void propDist(const Common::String &name, int dist) override;
 	int getPropDeg(const Common::String &name) override;
 	int setPropDeg(const Common::String &name, int newDeg) override;

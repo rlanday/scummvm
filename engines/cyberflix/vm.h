@@ -547,7 +547,11 @@ public:
 	/** propzclip(name, dist) (0x3eb4 FUN_00428ea0): world z clip distance. */
 	virtual void propZClip(const Common::String &name, int dist) {}
 
-	/** propdist(name, d) (0x3e8d FUN_004295c0): screen-space stacking depth
+	/** propdist(name) getter (0x3e8d FUN_00429670): screen-space depth, or
+	 *  projected world depth if the prop is in SET space. */
+	virtual int getPropDist(const Common::String &name) { return 0; }
+
+	/** propdist(name, d) setter (0x3e8d FUN_004295c0): screen-space stacking depth
 	 *  (only applied when d < 0 and the prop is in screen mode). */
 	virtual void propDist(const Common::String &name, int dist) {}
 

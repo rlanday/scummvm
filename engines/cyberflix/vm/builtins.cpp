@@ -287,9 +287,14 @@ bool ScriptVM::callPropMethod(uint16 opcode, const Common::Array<Value> &args, V
 		if (args.size() >= 2)
 			_interactionHost->propZClip(args[0].strValue, args[1].intValue);
 		return true;
-	case Script::kMethodPropDist: // propdist(name, d) -> FUN_004295c0
-		if (args.size() >= 2)
+	case Script::kMethodPropDist: // propdist(name[, d]) -> FUN_00429670/FUN_004295c0
+		if (args.size() >= 2) {
 			_interactionHost->propDist(args[0].strValue, args[1].intValue);
+		} else if (args.size() == 1) {
+			result = Value::makeInt(_interactionHost->getPropDist(args[0].strValue));
+		} else {
+			result = Value::makeInt(0);
+		}
 		return true;
 	case Script::kMethodPropDeg: // propdeg(name[, deg]) -> FUN_00429730/FUN_00429520
 		if (args.size() >= 2) {

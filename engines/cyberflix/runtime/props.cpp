@@ -24,6 +24,7 @@
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/set.h"
 #include "cyberflix/stage.h"
+#include "cyberflix/runtime/set_helpers.h"
 
 namespace Cyberflix {
 
@@ -556,6 +557,43 @@ void PropRuntime::propZClip(const Common::String &name, int dist) {
 	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 	prop->zClip = dist;
 	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+}
+
+int PropRuntime::getPropDist(CyberflixEngine &engine, const Common::String &name) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propdist('%s'): no such prop", name.c_str());
+		return 0;
+	}
+
+	if (prop->mode == 0)
+		return prop->depth;
+
+	SetRuntime &setRuntime = engine.setRuntime();
+	if (!setRuntime.set() || !setRuntime.set()->isOpen())
+		return 32000;
+
+	bool haveCamera = false;
+	Set::CameraData cameraData;
+	if (setRuntime.transitionType() == kSetTransitionForward) {
+		haveCamera = setRuntime.set()->transitionCameraData(
+				setRuntime.transitionResource(), setRuntime.transitionFrame(), cameraData);
+	} else if (setRuntime.scene() >= 0) {
+		haveCamera = setRuntime.set()->cameraData(static_cast<uint32>(setRuntime.scene()),
+				static_cast<uint32>(setRuntime.table()), static_cast<uint32>(setRuntime.angle()), cameraData);
+	}
+	if (!haveCamera)
+		return 32000;
+
+	Shop::WorldCamera camera;
+	camera = makeWorldCamera(cameraData);
+
+	Shop::PropRenderResult rendered = shop->renderWorldProp(*prop, camera,
+			setRuntime.set()->setName());
+	if (!rendered.valid)
+		return 32000;
+	return rendered.depth;
 }
 
 void PropRuntime::propDist(const Common::String &name, int dist) {

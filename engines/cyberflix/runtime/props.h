@@ -76,6 +76,7 @@ public:
 	void propXYZ(const Common::String &name, int x, int y, int z);
 	void propScale(const Common::String &name, int scale);
 	void propZClip(const Common::String &name, int dist);
+	int getPropDist(CyberflixEngine &engine, const Common::String &name);
 	void propDist(const Common::String &name, int dist);
 	int getPropDeg(const Common::String &name);
 	int setPropDeg(const Common::String &name, int newDeg);

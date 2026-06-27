@@ -95,6 +95,10 @@ void CyberflixPropVMHost::propZClip(const Common::String &name, int dist) {
 	engine().propRuntime().propZClip(name, dist);
 }
 
+int CyberflixPropVMHost::getPropDist(const Common::String &name) {
+	return engine().propRuntime().getPropDist(engine(), name);
+}
+
 void CyberflixPropVMHost::propDist(const Common::String &name, int dist) {
 	engine().propRuntime().propDist(name, dist);
 }
