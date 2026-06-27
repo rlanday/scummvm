@@ -55,6 +55,26 @@ int Stage::resourceIndexById(uint32 id) const {
 	return Cyberflix::resourceIndexById(_archive, id);
 }
 
+bool Stage::parseScriptResource(uint32 id) {
+	if (id == 0)
+		return false;
+	int idx = resourceIndexById(id);
+	if (idx < 0 || static_cast<uint32>(idx) >= _scripts.size())
+		return false;
+	if (_scripts[static_cast<uint32>(idx)])
+		return true;
+
+	Common::ScopedPtr<Common::SeekableReadStream> stream(_archive.createReadStreamForResource(static_cast<uint32>(idx)));
+	Common::SharedPtr<Script> script(new Script());
+	if (stream && script->parse(stream.get())) {
+		_scripts[static_cast<uint32>(idx)] = script;
+		return true;
+	}
+
+	warning("Cyberflix: failed to parse stage '%s' script resource %u", _name.c_str(), id);
+	return false;
+}
+
 Common::String Stage::pascalString(const byte *p) const {
 	return readPascalString(p, _fileData);
 }
@@ -222,12 +242,26 @@ bool Stage::open(const Common::String &name) {
 		const Archive::Resource &res = _archive.getResource(i);
 		if (res.empty || res.info != Script::kScriptInfoTag)
 			continue;
-		Common::ScopedPtr<Common::SeekableReadStream> stream(_archive.createReadStreamForResource(i));
-		Common::SharedPtr<Script> script(new Script());
-		if (stream && script->parse(stream.get()))
-			_scripts[i] = script;
-		else
-			warning("Cyberflix: failed to parse stage '%s' script resource %u", name.c_str(), res.id);
+		parseScriptResource(res.id);
+	}
+
+	parseScriptResource(_stageScriptId);
+	for (uint32 node = 0; node < _nodeCount; ++node) {
+		const byte *rec = nodeRecord(node);
+		if (!rec)
+			continue;
+		parseScriptResource(READ_LE_UINT32(rec + kNodeScriptResOffset));
+
+		uint32 buttonCount = 0, buttonLength = 0;
+		const byte *buttons = buttonTable(node, buttonCount, buttonLength);
+		if (!buttons)
+			continue;
+		for (uint32 button = 0; button < buttonCount; ++button) {
+			const byte *buttonRec = buttons + kButtonRecordsOffset + button * kButtonRecordStride;
+			if (kButtonRecordsOffset + button * kButtonRecordStride + kButtonRecordStride > buttonLength)
+				break;
+			parseScriptResource(READ_LE_UINT32(buttonRec + kButtonScriptOffset));
+		}
 	}
 
 	debug(1, "Cyberflix: opened stage '%s': %ux%u, %u node(s)",

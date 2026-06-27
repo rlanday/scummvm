@@ -156,6 +156,8 @@ private:
 	const byte *buttonRecord(uint32 node, const Common::String &button) const;
 	/** Read the Pascal string at @p p (bounded by the file buffer). */
 	Common::String pascalString(const byte *p) const;
+	/** Parse script resource @p id if it is referenced by stage metadata. */
+	bool parseScriptResource(uint32 id);
 	/** Parsed script resource @p id, or null if missing/not a script. */
 	const Script *scriptById(uint32 id) const;
 

@@ -34,8 +34,11 @@ class SeekableReadStream;
 namespace Cyberflix {
 
 /**
- * Parser for the CyberFlix script resources (directory entries whose @c info
- * tag is 0x0FA1), found in BOOTFILE and in the .STG / .SET containers.
+ * Parser for CyberFlix script resources, found in BOOTFILE and in the .STG /
+ * .SET containers. Most script directory entries carry info tag 0x0FA1, but
+ * stage metadata is authoritative: BLKJACK.STG's node script resource 2 is
+ * referenced from the node table even though its info tag is the leading
+ * comment opcode 0x1F44.
  *
  * A script resource is a flat array of fixed 8-byte instructions followed by a
  * Pascal-string pool. Each instruction is little-endian:
