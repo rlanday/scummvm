@@ -235,6 +235,7 @@ private:
 
 	CursorRuntime _cursorRuntime;
 	bool _cursorPresentationDirty = false;
+	uint32 _lastCursorDebugLogMillis = 0;
 
 	StageRuntime _stageRuntime;
 	SetRuntime _setRuntime;

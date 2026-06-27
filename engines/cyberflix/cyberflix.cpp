@@ -515,7 +515,18 @@ void CyberflixEngine::reassertCursorVisibility() {
 	// SDL may reveal the host cursor after focus/active-area transitions. Room
 	// gameplay presents cursor motion without changing the CyberFlix cursor
 	// resource, so explicitly reapply ScummVM's current software-cursor state.
-	CursorMan.showMouse(CursorMan.isVisible());
+	const bool visible = CursorMan.isVisible();
+	const bool previousVisible = CursorMan.showMouse(visible);
+	const uint32 now = _system->getMillis();
+	if (getGameType() == GType_Titanic && now - _lastCursorDebugLogMillis >= 1000) {
+		_lastCursorDebugLogMillis = now;
+		const Common::Point mouse = _eventMan->getMousePos();
+		debug(2, "Cyberflix: cursor reassert visible=%d previous=%d active='%s' mouse=(%d,%d) stage='%s' flat='%s' set='%s'",
+				visible ? 1 : 0, previousVisible ? 1 : 0,
+				_cursorRuntime.activeCursor().c_str(), mouse.x, mouse.y,
+				_stageRuntime.currentStage().c_str(), _stageRuntime.currentFlat().c_str(),
+				_setRuntime.set() && _setRuntime.set()->isOpen() ? _setRuntime.set()->setName().c_str() : "None");
+	}
 }
 
 bool CyberflixEngine::delayMillisWithCursorUpdates(uint32 delayMillis) {
