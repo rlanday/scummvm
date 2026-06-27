@@ -718,8 +718,22 @@ public:
 	 * TI.EXE FUN_0040ad80: [stage script, BOOTFILE res2 global library]).
 	 * @p script is retained, not owned, and must outlive the VM's use.
 	 */
-	void addLibrary(const Script *script) { _libraries.push_back(script); }
-	void clearLibraries() { _libraries.clear(); }
+	void addLibrary(const Script *script) {
+		_libraries.push_back(script);
+		_librarySelf.push_back(Common::String());
+		_libraryProp.push_back(Common::String());
+	}
+	void clearLibraries() {
+		_libraries.clear();
+		_librarySelf.clear();
+		_libraryProp.clear();
+	}
+
+	struct LibraryState {
+		Common::Array<const Script *> libraries;
+		Common::Array<Common::String> self;
+		Common::Array<Common::String> prop;
+	};
 
 	/**
 	 * Replace the whole dispatch scope chain, returning the previous one so a
@@ -729,9 +743,24 @@ public:
 	 * and boot messages (FUN_004390a0) exactly [BOOTFILE res1, BOOTFILE res2]
 	 * — so inner dispatches REPLACE the outer chain rather than stack on it.
 	 */
-	Common::Array<const Script *> swapLibraries(const Common::Array<const Script *> &libs) {
-		Common::Array<const Script *> prev = _libraries;
+	LibraryState swapLibraries(const Common::Array<const Script *> &libs) {
+		Common::Array<Common::String> self;
+		Common::Array<Common::String> prop;
+		return swapLibrariesWithContexts(libs, self, prop);
+	}
+
+	LibraryState swapLibrariesWithContexts(const Common::Array<const Script *> &libs,
+			const Common::Array<Common::String> &self,
+			const Common::Array<Common::String> &prop) {
+		LibraryState prev;
+		prev.libraries.swap(_libraries);
+		prev.self.swap(_librarySelf);
+		prev.prop.swap(_libraryProp);
 		_libraries = libs;
+		_librarySelf = self;
+		_libraryProp = prop;
+		_librarySelf.resize(_libraries.size());
+		_libraryProp.resize(_libraries.size());
 		return prev;
 	}
 
@@ -741,11 +770,15 @@ public:
 	 * chain in reverse because callFunction() walks from newest to oldest; this
 	 * helper centralizes that ordering and avoids caller-side temporary arrays.
 	 */
-	Common::Array<const Script *> swapLibrariesFixed(const Script *scope1,
+	LibraryState swapLibrariesFixed(const Script *scope1,
 			const Script *scope2, const Script *scope3, const Script *tail) {
-		Common::Array<const Script *> prev;
-		prev.swap(_libraries);
+		LibraryState prev;
+		prev.libraries.swap(_libraries);
+		prev.self.swap(_librarySelf);
+		prev.prop.swap(_libraryProp);
 		_libraries.reserve(4);
+		_librarySelf.reserve(4);
+		_libraryProp.reserve(4);
 		if (tail)
 			_libraries.push_back(tail);
 		if (scope3)
@@ -754,11 +787,15 @@ public:
 			_libraries.push_back(scope2);
 		if (scope1)
 			_libraries.push_back(scope1);
+		_librarySelf.resize(_libraries.size());
+		_libraryProp.resize(_libraries.size());
 		return prev;
 	}
 
-	void restoreLibraries(Common::Array<const Script *> &libs) {
-		_libraries.swap(libs);
+	void restoreLibraries(LibraryState &state) {
+		_libraries.swap(state.libraries);
+		_librarySelf.swap(state.self);
+		_libraryProp.swap(state.prop);
 	}
 
 	/** Remove the most recent registration of @p script from the scope chain
@@ -767,6 +804,8 @@ public:
 		for (int i = static_cast<int>(_libraries.size()) - 1; i >= 0; --i)
 			if (_libraries[i] == script) {
 				_libraries.remove_at(i);
+				_librarySelf.remove_at(i);
+				_libraryProp.remove_at(i);
 				return;
 			}
 	}
@@ -915,6 +954,8 @@ private:
 
 	/// Function-library scope chain for callFunction (latest searched first).
 	Common::Array<const Script *> _libraries;
+	Common::Array<Common::String> _librarySelf;
+	Common::Array<Common::String> _libraryProp;
 	uint32 _callDepth; ///< Recursion guard for script-to-script calls.
 
 	uint32 _pc;

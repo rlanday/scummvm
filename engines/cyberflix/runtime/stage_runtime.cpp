@@ -301,10 +301,20 @@ void StageRuntime::sendToButton(CyberflixEngine &engine, const Common::String &f
 	scopes.push_back(dispatchStage->buttonScript(static_cast<uint32>(dispatchNode), button));
 	scopes.push_back(dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)));
 	scopes.push_back(dispatchStage->stageScript());
+	Common::String flatName = dispatchStage->nodeName(static_cast<uint32>(dispatchNode));
+	Common::Array<Common::String> scopeSelf;
+	scopeSelf.push_back(button);
+	scopeSelf.push_back(flatName);
+	scopeSelf.push_back(dispatchStage->name());
+	Common::Array<Common::String> scopeProp;
+	scopeProp.push_back(button);
+	scopeProp.push_back(button);
+	scopeProp.push_back(button);
 	debug(1, "Cyberflix: sendtobutton('%s', '%s') -> %s(%u args)",
-			dispatchStage->nodeName(static_cast<uint32>(dispatchNode)).c_str(), button.c_str(),
+			flatName.c_str(), button.c_str(),
 			message.c_str(), args.size());
-	engine.dispatchWithScopeChain(scopes, button, button, message, args, "button");
+	engine.dispatchWithScopeChainContextsValue(scopes, scopeSelf, scopeProp,
+			button, button, message, args, "button");
 	engine.propRuntime().refreshPropsIfDirty(engine);
 }
 
@@ -330,7 +340,17 @@ Value StageRuntime::sendToButtonFx(CyberflixEngine &engine, const Common::String
 	scopes.push_back(dispatchStage->buttonScript(static_cast<uint32>(dispatchNode), button));
 	scopes.push_back(dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)));
 	scopes.push_back(dispatchStage->stageScript());
-	return engine.dispatchWithScopeChainValue(scopes, button, button, message, args, "buttonfx");
+	Common::String flatName = dispatchStage->nodeName(static_cast<uint32>(dispatchNode));
+	Common::Array<Common::String> scopeSelf;
+	scopeSelf.push_back(button);
+	scopeSelf.push_back(flatName);
+	scopeSelf.push_back(dispatchStage->name());
+	Common::Array<Common::String> scopeProp;
+	scopeProp.push_back(button);
+	scopeProp.push_back(button);
+	scopeProp.push_back(button);
+	return engine.dispatchWithScopeChainContextsValue(scopes, scopeSelf, scopeProp,
+			button, button, message, args, "buttonfx");
 }
 
 void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool resetCursor) {

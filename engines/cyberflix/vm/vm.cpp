@@ -818,6 +818,20 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 			debug(1, "Cyberflix: script '%s' matched scope %d/%u body %u (%u args)",
 					name.c_str(), li, _libraries.size(), def->bodyStart, args.size());
 
+		Common::String prevSelf = _ctxSelf;
+		Common::String prevProp = _ctxProp;
+		if (static_cast<uint32>(li) < _librarySelf.size() &&
+				(!_librarySelf[static_cast<uint32>(li)].empty() ||
+				 !_libraryProp[static_cast<uint32>(li)].empty())) {
+			// TI.EXE stores the 0xfba/0xfbb context on each scope-chain entry,
+			// not only on the original dispatch target. We first hit this with
+			// BLKJACK.STG: the Stay button enters the button script, but the
+			// gameover() function is defined on the flat script and expects cmd
+			// (0xfba) to be "blkjack" when scheduling makeloop("flat", cmd, ...).
+			setDispatchContext(_librarySelf[static_cast<uint32>(li)],
+					_libraryProp[static_cast<uint32>(li)]);
+		}
+
 		_locals.push_back(Common::HashMap<Common::String, Value>());
 		for (uint32 i = 0; i < def->params.size(); ++i)
 			_locals.back()[def->params[i]] = (i < args.size()) ? args[i] : Value();
@@ -826,6 +840,7 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 		RunResult rr = runBody(*lib, def->bodyStart, result, 0);
 		_callDepth--;
 		_locals.pop_back();
+		setDispatchContext(prevSelf, prevProp);
 
 		if (rr == kRunPassed)
 			continue; // try the next scope on the chain

@@ -273,6 +273,12 @@ private:
 			const Common::String &self, const Common::String &targetProp,
 			const Common::String &message, const Common::Array<Value> &args,
 			const char *debugContext);
+	Value dispatchWithScopeChainContextsValue(const Common::Array<const Script *> &scopes,
+			const Common::Array<Common::String> &scopeSelf,
+			const Common::Array<Common::String> &scopeProp,
+			const Common::String &self, const Common::String &targetProp,
+			const Common::String &message, const Common::Array<Value> &args,
+			const char *debugContext);
 	void dispatchSetMessage(const Common::String &message, const Common::Array<Value> &args);
 	Value dispatchSetMessageValue(const Common::String &message, const Common::Array<Value> &args);
 	void dispatchSceneMessage(uint32 scene, const Common::String &message,
