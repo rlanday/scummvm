@@ -207,6 +207,7 @@ public:
 		kMethodPropSet          = 0x3E9B,
 		kMethodPropScale        = 0x3E9C,
 		kMethodCurrentScene     = 0x3E9D,
+		kMethodVariable         = 0x3E9E,
 		kMethodCurrentDeg       = 0x3E9F,
 		kMethodPropOwner        = 0x3EA0,
 		kMethodWaveVolume       = 0x3EA1,

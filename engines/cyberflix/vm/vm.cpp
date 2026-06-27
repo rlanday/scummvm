@@ -684,6 +684,24 @@ bool ScriptVM::callCoreMethod(uint16 opcode, const Common::Array<Value> &args, V
 	case Script::kMethodStringLength: // stringlength(str) -> FUN_004373e0
 		result = Value::makeInt(args.empty() ? 0 : args[0].strValue.size());
 		return true;
+	case Script::kMethodVariable: {
+		// variable(name[, value]) -> dynamic variable get/set (getter
+		// FUN_00437090, setter FUN_00446fe0). First encountered in BLKJACK.STG:
+		// take(who) builds names such as "playerdowncard" and stores the dealt
+		// card prop in that slot; the show-card button later reads that variable
+		// and feeds the resulting prop name to propview/propdist/pointinprop.
+		if (args.empty())
+			return true;
+		Common::String key = args[0].strValue;
+		key.toLowercase();
+		if (args.size() >= 2) {
+			setVar(key, args[1]);
+			result = args[1];
+		} else {
+			result = getVar(args[0].strValue, key);
+		}
+		return true;
+	}
 	case Script::kMethodPutWord: // putword(str, delimiter, index, value) -> FUN_00437450
 		result = Value::makeString(putWord(args.size() > 0 ? args[0].strValue : Common::String(),
 				args.size() > 1 ? args[1].strValue : Common::String(),
