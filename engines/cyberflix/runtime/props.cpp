@@ -261,6 +261,14 @@ void PropRuntime::closeShopFile(CyberflixEngine &engine, const Common::String &n
 	for (uint32 i = 0; i < _shops.size(); ++i) {
 		if (_shops[i]->name() == key) {
 			debug(1, "Cyberflix: shop '%s' closed", key.c_str());
+			// Native closeshopfile (FUN_0042a7e0) tears down each prop through
+			// FUN_0042aa00 before deleting the shop's prop records. That helper
+			// stops makeloop("prop", <prop>, ...) callbacks via FUN_00423bf0.
+			// PHOTO.SHP first exposed this: photobag schedules delayed open/close
+			// animation callbacks, and a stale callback after closephoto() tried
+			// to dispatch to a prop that no longer existed.
+			for (uint32 p = 0; p < _shops[i]->propCount(); ++p)
+				engine._loopRuntime.stopLoop("prop", _shops[i]->prop(p).name);
 			markShopDirty(*_shops[i]);
 			_shops.remove_at(i);
 			refreshPropsIfDirty(engine);
