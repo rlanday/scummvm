@@ -206,6 +206,7 @@ private:
 	bool setGameCursor(const Common::String &name);
 	bool pollInputStateEvents();
 	bool pumpCursorMotionEvents();
+	void reassertCursorVisibility();
 	void presentCursorIfDirty();
 	bool delayMillisWithCursorUpdates(uint32 delayMillis);
 

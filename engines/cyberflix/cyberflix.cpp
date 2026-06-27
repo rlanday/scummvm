@@ -496,8 +496,16 @@ bool CyberflixEngine::pumpCursorMotionEvents() {
 void CyberflixEngine::presentCursorIfDirty() {
 	if (!_cursorPresentationDirty)
 		return;
+	reassertCursorVisibility();
 	_system->updateScreen();
 	_cursorPresentationDirty = false;
+}
+
+void CyberflixEngine::reassertCursorVisibility() {
+	// SDL may reveal the host cursor after focus/active-area transitions. Room
+	// gameplay presents cursor motion without changing the CyberFlix cursor
+	// resource, so explicitly reapply ScummVM's current software-cursor state.
+	CursorMan.showMouse(CursorMan.isVisible());
 }
 
 bool CyberflixEngine::delayMillisWithCursorUpdates(uint32 delayMillis) {
@@ -775,6 +783,7 @@ Common::Error CyberflixEngine::run() {
 		const bool propsDirtyAfterIdle = _propRuntime.dirty();
 		propRuntime().refreshPropsIfDirty(*this);
 		if (scriptEventHandled || propsDirtyAfterIdle || _cursorPresentationDirty) {
+			reassertCursorVisibility();
 			_system->updateScreen();
 			_cursorPresentationDirty = false;
 		}
