@@ -817,6 +817,9 @@ bool SdlEventSource::dispatchSDLEvent(SDL_Event &ev, Common::Event &event) {
 			// When we gain focus, we to update whether the display can turn off
 			// dependingif a game isn't running or not
 			event.type = Common::EVENT_FOCUS_GAINED;
+			if (_graphicsManager) {
+				_graphicsManager->notifyMouseEnteredWindow(true);
+			}
 			if (_engineRunning) {
 				SDL_DisableScreenSaver();
 			} else {
@@ -831,6 +834,18 @@ bool SdlEventSource::dispatchSDLEvent(SDL_Event &ev, Common::Event &event) {
 			SDL_EnableScreenSaver();
 			return true;
 		}
+
+		case SDL_WINDOWEVENT_ENTER:
+			if (_graphicsManager) {
+				_graphicsManager->notifyMouseEnteredWindow(true);
+			}
+			return false;
+
+		case SDL_WINDOWEVENT_LEAVE:
+			if (_graphicsManager) {
+				_graphicsManager->notifyMouseEnteredWindow(false);
+			}
+			return false;
 
 		default:
 			return false;
