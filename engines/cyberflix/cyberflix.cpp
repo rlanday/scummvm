@@ -585,7 +585,7 @@ void CyberflixEngine::forceUpdate() {
 	debugCargoPaintingTimer();
 	if (!_propRuntime.dirty() && isReplacementStage(_stageRuntime.stage()) && propRuntime().hasAnimatedScreenProps())
 		_propRuntime.setDirty(true);
-	propRuntime().refreshPropsIfDirty(*this);
+	propRuntime().refreshPropsIfDirty(*this, true);
 	if (_puppetRuntime.isVisible()) {
 		puppetRuntime().renderCurrentFrame(*this, true);
 		_setRuntime.screenUpdatePending() = false;

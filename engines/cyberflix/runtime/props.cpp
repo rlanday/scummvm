@@ -732,7 +732,7 @@ bool PropRuntime::pointInProp(const Common::String &name, int32 packedPoint) {
 	return rendered.cel->isOpaque(celX, celY);
 }
 
-void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine) {
+void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine, bool explicitForceUpdate) {
 	// The original recomposites the display list every tick; this engine
 	// renders on demand, so repaint the current room after a dispatch that
 	// changed prop state. While no scene is up yet (boot-time initprops) the
@@ -740,8 +740,9 @@ void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine) {
 	if (!_propsDirty)
 		return;
 	// Native loop callbacks run before the single display pass; repainting
-	// inside each callback would advance animated prop poses too often.
-	if (engine.loopRuntime().processingScheduledLoops())
+	// after each callback would advance animated prop poses too often. An
+	// explicit forceupdate() still reaches the compositor even from a callback.
+	if (engine.loopRuntime().processingScheduledLoops() && !explicitForceUpdate)
 		return;
 	if (engine._puppetRuntime.isVisible()) {
 		// Native sendtoprop/sendtoshop dispatch does not repaint immediately.
