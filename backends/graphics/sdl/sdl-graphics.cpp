@@ -316,7 +316,7 @@ bool SdlGraphicsManager::notifyMousePosition(Common::Point &mouse) {
 
 void SdlGraphicsManager::notifyMouseEnteredWindow(bool entered) {
 	if (entered) {
-		showMouse(_cursorVisible);
+		showSystemMouseCursor(false);
 	} else {
 		showSystemMouseCursor(_cursorVisible);
 	}
