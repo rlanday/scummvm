@@ -40,6 +40,7 @@ public:
 	Common::SharedPtr<Shop> findShopShared(const Common::String &name);
 	Shop::Prop *findProp(const Common::String &name, Shop **shopOut = nullptr);
 	Common::SharedPtr<Shop> findPropOwnerShared(const Common::String &name, Shop::Prop **propOut);
+	bool resolvePropStar(CyberflixEngine &engine, Shop::Prop &prop);
 
 	void collectScreenProps(Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop) const;
@@ -72,8 +73,10 @@ public:
 	void propView(const Common::String &name, const Common::String &shape);
 	int propXY(const Common::String &name, int selector);
 	void setPropXY(const Common::String &name, int x, int y);
-	void propSet(const Common::String &name, const Common::String &setName);
+	void propSet(CyberflixEngine &engine, const Common::String &name, const Common::String &setName);
 	void propXYZ(const Common::String &name, int x, int y, int z);
+	Common::String getPropStar(const Common::String &name);
+	Common::String setPropStar(CyberflixEngine &engine, const Common::String &name, const Common::String &newStar);
 	void propScale(const Common::String &name, int scale);
 	void propZClip(const Common::String &name, int dist);
 	int getPropDist(CyberflixEngine &engine, const Common::String &name);

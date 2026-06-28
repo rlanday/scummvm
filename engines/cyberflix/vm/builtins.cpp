@@ -273,6 +273,12 @@ bool ScriptVM::callPropMethod(uint16 opcode, const Common::Array<Value> &args, V
 			_interactionHost->propXYZ(args[0].strValue, args[1].intValue,
 					args[2].intValue, args[3].intValue);
 		return true;
+	case Script::kMethodPropStar: // propstar(name[, star]) -> FUN_00429320/FUN_004291f0
+		if (args.size() >= 2)
+			result = Value::makeString(_interactionHost->setPropStar(args[0].strValue, args[1].strValue));
+		else if (args.size() == 1)
+			result = Value::makeString(_interactionHost->getPropStar(args[0].strValue));
+		return true;
 	case Script::kMethodPropXY: // propxy(name, x, y) -> FUN_0042a370 (mode=0; depth=-1 if >=0)
 		if (args.size() >= 3)
 			_interactionHost->setPropXY(args[0].strValue, args[1].intValue, args[2].intValue);

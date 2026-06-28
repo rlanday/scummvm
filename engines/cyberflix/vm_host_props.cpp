@@ -80,11 +80,19 @@ void CyberflixPropVMHost::setPropXY(const Common::String &name, int x, int y) {
 }
 
 void CyberflixPropVMHost::propSet(const Common::String &name, const Common::String &setName) {
-	engine().propRuntime().propSet(name, setName);
+	engine().propRuntime().propSet(engine(), name, setName);
 }
 
 void CyberflixPropVMHost::propXYZ(const Common::String &name, int x, int y, int z) {
 	engine().propRuntime().propXYZ(name, x, y, z);
+}
+
+Common::String CyberflixPropVMHost::getPropStar(const Common::String &name) {
+	return engine().propRuntime().getPropStar(name);
+}
+
+Common::String CyberflixPropVMHost::setPropStar(const Common::String &name, const Common::String &newStar) {
+	return engine().propRuntime().setPropStar(engine(), name, newStar);
 }
 
 void CyberflixPropVMHost::propScale(const Common::String &name, int scale) {

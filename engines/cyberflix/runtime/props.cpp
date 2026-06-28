@@ -75,6 +75,25 @@ Common::SharedPtr<Shop> PropRuntime::findPropOwnerShared(const Common::String &n
 	return Common::SharedPtr<Shop>();
 }
 
+bool PropRuntime::resolvePropStar(CyberflixEngine &engine, Shop::Prop &prop) {
+	if (!engine._setRuntime.set() || !engine._setRuntime.set()->isOpen() ||
+			!prop.setName.equalsIgnoreCase(engine._setRuntime.set()->setName()))
+		return false;
+
+	int16 x = 0, y = 0, z = 0;
+	if (!engine._setRuntime.set()->starXYZ(prop.sceneName, x, y, z))
+		return false;
+
+	if (prop.x != x || prop.y != y || prop.z != z || prop.mode != 1) {
+		prop.x = x;
+		prop.y = y;
+		prop.z = z;
+		prop.mode = 1;
+		_propsDirty = true;
+	}
+	return true;
+}
+
 void PropRuntime::collectScreenProps(Common::Array<const Shop::Prop *> &draw,
 		Common::Array<const Shop *> &drawShop) const {
 	for (uint32 s = 0; s < _shops.size(); ++s) {
@@ -495,7 +514,7 @@ void PropRuntime::setPropXY(const Common::String &name, int x, int y) {
 	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
-void PropRuntime::propSet(const Common::String &name, const Common::String &setName) {
+void PropRuntime::propSet(CyberflixEngine &engine, const Common::String &name, const Common::String &setName) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
@@ -511,6 +530,7 @@ void PropRuntime::propSet(const Common::String &name, const Common::String &setN
 	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 	prop->setName = key;
 	prop->mode = 1; // FUN_00428c20 writes record +0x12 = 1 for SET placement.
+	resolvePropStar(engine, *prop);
 	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
@@ -531,6 +551,33 @@ void PropRuntime::propXYZ(const Common::String &name, int x, int y, int z) {
 	prop->y = static_cast<int16>(y);
 	prop->z = static_cast<int16>(z);
 	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+}
+
+Common::String PropRuntime::getPropStar(const Common::String &name) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propstar('%s'): no such prop", name.c_str());
+		return Common::String();
+	}
+	return prop->sceneName;
+}
+
+Common::String PropRuntime::setPropStar(CyberflixEngine &engine, const Common::String &name, const Common::String &newStar) {
+	Shop *shop = nullptr;
+	Shop::Prop *prop = findProp(name, &shop);
+	if (!prop) {
+		warning("Cyberflix: propstar('%s'): no such prop", name.c_str());
+		return Common::String();
+	}
+	Common::String key = newStar;
+	key.toLowercase();
+	Common::Rect oldRect;
+	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
+	prop->sceneName = key;
+	prop->mode = 1; // FUN_004291f0 switches propstar placements to SET/world mode.
+	resolvePropStar(engine, *prop);
+	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
+	return prop->sceneName;
 }
 
 void PropRuntime::propScale(const Common::String &name, int scale) {

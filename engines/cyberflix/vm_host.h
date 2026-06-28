@@ -210,6 +210,8 @@ public:
 	void propView(const Common::String &name, const Common::String &shape) override;
 	void propSet(const Common::String &name, const Common::String &setName) override;
 	void propXYZ(const Common::String &name, int x, int y, int z) override;
+	Common::String getPropStar(const Common::String &name) override;
+	Common::String setPropStar(const Common::String &name, const Common::String &newStar) override;
 	int propXY(const Common::String &name, int selector) override;
 	void setPropXY(const Common::String &name, int x, int y) override;
 	void propScale(const Common::String &name, int scale) override;

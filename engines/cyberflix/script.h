@@ -199,6 +199,7 @@ public:
 		kMethodPropDeg          = 0x3E90,
 		kMethodPropXYZ          = 0x3E91,
 		kMethodPropXY           = 0x3E92,
+		kMethodPropStar         = 0x3E94,
 		kMethodActorSet         = 0x3E95,
 		kMethodFrameRate        = 0x3E96,
 		kMethodActorSpeed       = 0x3E97,

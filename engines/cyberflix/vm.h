@@ -533,6 +533,11 @@ public:
 	 * setting mode=1 so the prop is no longer a screen overlay. */
 	virtual void propXYZ(const Common::String &name, int x, int y, int z) {}
 
+	/** propstar(name[, star]) (0x3e94 FUN_00429320/FUN_004291f0): get or set
+	 *  the prop's SET star, a named 3D placement point in the current .SET room. */
+	virtual Common::String getPropStar(const Common::String &name) { return Common::String(); }
+	virtual Common::String setPropStar(const Common::String &name, const Common::String &newStar) { return newStar; }
+
 	/** propxy(name, selector) (0x3e92 FUN_0042a450): selector 1 = x,
 	 *  2 = y, 3 = packed point. */
 	virtual int propXY(const Common::String &name, int selector) { return 0; }
