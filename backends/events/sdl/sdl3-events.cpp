@@ -42,7 +42,7 @@ static void debugSdlWindowCursorEvent(const char *name, const SDL_WindowEvent &w
 	float mouseX = 0.0f;
 	float mouseY = 0.0f;
 	const uint32 buttons = SDL_GetMouseState(&mouseX, &mouseY);
-	debug(1, "SDL cursor: window %s id=%u data=(%d,%d) mouse=(%d,%d) buttons=0x%x",
+	debug(1, "SDL host cursor: window %s id=%u data=(%d,%d) mouse=(%d,%d) buttons=0x%x",
 			name, windowEvent.windowID, windowEvent.data1, windowEvent.data2,
 			static_cast<int>(mouseX), static_cast<int>(mouseY), buttons);
 }

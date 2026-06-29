@@ -81,6 +81,14 @@ public:
 	bool warpMouseInWindow(int x, int y);
 
 	/**
+	 * Debug native host-cursor state around SDL_ShowCursor() calls. Most SDL
+	 * platforms need no extra diagnostics; Cocoa overrides this because AppKit
+	 * cursor rects can make the native cursor state differ from SDL's generic
+	 * visibility flag.
+	 */
+	virtual void debugHostCursorState(const char *context, bool targetVisible) const {}
+
+	/**
 	 * Iconifies the window.
 	 */
 	void iconifyWindow();

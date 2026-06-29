@@ -24,6 +24,9 @@
 
 #include "backends/platform/sdl/macosx/macosx-window.h"
 #include "backends/platform/sdl/macosx/macosx-compat.h"
+#include <AppKit/NSCursor.h>
+#include <AppKit/NSEvent.h>
+#include <AppKit/NSView.h>
 #include <AppKit/NSWindow.h>
 
 float SdlWindow_MacOSX::getDpiScalingFactor() const {
@@ -39,4 +42,49 @@ float SdlWindow_MacOSX::getDpiScalingFactor() const {
 #endif
 
 	return SdlWindow::getDpiScalingFactor();
+}
+
+void SdlWindow_MacOSX::debugHostCursorState(const char *context, bool targetVisible) const {
+#if !SDL_VERSION_ATLEAST(3, 0, 0) && SDL_VERSION_ATLEAST(2, 0, 0)
+	@autoreleasepool {
+		SDL_SysWMinfo wmInfo;
+		NSWindow *nswindow = nil;
+		NSView *contentView = nil;
+
+		if (getSDLWMInformation(&wmInfo) && wmInfo.subsystem == SDL_SYSWM_COCOA) {
+			nswindow = wmInfo.info.cocoa.window;
+			contentView = [nswindow contentView];
+		}
+
+		NSCursor *currentCursor = [NSCursor currentCursor];
+		NSCursor *arrowCursor = [NSCursor arrowCursor];
+		NSCursor *iBeamCursor = [NSCursor IBeamCursor];
+		NSCursor *pointingHandCursor = [NSCursor pointingHandCursor];
+		NSPoint windowMouse = NSZeroPoint;
+		NSPoint viewMouse = NSZeroPoint;
+		BOOL mouseInsideView = NO;
+
+		if (contentView) {
+			windowMouse = [nswindow mouseLocationOutsideOfEventStream];
+			viewMouse = [contentView convertPoint:windowMouse fromView:nil];
+			mouseInsideView = [contentView mouse:viewMouse inRect:[contentView bounds]];
+		}
+
+		const int sdlShown = SDL_ShowCursor(SDL_QUERY);
+		SDL_Cursor *currentSdlCursor = SDL_GetCursor();
+		SDL_Cursor *defaultSdlCursor = SDL_GetDefaultCursor();
+		const uint32 windowFlags = getSDLWindow() ? SDL_GetWindowFlags(getSDLWindow()) : 0;
+
+		debug(2, "Cocoa host cursor: %s targetVisible=%d sdlShown=%d sdlCursor=%p defaultCursor=%p windowFlags=0x%x cocoaWindow=%d key=%d main=%d mouseInsideView=%d windowMouse=(%.1f,%.1f) viewMouse=(%.1f,%.1f) nsCurrent=%p arrow=%d ibeam=%d hand=%d",
+				context, targetVisible ? 1 : 0, sdlShown,
+				(void *)currentSdlCursor, (void *)defaultSdlCursor, windowFlags,
+				nswindow ? 1 : 0, nswindow && [nswindow isKeyWindow] ? 1 : 0,
+				nswindow && [nswindow isMainWindow] ? 1 : 0, mouseInsideView ? 1 : 0,
+				static_cast<double>(windowMouse.x), static_cast<double>(windowMouse.y),
+				static_cast<double>(viewMouse.x), static_cast<double>(viewMouse.y),
+				(void *)currentCursor, currentCursor == arrowCursor ? 1 : 0,
+				currentCursor == iBeamCursor ? 1 : 0,
+				currentCursor == pointingHandCursor ? 1 : 0);
+	}
+#endif
 }

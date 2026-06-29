@@ -248,7 +248,7 @@ bool SdlGraphicsManager::showMouse(bool visible) {
 			showCursor = true;
 		}
 	}
-	debug(2, "SDL cursor: showMouse softwareVisible=%d storedVisible=%d mouse=(%d,%d) scaled=(%d,%d) active=(%d,%d)-(%d,%d) inActive=%d -> hostVisible=%d",
+	debug(2, "SDL host cursor: showMouse softwareVisible=%d storedVisible=%d mouse=(%d,%d) scaled=(%d,%d) active=(%d,%d)-(%d,%d) inActive=%d -> hostVisible=%d",
 			visible ? 1 : 0, _cursorVisible ? 1 : 0, rawX, rawY,
 			scaledMouse.x, scaledMouse.y, _activeArea.drawRect.left, _activeArea.drawRect.top,
 			_activeArea.drawRect.right, _activeArea.drawRect.bottom,
@@ -329,7 +329,7 @@ bool SdlGraphicsManager::notifyMousePosition(Common::Point &mouse) {
 		setMousePosition(mouse.x, mouse.y);
 		mouse = convertWindowToVirtual(mouse.x, mouse.y);
 	}
-	debug(2, "SDL cursor: notifyMousePosition window=(%d,%d) scaled=(%d,%d) clipped=(%d,%d) virtual=(%d,%d) active=(%d,%d)-(%d,%d) inActive=%d last=%d->%d cursorVisible=%d buttons=0x%x grabbed=%d warped=%d valid=%d -> hostVisible=%d",
+	debug(2, "SDL host cursor: notifyMousePosition window=(%d,%d) scaled=(%d,%d) clipped=(%d,%d) virtual=(%d,%d) active=(%d,%d)-(%d,%d) inActive=%d last=%d->%d cursorVisible=%d buttons=0x%x grabbed=%d warped=%d valid=%d -> hostVisible=%d",
 			windowMouse.x, windowMouse.y, scaledMouse.x, scaledMouse.y,
 			clippedMouse.x, clippedMouse.y, mouse.x, mouse.y,
 			_activeArea.drawRect.left, _activeArea.drawRect.top,
@@ -346,7 +346,7 @@ void SdlGraphicsManager::notifyMouseEnteredWindow(bool entered) {
 	int mouseY = 0;
 	getMouseState(&mouseX, &mouseY);
 	const bool hostVisible = !entered && _cursorVisible;
-	debug(1, "SDL cursor: notifyMouseEnteredWindow entered=%d cursorVisible=%d lastInActive=%d mouse=(%d,%d) buttons=0x%x -> hostVisible=%d",
+	debug(1, "SDL host cursor: notifyMouseEnteredWindow entered=%d cursorVisible=%d lastInActive=%d mouse=(%d,%d) buttons=0x%x -> hostVisible=%d",
 			entered ? 1 : 0, _cursorVisible ? 1 : 0,
 			_cursorLastInActiveArea ? 1 : 0, mouseX, mouseY,
 			SDL_GetMouseState(nullptr, nullptr), hostVisible ? 1 : 0);
@@ -358,8 +358,9 @@ void SdlGraphicsManager::notifyMouseEnteredWindow(bool entered) {
 }
 
 void SdlGraphicsManager::showSystemMouseCursor(bool visible) {
+	_window->debugHostCursorState("before SDL_ShowCursor", visible);
 #if SDL_VERSION_ATLEAST(3, 0, 0)
-	debug(2, "SDL cursor: showSystemMouseCursor(%d)", visible ? 1 : 0);
+	debug(2, "SDL host cursor: showSystemMouseCursor(%d)", visible ? 1 : 0);
 	if (visible) {
 		SDL_ShowCursor();
 	} else {
@@ -369,9 +370,10 @@ void SdlGraphicsManager::showSystemMouseCursor(bool visible) {
 	const int before = SDL_ShowCursor(SDL_QUERY);
 	SDL_ShowCursor(visible ? SDL_ENABLE : SDL_DISABLE);
 	const int after = SDL_ShowCursor(SDL_QUERY);
-	debug(2, "SDL cursor: showSystemMouseCursor(%d) before=%d after=%d",
+	debug(2, "SDL host cursor: showSystemMouseCursor(%d) before=%d after=%d",
 			visible ? 1 : 0, before, after);
 #endif
+	_window->debugHostCursorState("after SDL_ShowCursor", visible);
 }
 
 void SdlGraphicsManager::setSystemMousePosition(const int x, const int y) {
