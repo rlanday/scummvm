@@ -139,6 +139,7 @@ public:
 	void noteDialog(const Common::String &text) override;
 	void flushEvents() override;
 	void drawString(const Common::String &text, int32 packedPoint, int color, int size) override;
+	int stringWidth(const Common::String &text, int fontId, int size) override;
 	void fadePalette(const Common::String &target, int steps, bool toBlack) override;
 	void setVisualEffect(uint16 effect, int duration) override;
 	void makeLoop(const Common::String &kind, const Common::String &target,

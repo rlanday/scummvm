@@ -289,7 +289,8 @@ public:
 		kMethodSendToStageFx    = 0x4E7E,
 		kMethodSendToBootFx     = 0x4E7F,
 		kMethodWalkDest         = 0x4E83,
-		kMethodRoadAhead        = 0x4E94
+		kMethodRoadAhead        = 0x4E94,
+		kMethodStringWidth      = 0x4E95
 	};
 
 	/** Resource @c info tag identifying a script resource (BOOTFILE, .SET, ...). */

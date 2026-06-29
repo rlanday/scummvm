@@ -684,6 +684,12 @@ bool ScriptVM::callCoreMethod(uint16 opcode, const Common::Array<Value> &args, V
 	case Script::kMethodStringLength: // stringlength(str) -> FUN_004373e0
 		result = Value::makeInt(args.empty() ? 0 : args[0].strValue.size());
 		return true;
+	case Script::kMethodStringWidth: // stringwidth(str, fontId, size) -> FUN_00435444
+		result = Value::makeInt(_systemHost ? _systemHost->stringWidth(
+				args.size() > 0 ? args[0].strValue : Common::String(),
+				args.size() > 1 ? args[1].intValue : 0,
+				args.size() > 2 ? args[2].intValue : 12) : 0);
+		return true;
 	case Script::kMethodVariable: {
 		// variable(name[, value]) -> dynamic variable get/set (getter
 		// FUN_00437090, setter FUN_00446fe0). First encountered in BLKJACK.STG:

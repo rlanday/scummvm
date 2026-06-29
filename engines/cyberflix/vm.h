@@ -304,6 +304,9 @@ public:
 	/** drawstring(text, point, color, size) (0x2f30): draw text to the current port. */
 	virtual void drawString(const Common::String &text, int32 packedPoint, int color, int size) {}
 
+	/** stringwidth(text, fontId, size) (0x4e95): measure text in the drawstring font path. */
+	virtual int stringWidth(const Common::String &text, int fontId, int size) { return 0; }
+
 	/**
 	 * blacktoscreen(target, n) / screentoblack(target, n) (0x2f11/0x2f12,
 	 * FUN_00446b00/FUN_00446a80 -> FUN_0041b3f0/FUN_0041b3a0): fade the

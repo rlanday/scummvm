@@ -185,6 +185,16 @@ void CyberflixEngine::drawString(const Common::String &text, int32 packedPoint, 
 	_system->updateScreen();
 }
 
+int CyberflixEngine::stringWidth(const Common::String &text, int fontId, int size) {
+	(void)fontId; // Titanic's recovered scripts use font selector 0 for this text path.
+
+	const Graphics::Font *font = puppetRuntime().textFont(size);
+	if (!font)
+		return 0;
+
+	return font->getStringWidth(text);
+}
+
 // blacktoscreen(target, n) / screentoblack(target, n): palette-only fade
 // between black and the target clut, one interpolation step per 60 Hz tick
 // (FUN_0041b3f0 / FUN_0041b3a0 stepping FUN_0041b200 against the scaled timer).
