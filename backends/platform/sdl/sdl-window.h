@@ -89,6 +89,14 @@ public:
 	virtual void debugHostCursorState(const char *context, bool targetVisible) const {}
 
 	/**
+	 * Platform-specific synchronization after SDL_ShowCursor(). Generic SDL
+	 * backends do not need this; Cocoa overrides it because AppKit can keep
+	 * [NSCursor currentCursor] as the arrow after SDL's visibility flag has
+	 * already switched to hidden.
+	 */
+	virtual void syncHostCursorVisibility(bool visible) const {}
+
+	/**
 	 * Iconifies the window.
 	 */
 	void iconifyWindow();

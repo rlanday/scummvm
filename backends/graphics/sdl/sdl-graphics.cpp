@@ -373,7 +373,8 @@ void SdlGraphicsManager::showSystemMouseCursor(bool visible) {
 	debug(2, "SDL host cursor: showSystemMouseCursor(%d) before=%d after=%d",
 			visible ? 1 : 0, before, after);
 #endif
-	_window->debugHostCursorState("after SDL_ShowCursor", visible);
+	_window->syncHostCursorVisibility(visible);
+	_window->debugHostCursorState("after host cursor sync", visible);
 }
 
 void SdlGraphicsManager::setSystemMousePosition(const int x, const int y) {

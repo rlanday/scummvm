@@ -32,6 +32,7 @@ public:
 	void setupIcon() override {}
 	float getDpiScalingFactor() const override;
 	void debugHostCursorState(const char *context, bool targetVisible) const override;
+	void syncHostCursorVisibility(bool visible) const override;
 };
 
 #endif
