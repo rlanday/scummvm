@@ -266,7 +266,7 @@ Shop::PropCellResult Shop::resolvePropCel(const Prop &prop, int angle) const {
 		}
 	}
 	if (!best) {
-		debug(1, "Cyberflix: renderProp('%s'): no cell for pose %u in shape '%s'",
+		debug(2, "Cyberflix: renderProp('%s'): no cell for pose %u in shape '%s'",
 				prop.name.c_str(), poseId, prop.shapeName.c_str());
 		return result;
 	}

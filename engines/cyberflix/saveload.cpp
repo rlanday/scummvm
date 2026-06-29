@@ -247,6 +247,7 @@ struct HeaderState {
 	Common::String stageName;
 	int32 stageNode = 0;
 	Common::String flatName;
+	int32 frameCounter = 0; // frame() base; paintframe timers are absolute script frames.
 	bool stageVisible = false;
 	Common::String setFileName;
 	Common::String setName;
@@ -406,6 +407,8 @@ static bool parseHeaderChunk(Common::SeekableReadStream &in, int64 end, HeaderSt
 	header.stageVisible = !header.stageName.empty();
 	if (in.pos() < end)
 		header.stageVisible = in.readByte() != 0;
+	if (in.pos() + 4 <= end)
+		header.frameCounter = in.readSint32LE();
 	return !in.err();
 }
 
@@ -1325,6 +1328,13 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		blackScreen();
 	}
 
+	// Story timers such as the cargo painting timer store `paintframe = frame()`
+	// in script globals. Preserve frame() across saves so those absolute-frame
+	// timers resume instead of restarting or going negative after reload.
+	_frameCounter = header.frameCounter;
+	_lastCargoPaintingTimerLogBucket = -1;
+	_cargoPaintingTimerExpiredLogged = false;
+
 	logTitanicGymLoadDiagnostics(*this);
 
 	programPalette(savedClut);
@@ -1380,6 +1390,7 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 		payload.writeUint32LE(setSnapshot.transitionResource);
 		payload.writeUint32LE(setSnapshot.transitionFrame);
 		payload.writeByte(stageSnapshot.visible ? 1 : 0);
+		payload.writeSint32LE(_frameCounter);
 
 		writeChunk(*saveFile, "HEAD", payload);
 	}
