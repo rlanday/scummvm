@@ -38,6 +38,15 @@
 
 #define GAMECONTROLLERDB_FILE "gamecontrollerdb.txt"
 
+static void debugSdlWindowCursorEvent(const char *name, const SDL_WindowEvent &windowEvent) {
+	int mouseX = 0;
+	int mouseY = 0;
+	const uint32 buttons = SDL_GetMouseState(&mouseX, &mouseY);
+	debug(1, "SDL cursor: window %s id=%u data=(%d,%d) mouse=(%d,%d) buttons=0x%x",
+			name, windowEvent.windowID, windowEvent.data1, windowEvent.data2,
+			mouseX, mouseY, buttons);
+}
+
 static uint32 convUTF8ToUTF32(const char *src) {
 	if (!src || src[0] == 0)
 		return 0;
@@ -817,6 +826,7 @@ bool SdlEventSource::dispatchSDLEvent(SDL_Event &ev, Common::Event &event) {
 			// When we gain focus, we to update whether the display can turn off
 			// dependingif a game isn't running or not
 			event.type = Common::EVENT_FOCUS_GAINED;
+			debugSdlWindowCursorEvent("focus-gained", ev.window);
 			if (_graphicsManager) {
 				_graphicsManager->notifyMouseEnteredWindow(true);
 			}
@@ -831,17 +841,20 @@ bool SdlEventSource::dispatchSDLEvent(SDL_Event &ev, Common::Event &event) {
 		case SDL_WINDOWEVENT_FOCUS_LOST: {
 			// Always allow the display to turn off if ScummVM is out of focus
 			event.type = Common::EVENT_FOCUS_LOST;
+			debugSdlWindowCursorEvent("focus-lost", ev.window);
 			SDL_EnableScreenSaver();
 			return true;
 		}
 
 		case SDL_WINDOWEVENT_ENTER:
+			debugSdlWindowCursorEvent("enter", ev.window);
 			if (_graphicsManager) {
 				_graphicsManager->notifyMouseEnteredWindow(true);
 			}
 			return false;
 
 		case SDL_WINDOWEVENT_LEAVE:
+			debugSdlWindowCursorEvent("leave", ev.window);
 			if (_graphicsManager) {
 				_graphicsManager->notifyMouseEnteredWindow(false);
 			}
