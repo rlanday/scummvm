@@ -120,6 +120,7 @@ public:
 
 	enum MethodOpcode {
 		kMethodMessage          = 0x2EE1,
+		kMethodDelay            = 0x2EE4,
 		kMethodMakeLoop         = 0x2EE5,
 		kMethodWalkToStar       = 0x2EE6,
 		kMethodMakeCricket      = 0x2EE7,

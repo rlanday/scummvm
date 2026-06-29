@@ -606,6 +606,9 @@ bool ScriptVM::callRuntimeMethod(uint16 opcode, const Common::Array<Value> &args
 	case Script::kMethodMessage: // message(text) -> FUN_00446240 (no-op debug stub)
 		_systemHost->message(args.empty() ? Common::String() : args[0].strValue);
 		return true;
+	case Script::kMethodDelay: // delay(ticks) -> FUN_00405160
+		_systemHost->delayTicks(args.empty() ? 0 : args[0].intValue);
+		return true;
 	case Script::kMethodNoteDialog: // notedialog(text) -> FUN_004461e0 -> FUN_00408fc0 (modal OK box)
 		_systemHost->noteDialog(args.empty() ? Common::String() : args[0].strValue);
 		return true;

@@ -284,6 +284,10 @@ public:
 	/** message(text) (0x2ee1): copy/log a script diagnostic message. */
 	virtual void message(const Common::String &text) {}
 
+	/** delay(ticks) (0x2ee4 -> FUN_00405160): pump events until the native
+	 *  60 Hz timer reaches tick() + ticks. */
+	virtual void delayTicks(int ticks) {}
+
 	/**
 	 * notedialog(text) (0x2f2f -> FUN_004461e0 -> FUN_00408fc0): show a modal
 	 * note dialog with an OK button. The original calls MessageBoxA with flags

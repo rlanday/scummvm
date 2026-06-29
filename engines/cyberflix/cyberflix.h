@@ -135,6 +135,7 @@ public:
 	void blackScreen() override;
 	void forceUpdate() override;
 	void message(const Common::String &text) override;
+	void delayTicks(int ticks) override;
 	void noteDialog(const Common::String &text) override;
 	void flushEvents() override;
 	void drawString(const Common::String &text, int32 packedPoint, int color, int size) override;

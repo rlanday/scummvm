@@ -545,6 +545,22 @@ bool CyberflixEngine::delayMillisWithCursorUpdates(uint32 delayMillis) {
 	return presented;
 }
 
+void CyberflixEngine::delayTicks(int ticks) {
+	if (ticks <= 0)
+		return;
+
+	const int deadline = tick() + ticks;
+	while (!shouldQuit()) {
+		const int remainingTicks = deadline - tick();
+		if (remainingTicks <= 0)
+			break;
+		const uint32 delayMillis = MIN<uint32>(
+				static_cast<uint32>((static_cast<int64>(remainingTicks) * 1000 + 59) / 60),
+				kCursorPollIntervalMs);
+		delayMillisWithCursorUpdates(delayMillis);
+	}
+}
+
 void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String &target,
 		const Common::String &message, int delay) {
 	_loopRuntime.makeLoop(kind, target, message, delay);
