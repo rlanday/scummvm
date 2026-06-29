@@ -164,6 +164,7 @@ void CyberflixEngine::noteDialog(const Common::String &text) {
 }
 
 void CyberflixEngine::flushEvents() {
+	_deferredInputEvents.clear();
 	_eventMan->purgeMouseEvents();
 	_eventMan->purgeKeyboardEvents();
 }

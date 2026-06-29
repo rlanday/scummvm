@@ -24,7 +24,9 @@
 
 #include "common/random.h"
 #include "common/error.h"
+#include "common/events.h"
 #include "common/ptr.h"
+#include "common/queue.h"
 #include "common/rect.h"
 
 #include "engines/engine.h"
@@ -56,10 +58,6 @@ class Console;
 class Script;
 class Stage;
 class Set;
-}
-
-namespace Common {
-struct Event;
 }
 
 namespace Audio {
@@ -206,6 +204,7 @@ private:
 	 * decoded cursor groups are cached for reuse. Returns true on success.
 	 */
 	bool setGameCursor(const Common::String &name);
+	bool pollScriptEvent(Common::Event &event);
 	bool pollInputStateEvents();
 	bool pumpCursorMotionEvents();
 	void reassertCursorVisibility();
@@ -238,6 +237,7 @@ private:
 	CursorRuntime _cursorRuntime;
 	bool _cursorPresentationDirty = false;
 	uint32 _lastCursorDebugLogMillis = 0;
+	Common::Queue<Common::Event> _deferredInputEvents;
 
 	StageRuntime _stageRuntime;
 	SetRuntime _setRuntime;

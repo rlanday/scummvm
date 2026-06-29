@@ -433,9 +433,17 @@ bool CyberflixEngine::optionKey() {
 	return (_eventMan->getModifierState() & Common::KBD_SHIFT) != 0;
 }
 
+bool CyberflixEngine::pollScriptEvent(Common::Event &event) {
+	if (!_deferredInputEvents.empty()) {
+		event = _deferredInputEvents.pop();
+		return true;
+	}
+
+	return _eventMan->pollEvent(event);
+}
+
 bool CyberflixEngine::pollInputStateEvents() {
 	const Common::Point oldMouse = _eventMan->getMousePos();
-	Common::Array<Common::Event> deferred;
 	Common::Event event;
 	bool sawMouseButtonEvent = false;
 
@@ -458,13 +466,10 @@ bool CyberflixEngine::pollInputStateEvents() {
 			quitGame();
 			return false;
 		default:
-			deferred.push_back(event);
+			_deferredInputEvents.push(event);
 			break;
 		}
 	}
-
-	for (uint i = 0; i < deferred.size(); ++i)
-		_eventMan->pushEvent(deferred[i]);
 
 	const Common::Point newMouse = _eventMan->getMousePos();
 	if (oldMouse.x != newMouse.x || oldMouse.y != newMouse.y) {
@@ -476,7 +481,6 @@ bool CyberflixEngine::pollInputStateEvents() {
 
 bool CyberflixEngine::pumpCursorMotionEvents() {
 	const Common::Point oldMouse = _eventMan->getMousePos();
-	Common::Array<Common::Event> deferred;
 	Common::Event event;
 
 	while (_eventMan->pollEvent(event)) {
@@ -488,13 +492,14 @@ bool CyberflixEngine::pumpCursorMotionEvents() {
 			quitGame();
 			break;
 		default:
-			deferred.push_back(event);
+			// Do not requeue through EventManager::pushEvent(): that uses the
+			// artificial event source, which is dispatched after real backend
+			// events and can let newly typed telegram keys overtake older ones
+			// while script delay() loops poll only for cursor motion.
+			_deferredInputEvents.push(event);
 			break;
 		}
 	}
-
-	for (uint i = 0; i < deferred.size(); ++i)
-		_eventMan->pushEvent(deferred[i]);
 
 	const Common::Point newMouse = _eventMan->getMousePos();
 	const bool moved = oldMouse.x != newMouse.x || oldMouse.y != newMouse.y;
@@ -788,7 +793,7 @@ Common::Error CyberflixEngine::run() {
 	Common::Event event;
 	while (!shouldQuit()) {
 		bool scriptEventHandled = false;
-		while (_eventMan->pollEvent(event)) {
+		while (pollScriptEvent(event)) {
 			if (event.type == Common::EVENT_MOUSEMOVE) {
 				_cursorPresentationDirty = true;
 			} else if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
