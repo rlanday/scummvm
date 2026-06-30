@@ -248,6 +248,7 @@ struct HeaderState {
 	int32 stageNode = 0;
 	Common::String flatName;
 	int32 frameCounter = 0; // frame() base; paintframe timers are absolute script frames.
+	bool frameCounterSeen = false;
 	bool stageVisible = false;
 	Common::String setFileName;
 	Common::String setName;
@@ -407,8 +408,10 @@ static bool parseHeaderChunk(Common::SeekableReadStream &in, int64 end, HeaderSt
 	header.stageVisible = !header.stageName.empty();
 	if (in.pos() < end)
 		header.stageVisible = in.readByte() != 0;
-	if (in.pos() + 4 <= end)
+	if (in.pos() + 4 <= end) {
 		header.frameCounter = in.readSint32LE();
+		header.frameCounterSeen = true;
+	}
 	return !in.err();
 }
 
@@ -1330,8 +1333,21 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 
 	// Story timers such as the cargo painting timer store `paintframe = frame()`
 	// in script globals. Preserve frame() across saves so those absolute-frame
-	// timers resume instead of restarting or going negative after reload.
+	// timers resume instead of restarting or going negative after reload. Older
+	// ScummVM saves lack frameCounter; when loading one mid-timer, resume from
+	// paintframe instead of leaving frame() below paintframe and freezing the
+	// countdown until the counter catches up.
 	_frameCounter = header.frameCounter;
+	if (getGameType() == GType_Titanic) {
+		const int paintFrame = globalIntValue(_vm.globalVars(), "paintframe");
+		const int mission = globalIntValue(_vm.globalVars(), "mission");
+		const int phase = globalIntValue(_vm.globalVars(), "phase");
+		Shop::Prop *painting = _propRuntime.findProp("painting");
+		if ((!header.frameCounterSeen || _frameCounter < paintFrame) &&
+				mission == 2 && phase == 0 && paintFrame > 0 && painting &&
+				painting->owner.equalsIgnoreCase("none"))
+			_frameCounter = paintFrame;
+	}
 	_lastCargoPaintingTimerLogBucket = -1;
 	_cargoPaintingTimerExpiredLogged = false;
 
