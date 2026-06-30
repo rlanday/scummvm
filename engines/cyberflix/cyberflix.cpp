@@ -620,7 +620,11 @@ void CyberflixEngine::forceUpdate() {
 	const bool cursorMoved = pumpCursorMotionEvents();
 	bool presented = false;
 	processScheduledLoops();
-	_frameCounter++;
+	// FUN_004420b0 is the native writer for DAT_00461122, read by frame()
+	// (FUN_00435a30). The main interactive loop's idle timeout calls
+	// FUN_00442100 instead, so script-frame timers advance only on this
+	// forceupdate() compositor path, not on every quiet idle poll.
+	++_frameCounter;
 	debugCargoPaintingTimer();
 	if (!_propRuntime.dirty() && isReplacementStage(_stageRuntime.stage()) && propRuntime().hasAnimatedScreenProps())
 		_propRuntime.setDirty(true);
@@ -706,6 +710,9 @@ void CyberflixEngine::debugCargoPaintingTimer() {
 	// PENNY1.PUP res6 starts this by advancing mission 1 phase 4: BOOTFILE
 	// records paintframe = frame(). BINL.SET res58 later expires the cargo
 	// painting if frame() - paintframe > 10000 before the player opens the bin.
+	// This is a script-frame timer, not a wall-clock timer: native frame() only
+	// advances when forceupdate() reaches FUN_004420b0, so quiet rooms may not
+	// produce a log line every real-time bucket.
 	debug(1, "Cyberflix: cargo painting timer remaining about %d:%02d (%d/%d script frames)",
 			remainingSeconds / 60, remainingSeconds % 60, remainingFrames, kCargoPaintingTimerFrames);
 }

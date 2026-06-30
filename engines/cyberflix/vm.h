@@ -260,7 +260,7 @@ public:
 	virtual int getFrameRate() { return 3; }
 	virtual int setFrameRate(int newRate) { return newRate; }
 
-	/** frame() (0x4e6a FUN_00435a30): native compositor pass counter. */
+	/** frame() (0x4e6a FUN_00435a30): native forceupdate compositor-pass counter. */
 	virtual int frameCounter() { return 0; }
 
 	/**
