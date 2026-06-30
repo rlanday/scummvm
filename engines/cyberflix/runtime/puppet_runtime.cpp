@@ -242,7 +242,10 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 		}
 
 		bool cursorDirty = false;
-		while (engine._eventMan->pollEvent(event)) {
+		// Cursor smoothing defers non-motion events during the sleep below; the
+		// modal puppet loop must consume those queued clicks itself, not leak
+		// them back to the room after the puppet closes.
+		while (engine.pollScriptEvent(event)) {
 			if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
 				engine.requestQuit();
 				return -1;
@@ -256,7 +259,7 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 				return -1;
 			if (event.type != Common::EVENT_LBUTTONDOWN)
 				continue;
-			mouse = engine._eventMan->getMousePos();
+			mouse = Common::Point(event.mouse.x, event.mouse.y);
 			for (uint i = 0; i < _bevels.size(); ++i) {
 				if (!_bevels[i].rect.contains(mouse))
 					continue;
@@ -582,7 +585,9 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 		}
 		bool aborted = false;
 		bool cursorDirty = false;
-		while (engine._eventMan->pollEvent(event)) {
+		// Use the engine queue so clicks deferred by cursor-only sleeps during
+		// speech are consumed here instead of replaying as room clicks later.
+		while (engine.pollScriptEvent(event)) {
 			if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
 				engine.requestQuit();
 				aborted = true;
