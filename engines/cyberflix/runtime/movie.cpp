@@ -254,6 +254,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	Common::String pendingMovieName = name;
 	int pendingStartFrame = 0;
 	Common::Array<MovieReturnFrame> returnStack;
+	engine._actionFrameMask = 0; // playmovie clears the mask once (TI.EXE FUN_00446f80).
 
 	while (!pendingMovieName.empty() && !engine.shouldQuit()) {
 		const Common::String currentMovieName = pendingMovieName;
@@ -364,7 +365,6 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// before the frame loop). Reaching cue N during playback sets bit N of the
 	// action-frame mask that the script builtin actionframe(N) tests.
 	int actionCue1 = -1, actionCue2 = -1;
-	engine._actionFrameMask = 0; // playmovie clears the mask (TI.EXE FUN_00446f80)
 
 	// Screen position of the movie. The original never centers: each draw op
 	// blits at the master header's QuickDraw rect {top,left,bottom,right}
