@@ -33,17 +33,11 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 	if (name.empty())
 		return;
 
-	int previousHeading = 0;
-	if (set() && set()->isOpen() && this->scene() >= 0) {
-		Set::CameraData cameraData;
-		if (transitionType() == kSetTransitionForward && transitionResource() != 0) {
-			if (set()->transitionCameraData(transitionResource(), transitionFrame(), cameraData))
-				previousHeading = cameraData.heading;
-		} else if (set()->cameraData(static_cast<uint32>(this->scene()), static_cast<uint32>(table()),
-				static_cast<uint32>(angle()), cameraData)) {
-			previousHeading = cameraData.heading;
-		}
-	}
+	// TI.EXE keeps DAT_004611b4 as a persistent camera-heading global. The
+	// script-level changeset() wrapper may close/replace SET state, but native
+	// absent-view fallback still uses the last composited heading rather than 0.
+	updateLastCameraHeading();
+	int previousHeading = _lastCameraHeading;
 
 	Common::ScopedPtr<Set> newSet(new Set());
 	if (!newSet->open(name)) {
@@ -70,17 +64,9 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 	Common::String useScene = !sceneName.empty() ? sceneName : set()->defaultScene();
 	Common::String useView = !viewName.empty() ? viewName : set()->defaultView();
 
-	// The original finishes opensetfile by sending the system messages
-	// (FUN_00430fa0): it runs openset() against [set script, BOOTFILE res2],
-	// then (if the set did not change) runs "<scene>", openscene() through the
-	// sendtoscene executor FUN_004311e0, which paints and dispatches against
-	// [scene script, set script, BOOTFILE res2].
-	Common::Array<Value> noArgs;
-	Common::String openedName = set()->setName();
-	engine.dispatchSetMessage("openset", noArgs);
-
-	if (set() && set()->setName() == openedName && !useScene.empty()) {
-		int sceneIdx = set()->findScene(useScene);
+	int sceneIdx = -1;
+	if (!useScene.empty()) {
+		sceneIdx = set()->findScene(useScene);
 		if (sceneIdx < 0) {
 			if (set()->sceneCount() == 0) {
 				warning("Cyberflix: set '%s' has no scenes", set()->name().c_str());
@@ -122,8 +108,19 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 			}
 		}
 		renderSetScene(engine, sceneIdx, Set::kNativeStablePanoramaTable, angle, activeView);
-		engine.dispatchSceneMessage(static_cast<uint32>(sceneIdx), "openscene", noArgs);
 	}
+
+	// The original finishes opensetfile by sending the system messages
+	// (FUN_00430fa0) after FUN_00433960 has already selected and painted the
+	// current scene/view: it runs openset() against [set script, BOOTFILE res2],
+	// then (if the set did not change) runs "<scene>", openscene() through the
+	// sendtoscene executor FUN_004311e0.
+	Common::Array<Value> noArgs;
+	Common::String openedName = set()->setName();
+	engine.dispatchSetMessage("openset", noArgs);
+
+	if (set() && set()->setName() == openedName && sceneIdx >= 0)
+		engine.dispatchSceneMessage(static_cast<uint32>(sceneIdx), "openscene", noArgs);
 }
 
 // closesetfile(): send the closing system messages, then drop the open set
@@ -203,6 +200,7 @@ bool SetRuntime::restoreSnapshot(const Snapshot &snapshot) {
 			snapshot.transitionType : kSetTransitionNone;
 	transitionResource() = snapshot.transitionResource;
 	transitionFrame() = snapshot.transitionFrame;
+	updateLastCameraHeading();
 	return true;
 }
 

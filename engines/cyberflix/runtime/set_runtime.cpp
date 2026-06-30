@@ -76,6 +76,22 @@ bool SetRuntime::settleStableSetView(CyberflixEngine &engine) {
 	return renderNativeStableSetView(*this, engine);
 }
 
+void SetRuntime::updateLastCameraHeading() {
+	if (!set() || !set()->isOpen())
+		return;
+
+	Set::CameraData cameraData;
+	if (transitionType() == kSetTransitionForward) {
+		if (set()->transitionCameraData(transitionResource(), transitionFrame(), cameraData))
+			_lastCameraHeading = cameraData.heading;
+	} else if (scene() >= 0) {
+		if (set()->cameraData(static_cast<uint32>(scene()), static_cast<uint32>(table()),
+				static_cast<uint32>(angle()), cameraData)) {
+			_lastCameraHeading = cameraData.heading;
+		}
+	}
+}
+
 // sendtoscene(name, message): dispatch the message against [scene script, set
 // script, BOOTFILE res2] for the named scene, without changing the currently
 // rendered scene (TI.EXE FUN_004311e0/FUN_00431200).
@@ -210,6 +226,7 @@ void SetRuntime::navigateSet(CyberflixEngine &engine, const Common::String &acti
 		table() = turnTable;
 		angle() = startAngle;
 		transitionType() = kSetTransitionTurn;
+		updateLastCameraHeading();
 		displaySetFrame(engine, frameSequence());
 		return;
 	}
@@ -235,6 +252,7 @@ void SetRuntime::navigateSet(CyberflixEngine &engine, const Common::String &acti
 		transitionType() = kSetTransitionForward;
 		transitionResource() = transitionId;
 		transitionFrame() = 0;
+		updateLastCameraHeading();
 		displaySetFrame(engine, frameSequence());
 	}
 }
@@ -259,6 +277,7 @@ void SetRuntime::advanceSetTransition(CyberflixEngine &engine) {
 			return;
 		}
 		angle() = nextAngle;
+		updateLastCameraHeading();
 		int viewIdx = set()->viewTagAtAngle(static_cast<uint32>(scene()), static_cast<uint32>(table()), static_cast<uint32>(nextAngle));
 		if (viewIdx >= 0)
 			view() = set()->viewName(static_cast<uint32>(scene()), static_cast<uint32>(viewIdx));
@@ -295,6 +314,7 @@ void SetRuntime::advanceSetTransition(CyberflixEngine &engine) {
 			return;
 		}
 		transitionFrame() = nextFrame;
+		updateLastCameraHeading();
 		displaySetFrame(engine, frameSequence());
 
 		if (nextFrame == count - 1) {
@@ -314,6 +334,7 @@ void SetRuntime::advanceSetTransition(CyberflixEngine &engine) {
 			transitionType() = kSetTransitionNone;
 			transitionResource() = 0;
 			transitionFrame() = 0;
+			updateLastCameraHeading();
 			_stableSettlePending = true;
 			// Forward transitions finish through FUN_00442b70 after the final
 			// transition record has already been applied, then the later
@@ -339,6 +360,7 @@ void SetRuntime::renderSetScene(CyberflixEngine &engine, int sceneIdx, int table
 	scene() = sceneIdx;
 	table() = tableIdx;
 	angle() = angleIdx;
+	updateLastCameraHeading();
 	if (tableIdx == Set::kNativeStablePanoramaTable)
 		_stableSettlePending = false;
 	if (!viewName.empty()) {

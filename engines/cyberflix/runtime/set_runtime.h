@@ -113,6 +113,7 @@ public:
 	void advanceSetTransition(CyberflixEngine &engine);
 	bool stableSettlePending() const { return _stableSettlePending; }
 	bool settleStableSetView(CyberflixEngine &engine);
+	void updateLastCameraHeading();
 	void renderSetScene(CyberflixEngine &engine, int scene, int table, int angle,
 			const Common::String &view = Common::String());
 	void displaySetFrame(CyberflixEngine &engine, const FrameImage &frame);
@@ -138,6 +139,7 @@ public:
 	void reset() {
 		_set.reset();
 		clearNavigation();
+		_lastCameraHeading = 0;
 		_visible = false;
 		_screenUpdatePending = false;
 	}
@@ -153,6 +155,7 @@ private:
 	uint32 _transitionFrame = 0;
 	FrameSequence _frameSequence;
 	bool _stableSettlePending = false;
+	int _lastCameraHeading = 0;
 	bool _visible = false;
 	bool _screenUpdatePending = false;
 };
