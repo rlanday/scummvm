@@ -25,7 +25,9 @@
 #include "engines/advancedDetector.h"
 
 #define GAMEOPTION_FONT_ANTIALIASING GUIO_GAMEOPTIONS1
+#define GAMEOPTION_ENHANCED_PANORAMA_SETTLING GUIO_GAMEOPTIONS2
 #define CYBERFLIX_OPTION_FONT_ANTIALIASING "enable_font_antialiasing"
+#define CYBERFLIX_OPTION_ENHANCED_PANORAMA_SETTLING "enhanced_panorama_settling"
 
 namespace Cyberflix {
 

@@ -108,7 +108,11 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 							useView.c_str(), actualScene.c_str(),
 							set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx)).c_str());
 			}
-			int viewAngle = set()->angleForView(static_cast<uint32>(sceneIdx), 0, viewIdx);
+			// Direct scene opens use the native stable-view renderer
+			// (FUN_00433960 -> FUN_004425e0), which resolves named views against
+			// panorama table B rather than the right-turn table A.
+			int viewAngle = set()->angleForView(static_cast<uint32>(sceneIdx),
+					Set::kNativeStablePanoramaTable, viewIdx);
 			if (viewAngle >= 0) {
 				angle = viewAngle;
 				activeView = set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx));
@@ -117,7 +121,7 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 						useView.c_str(), actualScene.c_str());
 			}
 		}
-		renderSetScene(engine, sceneIdx, 0, angle, activeView);
+		renderSetScene(engine, sceneIdx, Set::kNativeStablePanoramaTable, angle, activeView);
 		engine.dispatchSceneMessage(static_cast<uint32>(sceneIdx), "openscene", noArgs);
 	}
 }
@@ -264,7 +268,10 @@ static bool chooseSceneView(const SetRuntime &runtime, int sceneIdx, const Commo
 		return false;
 	}
 
-	int viewAngle = runtime.set()->angleForView(static_cast<uint32>(sceneIdx), 0, viewIdx);
+	// currentview()/currentscene() are stable-view changes, so match the same
+	// FUN_00433960/FUN_004425e0 table-B path used by opensetfile().
+	int viewAngle = runtime.set()->angleForView(static_cast<uint32>(sceneIdx),
+			Set::kNativeStablePanoramaTable, viewIdx);
 	if (viewAngle < 0) {
 		warning("Cyberflix: %s view '%s' has no panorama angle in scene '%s'",
 				operation,
@@ -302,7 +309,7 @@ Common::String SetRuntime::setCurrentView(CyberflixEngine &engine, const Common:
 	if (!set() || !set()->isOpen())
 		return "none";
 
-	renderSetScene(engine, savedScene, 0, targetAngle, targetView);
+	renderSetScene(engine, savedScene, Set::kNativeStablePanoramaTable, targetAngle, targetView);
 	Common::Array<Value> noArgs;
 	engine.dispatchSceneMessage(static_cast<uint32>(savedScene), "openscene", noArgs);
 	return getCurrentView();
@@ -382,12 +389,13 @@ Common::String SetRuntime::setCurrentScene(CyberflixEngine &engine, const Common
 				int targetAngle = 0;
 				Common::String targetView = set()->defaultView();
 				int viewIdx = set()->findView(static_cast<uint32>(sceneIdx), targetView);
-				int viewAngle = set()->angleForView(static_cast<uint32>(sceneIdx), 0, viewIdx);
+				int viewAngle = set()->angleForView(static_cast<uint32>(sceneIdx),
+						Set::kNativeStablePanoramaTable, viewIdx);
 				if (viewAngle >= 0)
 					targetAngle = viewAngle;
 				else
 					targetView.clear();
-				renderSetScene(engine, sceneIdx, 0, targetAngle, targetView);
+				renderSetScene(engine, sceneIdx, Set::kNativeStablePanoramaTable, targetAngle, targetView);
 				Common::Array<Value> noArgs;
 				engine.dispatchSceneMessage(static_cast<uint32>(sceneIdx), "openscene", noArgs);
 			} else {

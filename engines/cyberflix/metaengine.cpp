@@ -89,6 +89,17 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 			0
 		}
 	},
+	{
+		GAMEOPTION_ENHANCED_PANORAMA_SETTLING,
+		{
+			_s("Enhance panorama settling after movement"),
+			_s("After a SET turn or forward move reaches a named view, redraw the stable panorama view immediately for a sharper image than the original transition frame."),
+			CYBERFLIX_OPTION_ENHANCED_PANORAMA_SETTLING,
+			false,
+			0,
+			0
+		}
+	},
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 

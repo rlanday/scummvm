@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/system.h"
 #include "common/util.h"
@@ -36,6 +37,39 @@
 #include "cyberflix/stage.h"
 
 namespace Cyberflix {
+
+static bool enhancedPanoramaSettlingEnabled() {
+	return ConfMan.hasKey(CYBERFLIX_OPTION_ENHANCED_PANORAMA_SETTLING) &&
+			ConfMan.getBool(CYBERFLIX_OPTION_ENHANCED_PANORAMA_SETTLING);
+}
+
+// Stable, non-moving room paints go through TI.EXE FUN_00433960 -> FUN_004425e0,
+// which resolves the named view in the scene's view directory and applies the
+// scene record's panorama table B (+0x0e). Movement does not arm a separate
+// "high-res after N ticks" timer. Forward moves keep stepping their authored
+// transition resource until the last record, then resolve the destination and
+// dispatch openscene(); turns stop on the first tagged panorama frame and do the
+// same openscene dispatch. Any visible settle after movement is therefore either
+// that final transition/compositor step or script/compositor work reached from
+// openscene(), not a delayed timer in the SET movement code.
+static bool renderNativeStableSetView(SetRuntime &runtime, CyberflixEngine &engine) {
+	if (!runtime.set() || !runtime.set()->isOpen() ||
+			runtime.scene() < 0 || runtime.view().empty())
+		return false;
+
+	int viewIdx = runtime.set()->findView(static_cast<uint32>(runtime.scene()), runtime.view());
+	if (viewIdx < 0)
+		return false;
+
+	int stableAngle = runtime.set()->angleForView(static_cast<uint32>(runtime.scene()),
+			Set::kNativeStablePanoramaTable, viewIdx);
+	if (stableAngle < 0)
+		return false;
+
+	runtime.renderSetScene(engine, runtime.scene(), Set::kNativeStablePanoramaTable,
+			stableAngle, runtime.view());
+	return true;
+}
 
 // sendtoscene(name, message): dispatch the message against [scene script, set
 // script, BOOTFILE res2] for the named scene, without changing the currently
@@ -146,7 +180,12 @@ void SetRuntime::navigateSet(CyberflixEngine &engine, const Common::String &acti
 	}
 
 	if (action.equalsIgnoreCase("left") || action.equalsIgnoreCase("right")) {
-		const int turnTable = action.equalsIgnoreCase("left") ? 1 : 0;
+		// FUN_00442140 selects the other authored panorama stream for each
+		// direction: table A for right turns, table B for left turns. Both streams
+		// are delta animations stepped by forceupdate()/visualeffect(), not by a
+		// wall-clock timer.
+		const int turnTable = action.equalsIgnoreCase("left") ?
+				Set::kPanoramaTableB : Set::kPanoramaTableA;
 		int startAngle = set()->angleForView(static_cast<uint32>(scene()), static_cast<uint32>(turnTable), viewIdx);
 		if (startAngle < 0 || set()->nextTaggedAngle(static_cast<uint32>(scene()), static_cast<uint32>(turnTable), startAngle) < 0) {
 			warning("Cyberflix: set '%s' scene '%s' has no %s turn from view '%s'",
@@ -220,6 +259,12 @@ void SetRuntime::advanceSetTransition(CyberflixEngine &engine) {
 
 		if (viewIdx >= 0) {
 			transitionType() = kSetTransitionNone;
+			// Native FUN_00442970 stops here, clears the transition globals and
+			// sends openscene(). This opt-in enhancement redraws the stable
+			// panorama table before openscene so turns do not remain on the tagged
+			// movement-table frame while waiting for any script-driven repaint.
+			if (enhancedPanoramaSettlingEnabled())
+				renderNativeStableSetView(*this, engine);
 			Common::Array<Value> noArgs;
 			engine.dispatchSceneMessage(static_cast<uint32>(scene()), "openscene", noArgs);
 		}
@@ -261,6 +306,12 @@ void SetRuntime::advanceSetTransition(CyberflixEngine &engine) {
 			transitionType() = kSetTransitionNone;
 			transitionResource() = 0;
 			transitionFrame() = 0;
+			// Forward transitions finish through FUN_00442b70 after the final
+			// transition record has already been applied. There is still no
+			// deferred high-resolution timer; keep native output by default, and
+			// let the option paint the stable table-B view immediately.
+			if (enhancedPanoramaSettlingEnabled())
+				renderNativeStableSetView(*this, engine);
 			Common::Array<Value> noArgs;
 			engine.dispatchSceneMessage(static_cast<uint32>(scene()), "openscene", noArgs);
 		}

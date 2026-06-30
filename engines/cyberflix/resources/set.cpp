@@ -133,7 +133,7 @@ const byte *Set::paintingTable(const byte *viewRec, uint32 &count, uint32 &lengt
 const byte *Set::panoramaTable(uint32 scene, uint32 table, uint32 &count) const {
 	count = 0;
 	const byte *rec = sceneRecord(scene);
-	if (!rec || table > 1)
+	if (!rec || table > kPanoramaTableB)
 		return nullptr;
 	uint32 panoId = READ_LE_UINT32(rec + (table == 0 ? kScenePanoramaAOffset : kScenePanoramaBOffset));
 	int idx = resourceIndexById(panoId);

@@ -76,9 +76,12 @@ namespace Cyberflix {
  * different from panorama frame index 0, and native FUN_00442e90 treats it as a
  * no-op that preserves the retained framebuffer.
  *
- * Rendering a room is therefore: pick a scene, pick a panorama table (A/B),
- * replay frames 0..angle, and apply the set clut. Panorama navigation, hotspots
- * and the behavior script come later.
+ * Rendering a stable room is therefore: pick a scene, use panorama table B
+ * (TI.EXE FUN_00433960 -> FUN_004425e0 locks the scene record's +0x0e
+ * table), replay frames 0..angle, and apply the set clut. Panorama
+ * navigation uses table A for right turns and table B for left turns; native
+ * movement completion leaves the final transition/turn frame onscreen unless
+ * a scene script explicitly repaints later.
  */
 class Set {
 public:
@@ -86,6 +89,10 @@ public:
 
 	/** Master-header, scene-record and panorama-record field offsets. */
 	enum {
+		kPanoramaTableA = 0,
+		kPanoramaTableB = 1,
+		kNativeStablePanoramaTable = kPanoramaTableB,
+
 		kMasterNameOffset = 0x070,
 		// Viewport rect the runtime copies into its set state (FUN_004307f0
 		// param_2[0x11/0x12/0x0f/0x10] <- B+0x80/0x82/0x84/0x86) and turns
