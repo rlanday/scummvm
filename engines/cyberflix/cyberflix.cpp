@@ -433,6 +433,24 @@ bool CyberflixEngine::optionKey() {
 	return (_eventMan->getModifierState() & Common::KBD_SHIFT) != 0;
 }
 
+// Deferred input queue:
+// ScummVM has several nested Cyberflix loops that pump backend events for a
+// narrower purpose than the main room loop. delayMillisWithCursorUpdates() and
+// pumpCursorMotionEvents() run during script delay(), forceupdate() pacing,
+// puppet speech, and puppetevent() choice waits so the software cursor keeps
+// moving like the original Win32 cursor. Those helpers may consume mouse motion
+// and quit requests immediately, but keys and button clicks still belong to the
+// script/modal context that is currently in charge.
+//
+// Keep those not-for-this-helper events in _deferredInputEvents instead of
+// pushing them back through EventManager::pushEvent(): pushEvent uses the
+// artificial source behind real backend events, which can reorder text input
+// (for example telegram typing) or replay a puppet choice click as a room
+// mousedown after the puppet closes. Any script-visible consumer that can run
+// after cursor-only pumping must call pollScriptEvent(): the main room loop,
+// puppet speech playback, and puppetevent() bevel selection. flushEvents()
+// clears this queue along with backend mouse/keyboard events for native
+// flush-events script calls.
 bool CyberflixEngine::pollScriptEvent(Common::Event &event) {
 	if (!_deferredInputEvents.empty()) {
 		event = _deferredInputEvents.pop();
