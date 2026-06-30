@@ -45,13 +45,11 @@ static bool enhancedPanoramaSettlingEnabled() {
 
 // Stable, non-moving room paints go through TI.EXE FUN_00433960 -> FUN_004425e0,
 // which resolves the named view in the scene's view directory and applies the
-// scene record's panorama table B (+0x0e). Movement does not arm a separate
-// "high-res after N ticks" timer. Forward moves keep stepping their authored
-// transition resource until the last record, then resolve the destination and
-// dispatch openscene(); turns stop on the first tagged panorama frame and do the
-// same openscene dispatch. Any visible settle after movement is therefore either
-// that final transition/compositor step or script/compositor work reached from
-// openscene(), not a delayed timer in the SET movement code.
+// scene record's panorama table B (+0x0e). Active movement still advances only
+// through forceupdate()/FUN_004420b0. Once movement has resolved a named view,
+// native clears DAT_00486724; the main event loop's quiet timeout case 8 later
+// reaches FUN_00442100, sees DAT_00486720 < 0 and DAT_00486724 == 0, and calls
+// FUN_004425e0 for the high-quality stable repaint without incrementing frame().
 static bool renderNativeStableSetView(SetRuntime &runtime, CyberflixEngine &engine) {
 	if (!runtime.set() || !runtime.set()->isOpen() ||
 			runtime.scene() < 0 || runtime.view().empty())
@@ -69,6 +67,13 @@ static bool renderNativeStableSetView(SetRuntime &runtime, CyberflixEngine &engi
 	runtime.renderSetScene(engine, runtime.scene(), Set::kNativeStablePanoramaTable,
 			stableAngle, runtime.view());
 	return true;
+}
+
+bool SetRuntime::settleStableSetView(CyberflixEngine &engine) {
+	if (!_stableSettlePending)
+		return false;
+	_stableSettlePending = false;
+	return renderNativeStableSetView(*this, engine);
 }
 
 // sendtoscene(name, message): dispatch the message against [scene script, set
@@ -195,6 +200,7 @@ void SetRuntime::navigateSet(CyberflixEngine &engine, const Common::String &acti
 		}
 		if (!engine.closeCurrentSceneForNavigation())
 			return;
+		_stableSettlePending = false;
 		if (!set()->applyPanoramaFrame(static_cast<uint32>(scene()), static_cast<uint32>(turnTable), static_cast<uint32>(startAngle),
 				frameSequence())) {
 			warning("Cyberflix: set '%s' failed to start %s turn from view '%s'",
@@ -220,6 +226,7 @@ void SetRuntime::navigateSet(CyberflixEngine &engine, const Common::String &acti
 		}
 		if (!engine.closeCurrentSceneForNavigation())
 			return;
+		_stableSettlePending = false;
 		if (!set()->applyTransitionFrame(transitionId, 0, frameSequence())) {
 			warning("Cyberflix: set '%s' failed to start forward transition %u",
 					set()->name().c_str(), transitionId);
@@ -259,12 +266,13 @@ void SetRuntime::advanceSetTransition(CyberflixEngine &engine) {
 
 		if (viewIdx >= 0) {
 			transitionType() = kSetTransitionNone;
+			_stableSettlePending = true;
 			// Native FUN_00442970 stops here, clears the transition globals and
-			// sends openscene(). This opt-in enhancement redraws the stable
-			// panorama table before openscene so turns do not remain on the tagged
-			// movement-table frame while waiting for any script-driven repaint.
+			// sends openscene(). It normally waits for the main-loop quiet timeout
+			// (FUN_00442100) to run the stable table-B repaint; this opt-in
+			// enhancement performs that repaint immediately.
 			if (enhancedPanoramaSettlingEnabled())
-				renderNativeStableSetView(*this, engine);
+				settleStableSetView(engine);
 			Common::Array<Value> noArgs;
 			engine.dispatchSceneMessage(static_cast<uint32>(scene()), "openscene", noArgs);
 		}
@@ -306,12 +314,13 @@ void SetRuntime::advanceSetTransition(CyberflixEngine &engine) {
 			transitionType() = kSetTransitionNone;
 			transitionResource() = 0;
 			transitionFrame() = 0;
+			_stableSettlePending = true;
 			// Forward transitions finish through FUN_00442b70 after the final
-			// transition record has already been applied. There is still no
-			// deferred high-resolution timer; keep native output by default, and
-			// let the option paint the stable table-B view immediately.
+			// transition record has already been applied, then the later
+			// main-loop quiet timeout performs the native stable table-B repaint.
+			// The option paints that stable view immediately instead.
 			if (enhancedPanoramaSettlingEnabled())
-				renderNativeStableSetView(*this, engine);
+				settleStableSetView(engine);
 			Common::Array<Value> noArgs;
 			engine.dispatchSceneMessage(static_cast<uint32>(scene()), "openscene", noArgs);
 		}
@@ -330,6 +339,8 @@ void SetRuntime::renderSetScene(CyberflixEngine &engine, int sceneIdx, int table
 	scene() = sceneIdx;
 	table() = tableIdx;
 	angle() = angleIdx;
+	if (tableIdx == Set::kNativeStablePanoramaTable)
+		_stableSettlePending = false;
 	if (!viewName.empty()) {
 		view() = viewName;
 	} else {

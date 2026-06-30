@@ -72,6 +72,7 @@
 namespace Cyberflix {
 
 static const uint32 kCursorPollIntervalMs = 2;
+static const int kNativeIdleDisplayTicks = 30;
 static const int kCargoPaintingTimerFrames = 10000;
 static const int kCargoPaintingTimerLogSeconds = 10;
 
@@ -816,9 +817,12 @@ Common::Error CyberflixEngine::run() {
 	// message (case 0 via FUN_00438e90, which formats the point as one int).
 	// The boot handlers route the hits onward (sendtoprop(name, mousedown)...).
 	Common::Event event;
+	int nextIdleDisplayTick = tick() + kNativeIdleDisplayTicks;
 	while (!shouldQuit()) {
 		bool scriptEventHandled = false;
+		bool scriptEventSeen = false;
 		while (pollScriptEvent(event)) {
+			scriptEventSeen = true;
 			if (event.type == Common::EVENT_MOUSEMOVE) {
 				_cursorPresentationDirty = true;
 			} else if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
@@ -881,6 +885,8 @@ Common::Error CyberflixEngine::run() {
 				}
 			}
 		}
+		if (scriptEventSeen)
+			nextIdleDisplayTick = tick() + kNativeIdleDisplayTicks;
 		// Present mouse motion immediately when no script event needs to repaint
 		// first; idle() below may still change the cursor shape and request
 		// another cursor-only present.
@@ -897,6 +903,22 @@ Common::Error CyberflixEngine::run() {
 			reassertCursorVisibility();
 			_system->updateScreen();
 			_cursorPresentationDirty = false;
+		}
+		// Native's main loop schedules a case-8 display timeout after about
+		// thirty 60 Hz ticks with no input (FUN_0043b040 -> FUN_00438680 ->
+		// FUN_00442100). It does not advance frame() or active movement; when a
+		// SET movement has already resolved to a named view, it repaints the
+		// stable table-B panorama (FUN_004425e0). This is the delayed "settle" the
+		// original shows after forward moves and right turns.
+		if (_setRuntime.stableSettlePending() &&
+				_setRuntime.transitionType() == kSetTransitionNone &&
+				tick() >= nextIdleDisplayTick) {
+			if (_setRuntime.settleStableSetView(*this) &&
+					setRuntime().presentPendingScreenUpdate(*this)) {
+				reassertCursorVisibility();
+				_cursorPresentationDirty = false;
+			}
+			nextIdleDisplayTick = tick() + kNativeIdleDisplayTicks;
 		}
 		if (_framePacingRuntime.getFrameRate() == 0 && _setRuntime.transitionType() == kSetTransitionNone)
 			delayMillisWithCursorUpdates(10);
