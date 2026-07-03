@@ -107,7 +107,6 @@ private:
 	Common::Array<BevelOption> _bevels;
 	Common::ScopedPtr<Graphics::Font> _nativeTextFont;
 	int _nativeTextFontSize = 0;
-	bool _nativeTextFontAntialiasing = false;
 };
 
 } // End of namespace Cyberflix

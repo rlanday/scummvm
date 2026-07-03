@@ -39,7 +39,7 @@ static const CyberflixGameDescription gameDescriptions[] = {
 			Common::EN_ANY,
 			Common::kPlatformWindows,
 			ADGF_UNSTABLE,
-			GUIO3(GUIO_NOMIDI, GAMEOPTION_FONT_ANTIALIASING, GAMEOPTION_ENHANCED_PANORAMA_SETTLING)
+			GUIO2(GUIO_NOMIDI, GAMEOPTION_ENHANCED_PANORAMA_SETTLING)
 		},
 		GType_Titanic
 	},

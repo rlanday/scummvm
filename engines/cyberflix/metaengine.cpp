@@ -79,17 +79,6 @@ static bool readCyberflixSaveDescription(Common::SeekableReadStream &in, Common:
 
 static const ADExtraGuiOptionsMap optionsList[] = {
 	{
-		GAMEOPTION_FONT_ANTIALIASING,
-		{
-			_s("Enable font anti-aliasing"),
-			_s("Render CyberFlix text with smooth TrueType glyphs instead of the original monochrome Windows-style glyphs."),
-			CYBERFLIX_OPTION_FONT_ANTIALIASING,
-			false,
-			0,
-			0
-		}
-	},
-	{
 		GAMEOPTION_ENHANCED_PANORAMA_SETTLING,
 		{
 			_s("Enhance panorama settling after movement"),

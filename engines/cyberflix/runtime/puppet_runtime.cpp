@@ -21,7 +21,6 @@
 
 #include "common/algorithm.h"
 #include "common/archive.h"
-#include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/events.h"
 #include "common/path.h"
@@ -454,19 +453,18 @@ bool PuppetRuntime::renderCurrentFrame(CyberflixEngine &engine, bool present) {
 
 const Graphics::Font *PuppetRuntime::textFont(int size) {
 #ifdef USE_FREETYPE2
-	const bool antialiasing = ConfMan.hasKey(CYBERFLIX_OPTION_FONT_ANTIALIASING) &&
-			ConfMan.getBool(CYBERFLIX_OPTION_FONT_ANTIALIASING);
-	if (_nativeTextFont && _nativeTextFontSize == size &&
-			_nativeTextFontAntialiasing == antialiasing)
+	if (_nativeTextFont && _nativeTextFontSize == size)
 		return _nativeTextFont.get();
 
 	_nativeTextFont.reset();
 	_nativeTextFontSize = size;
-	_nativeTextFontAntialiasing = antialiasing;
 
-	const Graphics::TTFRenderMode renderMode = antialiasing
-			? Graphics::kTTFRenderModeLight
-			: Graphics::kTTFRenderModeMonochrome;
+	// Titanic is an 8-bit palettised title. The ScummVM TTF rasteriser can blend
+	// anti-aliased glyphs only into RGB/RGBA destinations; the CLUT8 draw path
+	// thresholds the coverage bitmap at 0x80, so a "light" render mode would be
+	// discarded at draw time. Use the monochrome mode to match the original
+	// Windows glyphs and avoid paying for coverage that never reaches the screen.
+	const Graphics::TTFRenderMode renderMode = Graphics::kTTFRenderModeMonochrome;
 
 	static const char *const arialNames[] = {
 		"arial.ttf",
