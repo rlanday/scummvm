@@ -66,6 +66,21 @@ static bool shouldLogEnigmaVariable(const Common::String &key) {
 			key == "countdial";
 }
 
+// Story-progress globals that gate room encounters (e.g. the Smethels message
+// on GSTAIR3 needs mission==2 && phase==3 && savedeck=='c'). Logging writes to
+// these at level 1 makes a corrupted timeline state obvious without re-running
+// under a debugger.
+static bool shouldLogStoryVariable(const Common::String &key) {
+	return key == "mission" ||
+			key == "phase" ||
+			key == "smethphase" ||
+			key == "pennyphase" ||
+			key == "paintframe" ||
+			key == "savedeck" ||
+			key == "burnsphase" ||
+			key == "neckphase";
+}
+
 static bool isEnigmaStageContext(const Common::String &self) {
 	return self.equalsIgnoreCase("enigma.stg") ||
 			self.equalsIgnoreCase("enigma 1");
@@ -213,6 +228,11 @@ void ScriptVM::setVar(const Common::String &name, const Value &v) {
 	if (shouldLogEnigmaVariable(key)) {
 		Common::String oldValue = _vars.contains(key) ? _vars[key].toString() : Common::String("<unset>");
 		debug(1, "Cyberflix: Enigma var %s global %s -> %s",
+				key.c_str(), oldValue.c_str(), v.toString().c_str());
+	}
+	if (shouldLogStoryVariable(key)) {
+		Common::String oldValue = _vars.contains(key) ? _vars[key].toString() : Common::String("<unset>");
+		debug(1, "Cyberflix: story var %s global %s -> %s",
 				key.c_str(), oldValue.c_str(), v.toString().c_str());
 	}
 	_vars[key] = v;

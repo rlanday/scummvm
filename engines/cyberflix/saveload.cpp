@@ -1257,6 +1257,24 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 			_vm.globalVars()[it->_key] = it->_value;
 	}
 
+	if (varsSeen && getGameType() == GType_Titanic) {
+		// Dump the story-progress globals on load so a timeline state that blocks
+		// a gated encounter (e.g. the Smethels message on GSTAIR3, which needs
+		// mission==2 && phase==3 && savedeck=='c') is immediately visible. Each
+		// of these is also logged on change at level 1 (vm.cpp shouldLogStoryVariable).
+		debug(1, "Cyberflix: load story state: mission=%d phase=%d smethphase=%d pennyphase=%d "
+				"burnsphase=%d neckphase=%d paintframe=%d savedeck=%s",
+				globalIntValue(_vm.globalVars(), "mission"),
+				globalIntValue(_vm.globalVars(), "phase"),
+				globalIntValue(_vm.globalVars(), "smethphase"),
+				globalIntValue(_vm.globalVars(), "pennyphase"),
+				globalIntValue(_vm.globalVars(), "burnsphase"),
+				globalIntValue(_vm.globalVars(), "neckphase"),
+				globalIntValue(_vm.globalVars(), "paintframe"),
+				_vm.globalVars().contains("savedeck")
+						? _vm.globalVars()["savedeck"].toString().c_str() : "<unset>");
+	}
+
 	restoreShopState(_propRuntime, shopStates);
 	restoreCastState(_actorRuntime, castStates);
 	restoreTrackState(_audioRuntime, trackStates);
