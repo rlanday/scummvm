@@ -151,6 +151,8 @@ public:
 
 	/** Name of the open set (currentset, 0x4e55), or "none". */
 	virtual Common::String currentSet() { return "none"; }
+	virtual void sendToSet(const Common::String &message,
+			const Common::Array<Value> &args) {}
 	virtual Value sendToSetFx(const Common::String &message,
 			const Common::Array<Value> &args) { return Value(); }
 

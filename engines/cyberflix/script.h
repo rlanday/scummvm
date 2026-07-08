@@ -168,6 +168,7 @@ public:
 		kMethodCloseStageFile   = 0x2F1D,
 		kMethodGotoFlat         = 0x2F1E,
 		kMethodSendToPainting   = 0x2F22,
+		kMethodSendToSet        = 0x2F23,
 		kMethodSendToButton     = 0x2F24,
 		kMethodSendToFlat       = 0x2F25,
 		kMethodSendToStage      = 0x2F26,

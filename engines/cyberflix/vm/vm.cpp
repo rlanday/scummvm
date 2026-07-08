@@ -449,7 +449,7 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 			// The message-carrying builtins sendtoactor (0x2ef0), sendtoscene
 			// (0x2f02), sendtopuppet (0x2f0d), sendtocast (0x2f10),
 			// sendtoprop (0x2f17), sendtoshop
-			// (0x2f1b), sendtopainting (0x2f22), sendtobutton (0x2f24),
+			// (0x2f1b), sendtopainting (0x2f22), sendtoset (0x2f23), sendtobutton (0x2f24),
 			// sendtoflat (0x2f25), sendtostage (0x2f26), sendtoboot
 			// (0x2f31), and the value-returning 0x4e74-0x4e7f fx dispatch
 			// family pass their final
@@ -463,7 +463,8 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 			if (headOp == Script::kMethodSendToActor || headOp == Script::kMethodSendToScene ||
 					headOp == Script::kMethodSendToPuppet || headOp == Script::kMethodSendToCast ||
 					headOp == Script::kMethodSendToProp || headOp == Script::kMethodSendToShop ||
-					headOp == Script::kMethodSendToPainting || headOp == Script::kMethodSendToButton ||
+					headOp == Script::kMethodSendToPainting || headOp == Script::kMethodSendToSet ||
+					headOp == Script::kMethodSendToButton ||
 					headOp == Script::kMethodSendToFlat || headOp == Script::kMethodSendToStage ||
 					headOp == Script::kMethodSendToBoot || headOp == Script::kMethodSendToActorFx ||
 					headOp == Script::kMethodSendToSceneFx || headOp == Script::kMethodSendToPuppetFx ||
@@ -620,6 +621,10 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	case Script::kMethodSendToPaintingFx:
 		if (_host)
 			return _navigationHost->sendToPaintingFx(target0, target1, target2, *message, msgArgs);
+		break;
+	case Script::kMethodSendToSet: // sendtoset(message(...)) -> dispatch against the current set's script chain.
+		if (_host)
+			_navigationHost->sendToSet(*message, msgArgs);
 		break;
 	case Script::kMethodSendToSetFx:
 		if (_host)

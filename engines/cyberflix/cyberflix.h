@@ -129,6 +129,7 @@ public:
 	void sendToBoot(const Common::String &message, const Common::Array<Value> &args) override;
 	Value sendToBootFx(const Common::String &message, const Common::Array<Value> &args) override;
 	Value sendToSetFx(const Common::String &message, const Common::Array<Value> &args) override;
+	void sendToSet(const Common::String &message, const Common::Array<Value> &args) override;
 	void setClut(const Common::String &name) override;
 	void blackScreen() override;
 	void forceUpdate() override;

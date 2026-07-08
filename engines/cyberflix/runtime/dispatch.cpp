@@ -154,6 +154,10 @@ Value CyberflixEngine::sendToSetFx(const Common::String &message, const Common::
 	return dispatchSetMessageValue(message, args);
 }
 
+void CyberflixEngine::sendToSet(const Common::String &message, const Common::Array<Value> &args) {
+	dispatchSetMessage(message, args);
+}
+
 void CyberflixEngine::dispatchSceneMessage(uint32 scene, const Common::String &message,
 		const Common::Array<Value> &args) {
 	if (!_setRuntime.set() || !_setRuntime.set()->isOpen() || message.empty())
