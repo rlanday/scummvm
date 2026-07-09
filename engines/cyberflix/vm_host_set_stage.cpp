@@ -136,6 +136,18 @@ Common::String CyberflixStageSetVMHost::currentFlat() {
 	return engine().stageRuntime().currentFlat();
 }
 
+int CyberflixStageSetVMHost::countFlats() {
+	return engine().stageRuntime().countFlats();
+}
+
+Common::String CyberflixStageSetVMHost::indexToFlat(int index) {
+	return engine().stageRuntime().indexToFlat(index);
+}
+
+int CyberflixStageSetVMHost::flatToIndex(const Common::String &name) {
+	return engine().stageRuntime().flatToIndex(name);
+}
+
 void CyberflixStageSetVMHost::sendToStage(const Common::String &message, const Common::Array<Value> &args) {
 	engine().stageRuntime().sendToStage(engine(), message, args);
 }

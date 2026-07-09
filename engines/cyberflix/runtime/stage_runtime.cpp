@@ -179,6 +179,32 @@ Common::String StageRuntime::currentFlat() const {
 	return "None";
 }
 
+int StageRuntime::countFlats() const {
+	// countflats() (0x4e43): number of nodes in the open stage. Flats are 1-based
+	// in script (gotoflat/indextoflat), matching countprops/countpuppets.
+	if (stage() && stage()->isOpen())
+		return static_cast<int>(stage()->nodeCount());
+	return 0;
+}
+
+Common::String StageRuntime::indexToFlat(int index) const {
+	// indextoflat(i) (0x4e44): name of the 1-based flat i, or native "None".
+	if (stage() && stage()->isOpen() && index >= 1 &&
+			static_cast<uint32>(index) <= stage()->nodeCount())
+		return stage()->nodeName(static_cast<uint32>(index - 1));
+	return "None";
+}
+
+int StageRuntime::flatToIndex(const Common::String &name) const {
+	// flattoindex(name) (0x4e45): 1-based index of the named flat, or 0 if none.
+	if (stage() && stage()->isOpen()) {
+		int node = stage()->findNode(name);
+		if (node >= 0)
+			return node + 1;
+	}
+	return 0;
+}
+
 StageRuntime::Snapshot StageRuntime::snapshot() const {
 	Snapshot state;
 	if (stage() && stage()->isOpen()) {

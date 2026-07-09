@@ -45,6 +45,9 @@ public:
 	bool getStageVisible() override;
 	bool setStageVisible(bool visible) override;
 	Common::String currentFlat() override;
+	int countFlats() override;
+	Common::String indexToFlat(int index) override;
+	int flatToIndex(const Common::String &name) override;
 	void sendToStage(const Common::String &message, const Common::Array<Value> &args) override;
 	Value sendToStageFx(const Common::String &message, const Common::Array<Value> &args) override;
 	void sendToFlat(const Common::String &flat, const Common::String &message,

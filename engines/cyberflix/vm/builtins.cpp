@@ -436,6 +436,15 @@ bool ScriptVM::callStageSetMethod(uint16 opcode, const Common::Array<Value> &arg
 	case Script::kMethodCurrentFlat: // currentflat() -> current stage node name or native 'None'
 		result = Value::makeString(_navigationHost->currentFlat());
 		return true;
+	case Script::kMethodCountFlats: // countflats() (0x4e43 FUN_00409980) -> stage node count
+		result = Value::makeInt(_navigationHost->countFlats());
+		return true;
+	case Script::kMethodIndexToFlat: // indextoflat(i) (0x4e44 FUN_004099e0) -> 1-based flat name
+		result = Value::makeString(_navigationHost->indexToFlat(args.empty() ? 0 : args[0].intValue));
+		return true;
+	case Script::kMethodFlatToIndex: // flattoindex(name) (0x4e45 FUN_00409d70) -> 1-based index or 0
+		result = Value::makeInt(_navigationHost->flatToIndex(args.empty() ? Common::String() : args[0].strValue));
+		return true;
 	case Script::kMethodCurrentView: { // currentview([name]) -> current SET view name
 		result = args.empty() ?
 				Value::makeString(_navigationHost->getCurrentView()) :

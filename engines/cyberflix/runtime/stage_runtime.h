@@ -61,6 +61,9 @@ public:
 	bool getStageVisible() const;
 	bool setStageVisible(bool visible);
 	Common::String currentFlat() const;
+	int countFlats() const;
+	Common::String indexToFlat(int index) const;
+	int flatToIndex(const Common::String &name) const;
 	const FrameImage *stageShellFrame();
 
 	void sendToStage(CyberflixEngine &engine, const Common::String &message, const Common::Array<Value> &args);

@@ -100,6 +100,15 @@ public:
 	/** currentflat() (0x4e46): current stage node name, or native "None". */
 	virtual Common::String currentFlat() { return "None"; }
 
+	/** countflats() (0x4e43 FUN_00409980): node count of the open stage. */
+	virtual int countFlats() { return 0; }
+
+	/** indextoflat(i) (0x4e44 FUN_004099e0): name of the 1-based flat i, or "None". */
+	virtual Common::String indexToFlat(int index) { return "None"; }
+
+	/** flattoindex(name) (0x4e45 FUN_00409d70): 1-based index of the flat, or 0. */
+	virtual int flatToIndex(const Common::String &name) { return 0; }
+
 	/**
 	 * Deliver the message call `message(args)` to the open stage's script. The
 	 * original sendtostage (TI.EXE FUN_0040ad80) passes the message UNevaluated
