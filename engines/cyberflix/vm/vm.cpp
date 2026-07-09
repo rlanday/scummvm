@@ -909,6 +909,14 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 	uint32 forBase = _forStack.size();
 
 	while (pc < count && (maxSteps == 0 || executed < maxSteps)) {
+		// Unwind promptly when the host is quitting. A script wait loop (e.g. the
+		// fencing turn loop) spins on kOpWhile/kOpFor calling forceupdate() and
+		// would otherwise never return after a window-close/Cmd-Q, forcing a
+		// force-quit. Throttled by the statement counter so the per-instruction
+		// cost is just a mask+branch, not a virtual call, on this hot path.
+		if ((executed & 0xff) == 0 && _systemHost && _systemHost->hostQuitRequested())
+			goto done;
+
 		uint32 here = pc;
 		uint16 op = script.getInstruction(pc).opcode;
 

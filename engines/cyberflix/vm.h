@@ -283,6 +283,13 @@ public:
 	 */
 	virtual void forceUpdate() {}
 
+	/**
+	 * True when the host has been asked to quit (window close / Cmd-Q). Script
+	 * wait loops poll this so they unwind back to the main loop instead of
+	 * spinning forever after a quit request.
+	 */
+	virtual bool hostQuitRequested() { return false; }
+
 	/** message(text) (0x2ee1): copy/log a script diagnostic message. */
 	virtual void message(const Common::String &text) {}
 
