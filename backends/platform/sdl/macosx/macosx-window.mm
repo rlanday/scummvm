@@ -67,6 +67,13 @@ float SdlWindow_MacOSX::getDpiScalingFactor() const {
 
 void SdlWindow_MacOSX::debugHostCursorState(const char *context, bool targetVisible) const {
 #if !SDL_VERSION_ATLEAST(3, 0, 0) && SDL_VERSION_ATLEAST(2, 0, 0)
+	// This purely feeds a debug(2) line, but the Cocoa/SDL introspection below
+	// (autorelease pool, NSCursor queries, mouseLocationOutsideOfEventStream,
+	// SDL_ShowCursor(SDL_QUERY)) runs on every cursor update. Skip it entirely
+	// unless level-2 logging is active, so normal play does not pay that cost
+	// per mouse move (it makes the software cursor stutter).
+	if (gDebugLevel < 2)
+		return;
 	@autoreleasepool {
 		SDL_SysWMinfo wmInfo;
 		NSWindow *nswindow = nil;

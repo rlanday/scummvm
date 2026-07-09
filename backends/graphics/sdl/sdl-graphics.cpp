@@ -367,11 +367,15 @@ void SdlGraphicsManager::showSystemMouseCursor(bool visible) {
 		SDL_HideCursor();
 	}
 #else
-	const int before = SDL_ShowCursor(SDL_QUERY);
-	SDL_ShowCursor(visible ? SDL_ENABLE : SDL_DISABLE);
-	const int after = SDL_ShowCursor(SDL_QUERY);
-	debug(2, "SDL host cursor: showSystemMouseCursor(%d) before=%d after=%d",
-			visible ? 1 : 0, before, after);
+	if (gDebugLevel >= 2) {
+		const int before = SDL_ShowCursor(SDL_QUERY);
+		SDL_ShowCursor(visible ? SDL_ENABLE : SDL_DISABLE);
+		const int after = SDL_ShowCursor(SDL_QUERY);
+		debug(2, "SDL host cursor: showSystemMouseCursor(%d) before=%d after=%d",
+				visible ? 1 : 0, before, after);
+	} else {
+		SDL_ShowCursor(visible ? SDL_ENABLE : SDL_DISABLE);
+	}
 #endif
 	_window->syncHostCursorVisibility(visible);
 	_window->debugHostCursorState("after host cursor sync", visible);
