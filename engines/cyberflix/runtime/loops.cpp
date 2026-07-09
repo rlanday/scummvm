@@ -130,53 +130,77 @@ void LoopRuntime::pauseCricket(const Common::String &kind, bool paused) {
 }
 
 void LoopRuntime::processScheduledLoops(CyberflixEngine &engine) {
-	if (_loopsPaused || _scheduledLoops.empty() || _processingScheduledLoops)
+	if (_loopsPaused || _scheduledLoops.empty())
 		return;
 
-	// Scheduled callbacks are commonly zero-argument "scene"/"flat" loops that
-	// fire from forceupdate(). Keep the hot path allocation-free except for the
-	// actual script dispatch work measured under this routine.
+	// Native forceupdate() (TI.EXE FUN_00423a60 -> FUN_00423ff0 per loop record)
+	// re-scans its scheduled-loop table on every pass, and marks the record it is
+	// about to dispatch INACTIVE before dispatching it. So when a callback itself
+	// calls forceupdate(), the nested pass still fires every OTHER due loop -- only
+	// the record currently being dispatched is skipped (FUN_00423a60 tests
+	// `*psVar6 != 0`; FUN_00423ff0 sets `*param_4 = 0` before the dispatch).
+	//
+	// A single global "already processing" guard here would instead starve every
+	// other callback for the whole duration of a script's forceupdate() wait loop.
+	// That is what deadlocked the Willie fencing turn: willieattack()'s
+	// `for count = 0 to 8 { forceupdate() }` lunge loop (and its follow-on
+	// sendtoflat/sendtostage handlers, which loop on forceupdate() too) blocked
+	// the scheduled callback that hands the turn back to the player, so neither
+	// side could act.
+	//
+	// Mirror native: allow re-entrant passes, remove the loop before dispatching
+	// it (so a nested pass skips it), and re-scan after each dispatch since the
+	// dispatch may add/remove loops. `processedPass` stops a loop being
+	// decremented twice within one pass; a nested pass gets its own id and
+	// decrements independently, matching native's per-forceupdate table walk.
+	const bool wasProcessing = _processingScheduledLoops;
 	_processingScheduledLoops = true;
-	const uint32 currentPass = ++_scheduledLoopPass;
+	const uint32 pass = ++_scheduledLoopPass;
 	Common::Array<Value> noArgs;
-	for (uint32 i = 0; i < _scheduledLoops.size();) {
-		if (_scheduledLoops[i].createdPass >= currentPass) {
-			++i;
-			continue;
-		}
 
-		--_scheduledLoops[i].remainingPasses;
-		if (_scheduledLoops[i].remainingPasses > 0) {
-			++i;
-			continue;
-		}
+	bool rescan = true;
+	while (rescan) {
+		rescan = false;
+		for (uint32 i = 0; i < _scheduledLoops.size(); ++i) {
+			ScheduledLoop &sl = _scheduledLoops[i];
+			if (sl.createdPass >= pass || sl.processedPass == pass)
+				continue;
+			sl.processedPass = pass;
+			if (--sl.remainingPasses > 0)
+				continue;
 
-		ScheduledLoop loop = _scheduledLoops[i];
-		_scheduledLoops.remove_at(i);
-		switch (loop.kindId) {
-		case ScheduledLoop::kScene:
-			engine.sendToScene(loop.target, loop.message, noArgs);
+			ScheduledLoop loop = _scheduledLoops[i];
+			_scheduledLoops.remove_at(i);
+			switch (loop.kindId) {
+			case ScheduledLoop::kScene:
+				engine.sendToScene(loop.target, loop.message, noArgs);
+				break;
+			case ScheduledLoop::kFlat:
+				engine.sendToFlat(loop.target, loop.message, noArgs);
+				break;
+			case ScheduledLoop::kStage:
+				engine.sendToStage(loop.message, noArgs);
+				break;
+			case ScheduledLoop::kProp:
+				engine.sendToProp(loop.target, loop.message, noArgs);
+				break;
+			case ScheduledLoop::kShop:
+				engine.sendToShop(loop.target, loop.message, noArgs);
+				break;
+			case ScheduledLoop::kActor:
+				engine.sendToActor(loop.target, loop.message, noArgs);
+				break;
+			default:
+				debug(1, "Cyberflix: makeloop kind '%s' unhandled", loop.kind.c_str());
+			}
+			// The dispatch may have re-entered this routine and/or mutated the
+			// array (makeloop/stoploop); restart the scan from the top.
+			rescan = true;
 			break;
-		case ScheduledLoop::kFlat:
-			engine.sendToFlat(loop.target, loop.message, noArgs);
-			break;
-		case ScheduledLoop::kStage:
-			engine.sendToStage(loop.message, noArgs);
-			break;
-		case ScheduledLoop::kProp:
-			engine.sendToProp(loop.target, loop.message, noArgs);
-			break;
-		case ScheduledLoop::kShop:
-			engine.sendToShop(loop.target, loop.message, noArgs);
-			break;
-		case ScheduledLoop::kActor:
-			engine.sendToActor(loop.target, loop.message, noArgs);
-			break;
-		default:
-			debug(1, "Cyberflix: makeloop kind '%s' unhandled", loop.kind.c_str());
 		}
 	}
-	_processingScheduledLoops = false;
+
+	_processingScheduledLoops = wasProcessing;
 }
 
 } // End of namespace Cyberflix
