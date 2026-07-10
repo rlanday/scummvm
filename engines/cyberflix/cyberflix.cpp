@@ -618,8 +618,6 @@ void CyberflixEngine::forceUpdate() {
 	// forceupdate() (TI.EXE 0x2f14 -> FUN_00446910 -> FUN_00423a60): rebuild the
 	// display list from LIVE prop visibility, step active SET transitions through
 	// FUN_004420b0, composite, and present.
-	++_forceUpdateDepth;
-	const bool reentrant = _forceUpdateDepth > 1;
 	const bool cursorMoved = pumpCursorMotionEvents();
 	bool presented = false;
 	processScheduledLoops();
@@ -660,26 +658,17 @@ void CyberflixEngine::forceUpdate() {
 		presentCursorIfDirty();
 		_framePacingRuntime.noteForceUpdatePresented(true);
 	}
-	// Only the outermost forceupdate() owns frame pacing. A nested pass (a
-	// scheduled-loop callback that calls forceupdate() while an outer
-	// forceupdate() is still running its processScheduledLoops()) has already
-	// presented above; making it wait on the frame deadline here — and re-arm
-	// noteFrameTick() — would charge the outer pass a second full frame of
-	// delay, halving the effective frame rate and making the cursor stutter.
-	if (!reentrant) {
-		while (!shouldQuit()) {
-			const uint32 delay = _framePacingRuntime.delayMillisUntilDeadline(tick());
-			if (delay == 0)
-				break;
-			// Keep software-cursor motion responsive while preserving native frame
-			// pacing. updateScreen() is cheap here on OpenGL: it redraws the cursor
-			// over the already-uploaded game texture, and vsync caps the cadence.
-			if (delayMillisWithCursorUpdates(delay))
-				_framePacingRuntime.noteForceUpdatePresented(true);
-		}
-		_framePacingRuntime.noteFrameTick(tick());
+	while (!shouldQuit()) {
+		const uint32 delay = _framePacingRuntime.delayMillisUntilDeadline(tick());
+		if (delay == 0)
+			break;
+		// Keep software-cursor motion responsive while preserving native frame
+		// pacing. updateScreen() is cheap here on OpenGL: it redraws the cursor
+		// over the already-uploaded game texture, and vsync caps the cadence.
+		if (delayMillisWithCursorUpdates(delay))
+			_framePacingRuntime.noteForceUpdatePresented(true);
 	}
-	--_forceUpdateDepth;
+	_framePacingRuntime.noteFrameTick(tick());
 	debug(2, "Cyberflix: forceupdate()");
 }
 

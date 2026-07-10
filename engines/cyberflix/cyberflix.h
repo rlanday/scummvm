@@ -317,12 +317,6 @@ private:
 	void processScheduledLoops();
 	FramePacingRuntime _framePacingRuntime;
 	int _frameCounter = 0;
-	// Nesting depth of forceUpdate(). Scripts call forceupdate() from within
-	// scheduled-loop callbacks that themselves fire from an outer forceUpdate(),
-	// so the compositor path is re-entrant. Only the outermost pass owns frame
-	// pacing; nested passes present but must not wait for (or re-arm) the frame
-	// deadline, otherwise each nested call adds a full frame of latency.
-	int _forceUpdateDepth = 0;
 	int _lastCargoPaintingTimerLogBucket = -1;
 	bool _cargoPaintingTimerExpiredLogged = false;
 
