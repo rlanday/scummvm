@@ -31,8 +31,6 @@ public:
 	// Use an iconless window on macOS, as we use a nicer external icon there.
 	void setupIcon() override {}
 	float getDpiScalingFactor() const override;
-	void debugHostCursorState(const char *context, bool targetVisible) const override;
-	void syncHostCursorVisibility(bool visible) const override;
 };
 
 #endif

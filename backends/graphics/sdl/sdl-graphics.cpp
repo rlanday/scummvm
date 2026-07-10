@@ -228,38 +228,22 @@ void SdlGraphicsManager::initSizeHint(const Graphics::ModeList &modes) {
 }
 
 bool SdlGraphicsManager::showMouse(bool visible) {
+	if (visible == _cursorVisible) {
+		return visible;
+	}
+
 	bool showCursor = false;
-	int rawX = 0;
-	int rawY = 0;
-	Common::Point scaledMouse(0, 0);
-	bool inActiveArea = false;
 	if (visible) {
 		// _cursorX and _cursorY are currently always clipped to the active
 		// area, so we need to ask SDL where the system's mouse cursor is
 		// instead
-		getMouseState(&rawX, &rawY);
-		// _activeArea is in drawable coordinates; SDL mouse state is in window
-		// coordinates on HiDPI displays.
-		const float dpiScale = _window->getSdlDpiScalingFactor();
-		scaledMouse = Common::Point(static_cast<int>(rawX * dpiScale + 0.5f),
-				static_cast<int>(rawY * dpiScale + 0.5f));
-		inActiveArea = _activeArea.drawRect.contains(scaledMouse);
-		if (!inActiveArea) {
+		int x, y;
+		getMouseState(&x, &y);
+		if (!_activeArea.drawRect.contains(Common::Point(x, y))) {
 			showCursor = true;
 		}
 	}
-	debug(2, "SDL host cursor: showMouse softwareVisible=%d storedVisible=%d mouse=(%d,%d) scaled=(%d,%d) active=(%d,%d)-(%d,%d) inActive=%d -> hostVisible=%d",
-			visible ? 1 : 0, _cursorVisible ? 1 : 0, rawX, rawY,
-			scaledMouse.x, scaledMouse.y, _activeArea.drawRect.left, _activeArea.drawRect.top,
-			_activeArea.drawRect.right, _activeArea.drawRect.bottom,
-			inActiveArea ? 1 : 0, showCursor ? 1 : 0);
 	showSystemMouseCursor(showCursor);
-
-	// The OS cursor can become stale after focus or mode transitions, so update
-	// it even when the software-cursor visibility flag is unchanged.
-	if (visible == _cursorVisible) {
-		return visible;
-	}
 
 	return WindowedGraphicsManager::showMouse(visible);
 }
@@ -270,21 +254,14 @@ bool SdlGraphicsManager::lockMouse(bool lock) {
 
 bool SdlGraphicsManager::notifyMousePosition(Common::Point &mouse) {
 	bool showCursor = false;
-	const Common::Point windowMouse = mouse;
-	const uint32 buttons = SDL_GetMouseState(nullptr, nullptr);
 	// Currently on macOS we need to scale the events for HiDPI screen, but on
 	// Windows we do not. We can find out if we need to do it by querying the
 	// SDL window size vs the SDL drawable size.
 	float dpiScale = _window->getSdlDpiScalingFactor();
 	mouse.x = (int)(mouse.x * dpiScale + 0.5f);
 	mouse.y = (int)(mouse.y * dpiScale + 0.5f);
-	const Common::Point scaledMouse = mouse;
-	const bool wasLastInActiveArea = _cursorLastInActiveArea;
-	const bool inActiveArea = _activeArea.drawRect.contains(mouse);
-	const bool grabbed = _window->mouseIsGrabbed();
-	bool warped = false;
 	bool valid = true;
-	if (inActiveArea) {
+	if (_activeArea.drawRect.contains(mouse)) {
 		_cursorLastInActiveArea = true;
 	} else {
 		// The right/bottom edges are not part of the drawRect. As the clipping
@@ -296,13 +273,12 @@ bool SdlGraphicsManager::notifyMousePosition(Common::Point &mouse) {
 		mouse.y = CLIP<int>(mouse.y, _activeArea.drawRect.top,
 							_activeArea.drawRect.bottom - (int)(1 * dpiScale + 0.5f));
 
-		if (grabbed ||
+		if (_window->mouseIsGrabbed() ||
 			// Keep the mouse inside the game area during dragging to prevent an
 			// event mismatch where the mouseup event gets lost because it is
 			// performed outside of the game area
-			(_cursorLastInActiveArea && buttons != 0)) {
+			(_cursorLastInActiveArea && SDL_GetMouseState(nullptr, nullptr) != 0)) {
 			setSystemMousePosition(mouse.x, mouse.y);
-			warped = true;
 		} else {
 			// Allow the in-game mouse to get a final movement event to the edge
 			// of the window if the mouse was moved out of the game area
@@ -323,62 +299,24 @@ bool SdlGraphicsManager::notifyMousePosition(Common::Point &mouse) {
 		}
 	}
 
-	const Common::Point clippedMouse = mouse;
 	showSystemMouseCursor(showCursor);
 	if (valid) {
 		setMousePosition(mouse.x, mouse.y);
 		mouse = convertWindowToVirtual(mouse.x, mouse.y);
 	}
-	debug(2, "SDL host cursor: notifyMousePosition window=(%d,%d) scaled=(%d,%d) clipped=(%d,%d) virtual=(%d,%d) active=(%d,%d)-(%d,%d) inActive=%d last=%d->%d cursorVisible=%d buttons=0x%x grabbed=%d warped=%d valid=%d -> hostVisible=%d",
-			windowMouse.x, windowMouse.y, scaledMouse.x, scaledMouse.y,
-			clippedMouse.x, clippedMouse.y, mouse.x, mouse.y,
-			_activeArea.drawRect.left, _activeArea.drawRect.top,
-			_activeArea.drawRect.right, _activeArea.drawRect.bottom,
-			inActiveArea ? 1 : 0, wasLastInActiveArea ? 1 : 0,
-			_cursorLastInActiveArea ? 1 : 0, _cursorVisible ? 1 : 0,
-			buttons, grabbed ? 1 : 0, warped ? 1 : 0, valid ? 1 : 0,
-			showCursor ? 1 : 0);
 	return valid;
 }
 
-void SdlGraphicsManager::notifyMouseEnteredWindow(bool entered) {
-	int mouseX = 0;
-	int mouseY = 0;
-	getMouseState(&mouseX, &mouseY);
-	const bool hostVisible = !entered && _cursorVisible;
-	debug(1, "SDL host cursor: notifyMouseEnteredWindow entered=%d cursorVisible=%d lastInActive=%d mouse=(%d,%d) buttons=0x%x -> hostVisible=%d",
-			entered ? 1 : 0, _cursorVisible ? 1 : 0,
-			_cursorLastInActiveArea ? 1 : 0, mouseX, mouseY,
-			SDL_GetMouseState(nullptr, nullptr), hostVisible ? 1 : 0);
-	if (entered) {
-		showSystemMouseCursor(false);
-	} else {
-		showSystemMouseCursor(_cursorVisible);
-	}
-}
-
 void SdlGraphicsManager::showSystemMouseCursor(bool visible) {
-	_window->debugHostCursorState("before SDL_ShowCursor", visible);
 #if SDL_VERSION_ATLEAST(3, 0, 0)
-	debug(2, "SDL host cursor: showSystemMouseCursor(%d)", visible ? 1 : 0);
 	if (visible) {
 		SDL_ShowCursor();
 	} else {
 		SDL_HideCursor();
 	}
 #else
-	if (gDebugLevel >= 2) {
-		const int before = SDL_ShowCursor(SDL_QUERY);
-		SDL_ShowCursor(visible ? SDL_ENABLE : SDL_DISABLE);
-		const int after = SDL_ShowCursor(SDL_QUERY);
-		debug(2, "SDL host cursor: showSystemMouseCursor(%d) before=%d after=%d",
-				visible ? 1 : 0, before, after);
-	} else {
-		SDL_ShowCursor(visible ? SDL_ENABLE : SDL_DISABLE);
-	}
+	SDL_ShowCursor(visible ? SDL_ENABLE : SDL_DISABLE);
 #endif
-	_window->syncHostCursorVisibility(visible);
-	_window->debugHostCursorState("after host cursor sync", visible);
 }
 
 void SdlGraphicsManager::setSystemMousePosition(const int x, const int y) {

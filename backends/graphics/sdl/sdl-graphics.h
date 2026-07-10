@@ -90,7 +90,6 @@ public:
 	 * should cause the event to be sent to the game.
 	 */
 	virtual bool notifyMousePosition(Common::Point &mouse);
-	void notifyMouseEnteredWindow(bool entered);
 
 	bool showMouse(bool visible) override;
 	bool lockMouse(bool lock) override;
