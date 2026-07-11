@@ -24,7 +24,6 @@
 #include "common/system.h"
 #include "common/util.h"
 
-#include "graphics/cursorman.h"
 #include "graphics/surface.h"
 
 #include "cyberflix/cast.h"
@@ -506,10 +505,11 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 	// upload even when no compositor pass drew new pixels.
 	screenUpdatePending() = true;
 
-	// Default arrow until per-view hotspot hit-testing (directional cursors) is
-	// implemented. Views are the scene's hotspot lists.
-	if (engine.setGameCursor("CURS.ARROW"))
-		CursorMan.showMouse(true);
+	// Do NOT reset the cursor here: the native compositor (FUN_00442d90) never
+	// touches the cursor — shape policy belongs to the scripts (the boot idle
+	// handler hit-tests and dispatches setcursor every pass). An earlier
+	// unconditional CURS.ARROW reset here made the hover cursor flash back to
+	// the arrow whenever an animated prop forced a recomposite.
 }
 
 bool SetRuntime::presentPendingScreenUpdate(CyberflixEngine &engine) {
