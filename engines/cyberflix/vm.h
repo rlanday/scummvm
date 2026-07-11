@@ -434,6 +434,10 @@ public:
 	/** optionkey() (0x4e5a): true while the native Option/Shift key is down. */
 	virtual bool optionKey() { return false; }
 
+	/** shiftkey() (0x4e5b FUN_00437710): true while Shift is down. Native
+	 *  optionkey and shiftkey both read GetAsyncKeyState(VK_SHIFT). */
+	virtual bool shiftKey() { return false; }
+
 	/** path(slot[, value]) (0x3e89 FUN_004462a0): get or set a native path slot. */
 	virtual Common::String getPathSlot(int slot) { return Common::String(); }
 	virtual Common::String setPathSlot(int slot, const Common::String &newPath) { return newPath; }
@@ -499,6 +503,10 @@ public:
 	virtual void walkOnPath(const Common::String &name, const Common::String &path, const Common::String &dest) {}
 	virtual void walkToXYZ(const Common::String &name, int x, int y, int z) {}
 	virtual void stopWalk(const Common::String &name) {}
+
+	/** actorexists(name) (0x4e37 FUN_0041fb20): whether the actor lookup
+	 *  (FUN_004225b0) succeeds. */
+	virtual bool actorExists(const Common::String &name) { return false; }
 	virtual bool isWalk(const Common::String &name) { return false; }
 	virtual Common::String walkDest(const Common::String &name) { return "None"; }
 	virtual int starXYZ(const Common::String &name, int selector) { return 0; }
@@ -538,6 +546,10 @@ public:
 	virtual Value sendToPropFx(const Common::String &prop, const Common::String &message,
 			const Common::Array<Value> &args) { return Value(); }
 
+	/** propexists(name) (0x4e38 FUN_00428fc0): whether the prop lookup
+	 *  (FUN_0042b700) succeeds. */
+	virtual bool propExists(const Common::String &name) { return false; }
+
 	/** propvisible(name) getter (0x3e8f FUN_00429dc0). */
 	virtual bool propVisible(const Common::String &name) { return false; }
 
@@ -557,6 +569,10 @@ public:
 	/** propxyz(name, x, y, z) (0x3e91 FUN_0042a140): world/SET-space placement,
 	 * setting mode=1 so the prop is no longer a screen overlay. */
 	virtual void propXYZ(const Common::String &name, int x, int y, int z) {}
+
+	/** propxyz(name, selector) (0x3e91 FUN_0042a250): world-position getter;
+	 *  1=x, 2=y, 3=z, 4=packed x/y point. */
+	virtual int propXYZ(const Common::String &name, int selector) { return 0; }
 
 	/** propstar(name[, star]) (0x3e94 FUN_00429320/FUN_004291f0): get or set
 	 *  the prop's SET star, a named 3D placement point in the current .SET room. */

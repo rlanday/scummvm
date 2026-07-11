@@ -75,6 +75,7 @@ public:
 	void setPropXY(const Common::String &name, int x, int y);
 	void propSet(CyberflixEngine &engine, const Common::String &name, const Common::String &setName);
 	void propXYZ(const Common::String &name, int x, int y, int z);
+	int propXYZ(CyberflixEngine &engine, const Common::String &name, int selector);
 	Common::String getPropStar(const Common::String &name);
 	Common::String setPropStar(CyberflixEngine &engine, const Common::String &name, const Common::String &newStar);
 	void propScale(const Common::String &name, int scale);

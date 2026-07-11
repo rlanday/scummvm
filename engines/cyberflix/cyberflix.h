@@ -152,6 +152,7 @@ public:
 	bool keyAborts(const Common::String *resource, const Common::String *key,
 			const bool *enabled) override;
 	bool optionKey() override;
+	bool shiftKey() override;
 	Common::String getPathSlot(int slot) override;
 	Common::String setPathSlot(int slot, const Common::String &newPath) override;
 	Common::String getCurrentCD() override;

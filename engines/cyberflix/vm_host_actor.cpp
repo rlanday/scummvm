@@ -172,6 +172,10 @@ void CyberflixActorVMHost::stopWalk(const Common::String &name) {
 	engine().actorRuntime().stopWalk(name);
 }
 
+bool CyberflixActorVMHost::actorExists(const Common::String &name) {
+	return engine().actorRuntime().findActorRef(name).actor != nullptr;
+}
+
 bool CyberflixActorVMHost::isWalk(const Common::String &name) {
 	return engine().actorRuntime().isWalk(name);
 }

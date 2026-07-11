@@ -186,6 +186,7 @@ public:
 	void walkOnPath(const Common::String &name, const Common::String &path, const Common::String &dest) override;
 	void walkToXYZ(const Common::String &name, int x, int y, int z) override;
 	void stopWalk(const Common::String &name) override;
+	bool actorExists(const Common::String &name) override;
 	bool isWalk(const Common::String &name) override;
 	Common::String walkDest(const Common::String &name) override;
 	int starXYZ(const Common::String &name, int selector) override;
@@ -207,12 +208,14 @@ public:
 			const Common::Array<Value> &args) override;
 	Value sendToPropFx(const Common::String &prop, const Common::String &message,
 			const Common::Array<Value> &args) override;
+	bool propExists(const Common::String &name) override;
 	bool propVisible(const Common::String &name) override;
 	void propVisible(const Common::String &name, bool visible) override;
 	Common::String propView(const Common::String &name) override;
 	void propView(const Common::String &name, const Common::String &shape) override;
 	void propSet(const Common::String &name, const Common::String &setName) override;
 	void propXYZ(const Common::String &name, int x, int y, int z) override;
+	int propXYZ(const Common::String &name, int selector) override;
 	Common::String getPropStar(const Common::String &name) override;
 	Common::String setPropStar(const Common::String &name, const Common::String &newStar) override;
 	int propXY(const Common::String &name, int selector) override;

@@ -434,6 +434,12 @@ bool CyberflixEngine::optionKey() {
 	return (_eventMan->getModifierState() & Common::KBD_SHIFT) != 0;
 }
 
+bool CyberflixEngine::shiftKey() {
+	// Native shiftkey (FUN_00437710) and optionkey (FUN_004376e0) both read
+	// GetAsyncKeyState(VK_SHIFT).
+	return optionKey();
+}
+
 // Deferred input queue:
 // ScummVM has several nested Cyberflix loops that pump backend events for a
 // narrower purpose than the main room loop. delayMillisWithCursorUpdates() and
