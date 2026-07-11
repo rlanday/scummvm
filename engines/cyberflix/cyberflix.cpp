@@ -626,6 +626,8 @@ void CyberflixEngine::forceUpdate() {
 	// FUN_004420b0, composite, and present.
 	const bool cursorMoved = pumpCursorMotionEvents();
 	bool presented = false;
+	// Native FUN_00423a60 services walk records before scheduled loops.
+	_actorRuntime.advanceWalks(*this);
 	processScheduledLoops();
 	// FUN_004420b0 is the native writer for DAT_00461122, read by frame()
 	// (FUN_00435a30). The main interactive loop's idle timeout calls

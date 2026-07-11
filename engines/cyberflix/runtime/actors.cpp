@@ -136,9 +136,15 @@ void ActorRuntime::clearWalkRecord(const Common::String &name) {
 void ActorRuntime::dispatchWalkComplete(CyberflixEngine &engine, const Common::String &name) {
 	// Native movement service FUN_004250b0 clears the walk slot and dispatches
 	// "<actor>, endwalk()" when queued walktostar/walktoxyz/walkonpath motion
-	// finishes. Our temporary immediate-walk subset must still send that
-	// callback so authored locks such as B-70 Georgia's lockevents are released.
+	// finishes (also sent by the immediate-resolution path below so authored
+	// locks such as B-70 Georgia's lockevents are always released).
 	sendToActor(engine, name, "endwalk", Common::Array<Value>());
+}
+
+void ActorRuntime::dispatchTurnComplete(CyberflixEngine &engine, const Common::String &name) {
+	// FUN_004250b0 dispatches "<actor>, endturn()" when the turning phase of a
+	// walk (or a turntodeg record) reaches its target angle.
+	sendToActor(engine, name, "endturn", Common::Array<Value>());
 }
 
 Common::SharedPtr<Cast> ActorRuntime::findCastShared(const Common::String &name) const {
@@ -687,10 +693,75 @@ void ActorRuntime::turnToDeg(CyberflixEngine &engine, const Common::String &name
 		return;
 	}
 	const int16 newAngle = static_cast<int16>(deg & 0xff);
+	// Native FUN_004242f0 -> FUN_00424a60 queues a turn-only walk record
+	// (kind 0) that the movement service rotates to the target angle before
+	// dispatching endturn(). Animate in-set actors; off-set ones turn
+	// instantly but still get the completion callback.
+	clearWalkRecord(name);
+	if (engine._setRuntime.set() && engine._setRuntime.set()->isOpen() &&
+			ref.actor->setName.equalsIgnoreCase(engine._setRuntime.set()->setName())) {
+		WalkRecord w;
+		w.actorName = name;
+		w.actorName.toLowercase();
+		w.destName = ref.actor->sceneName;
+		w.turnTarget = newAngle;
+		w.turnOnly = true;
+		_walks.push_back(w);
+		return;
+	}
 	if (ref.actor->angle != newAngle) {
 		ref.actor->angle = newAngle;
 		engine._propRuntime.setDirty(true);
 	}
+	dispatchTurnComplete(engine, name);
+}
+
+// Integer sqrt for walk distances, like native FUN_0041b1a0.
+static int32 walkDistance(int32 dx, int32 dy, int32 dz) {
+	const double sum = static_cast<double>(dx) * dx + static_cast<double>(dy) * dy +
+			static_cast<double>(dz) * dz;
+	return static_cast<int32>(sqrt(sum));
+}
+
+// One turning-phase step, mirroring FUN_00426590: rotate `current` toward
+// `target` by `step` in the shorter direction around the 256-unit circle,
+// without overshooting the target.
+static int16 stepAngleToward(int16 current, int16 target, int step) {
+	const int cur = current & 0xff;
+	const int tgt = target & 0xff;
+	const int forward = (tgt - cur) & 0xff;
+	if (forward == 0)
+		return static_cast<int16>(tgt);
+	if (forward <= 128)
+		return static_cast<int16>((cur + MIN(step, forward)) & 0xff);
+	return static_cast<int16>((cur - MIN(step, 256 - forward)) & 0xff);
+}
+
+// Build an animated walk record, mirroring FUN_00424ad0/FUN_00424be0: face the
+// destination first, then cover the straight-line distance at the actor's
+// speed. While the walk is live the actor leaves its star ("none") so the
+// per-frame star snap (resolveActorStar) does not fight the interpolation;
+// native does the same by parking a placeholder in the star field.
+bool ActorRuntime::queueAnimatedWalk(CyberflixEngine &engine, Cast::Actor &actor,
+		const Common::String &name, const Common::String &dest,
+		int16 destX, int16 destY, int16 destZ) {
+	WalkRecord w;
+	w.actorName = name;
+	w.actorName.toLowercase();
+	w.destName = dest;
+	w.turnTarget = static_cast<int16>(engine.calcDeg(engine.makePoint(actor.x, actor.y),
+			engine.makePoint(destX, destY)) & 0xff);
+	w.startX = actor.x;
+	w.startY = actor.y;
+	w.startZ = actor.z;
+	w.dx = actor.x - destX;
+	w.dy = actor.y - destY;
+	w.dz = actor.z - destZ;
+	w.total = MAX<int32>(1, walkDistance(w.dx, w.dy, w.dz));
+	actor.sceneName = "none";
+	actor.mode = 1;
+	_walks.push_back(w);
+	return true;
 }
 
 void ActorRuntime::walkToStar(CyberflixEngine &engine, const Common::String &name, const Common::String &star) {
@@ -700,12 +771,23 @@ void ActorRuntime::walkToStar(CyberflixEngine &engine, const Common::String &nam
 		return;
 	}
 
-	// Native queues a 16-slot actor walk record (FUN_00424410 -> FUN_004243b0)
-	// and movement service FUN_004250b0 later advances it. Until the full path
-	// system exists, resolve the destination immediately so authored scripts do
-	// not block forever in while(iswalk(actor)) wait loops, then emit the native
-	// completion callback that those scripts use for cleanup.
 	clearWalkRecord(name);
+	// Native FUN_00424410 queues an animated record (FUN_00424ad0) when the
+	// actor stands in the current set, otherwise a deferred record that waits
+	// until the player reaches the actor's set. We animate the visible case;
+	// for the deferred case resolve immediately instead so scripts polling
+	// iswalk()/endwalk() never block on a set the player may not visit.
+	int16 sx = 0, sy = 0, sz = 0;
+	if (engine._setRuntime.set() && engine._setRuntime.set()->isOpen() &&
+			ref.actor->setName.equalsIgnoreCase(engine._setRuntime.set()->setName()) &&
+			engine._setRuntime.set()->starXYZ(star, sx, sy, sz)) {
+		debug(1, "Cyberflix: walktostar('%s', '%s') queued dist %d", name.c_str(), star.c_str(),
+				walkDistance(ref.actor->x - sx, ref.actor->y - sy, ref.actor->z - sz));
+		queueAnimatedWalk(engine, *ref.actor, name, star, sx, sy, sz);
+		return;
+	}
+	debug(1, "Cyberflix: walktostar('%s', '%s') resolved immediately (actor off-set)",
+			name.c_str(), star.c_str());
 	Common::String dest = star;
 	setActorStar(engine, name, dest);
 	dispatchWalkComplete(engine, name);
@@ -719,10 +801,21 @@ void ActorRuntime::walkOnPath(CyberflixEngine &engine, const Common::String &nam
 		return;
 	}
 
-	// Native FUN_00424640 queues a path walk from the middle argument to the
-	// destination star. Until path interpolation exists, land on the authored
-	// destination immediately but keep the same endwalk() completion signal.
+	// Native FUN_00424640 walks the star path from the middle argument to the
+	// destination (FUN_00424d00 path interpolation). Until path-following
+	// exists, walk the straight line to the destination star; off-set actors
+	// resolve immediately as in walkToStar.
 	clearWalkRecord(name);
+	int16 sx = 0, sy = 0, sz = 0;
+	if (engine._setRuntime.set() && engine._setRuntime.set()->isOpen() &&
+			ref.actor->setName.equalsIgnoreCase(engine._setRuntime.set()->setName()) &&
+			engine._setRuntime.set()->starXYZ(dest, sx, sy, sz)) {
+		debug(1, "Cyberflix: walkonpath('%s' -> '%s') queued as direct walk", name.c_str(), dest.c_str());
+		queueAnimatedWalk(engine, *ref.actor, name, dest, sx, sy, sz);
+		return;
+	}
+	debug(1, "Cyberflix: walkonpath('%s' -> '%s') resolved immediately (actor off-set)",
+			name.c_str(), dest.c_str());
 	setActorStar(engine, name, dest);
 	dispatchWalkComplete(engine, name);
 }
@@ -734,15 +827,134 @@ void ActorRuntime::walkToXYZ(CyberflixEngine &engine, const Common::String &name
 		return;
 	}
 
-	// Native FUN_00424540 queues coordinate motion and completes through the
-	// same FUN_004250b0 endwalk() path as walktostar.
+	// Native FUN_00424540 -> FUN_00424be0 queues coordinate motion; the actor
+	// ends the walk off-star ("none"), resting at the raw coordinates.
 	clearWalkRecord(name);
+	if (engine._setRuntime.set() && engine._setRuntime.set()->isOpen() &&
+			ref.actor->setName.equalsIgnoreCase(engine._setRuntime.set()->setName())) {
+		debug(1, "Cyberflix: walktoxyz('%s', %d, %d, %d) queued", name.c_str(), x, y, z);
+		queueAnimatedWalk(engine, *ref.actor, name, Common::String(),
+				static_cast<int16>(x), static_cast<int16>(y), static_cast<int16>(z));
+		return;
+	}
+	debug(1, "Cyberflix: walktoxyz('%s', %d, %d, %d) resolved immediately (actor off-set)",
+			name.c_str(), x, y, z);
 	actorXYZ(engine, name, x, y, z);
 	dispatchWalkComplete(engine, name);
 }
 
+void ActorRuntime::advanceActorPoses() {
+	for (uint32 i = 0; i < _casts.size(); ++i)
+		_casts[i]->advanceActorPoses();
+}
+
+void ActorRuntime::advanceWalks(CyberflixEngine &engine) {
+	if (_walks.empty())
+		return;
+
+	// Advance records first, then dispatch endturn()/endwalk() afterwards:
+	// those handlers run scripts that may queue or clear walks, which would
+	// otherwise invalidate the iteration (native uses fixed slots).
+	struct Completion {
+		Common::String name;
+		Common::String dest;
+		bool walkDone;
+	};
+	Common::Array<Completion> completions;
+
+	for (uint32 i = 0; i < _walks.size();) {
+		WalkRecord &w = _walks[i];
+		if (w.pause > 0) {
+			++i;
+			continue;
+		}
+		ActorRef ref = findActorRef(w.actorName);
+		if (!ref.actor) {
+			_walks.remove_at(i);
+			continue;
+		}
+
+		if (w.turnTarget >= 0) {
+			// Turning phase: rotate by the actor's turn rate per pass, then
+			// notify. Native leaves a zero turn rate stuck; step at least 1
+			// so scripts that forgot stdturn cannot hang the walk.
+			const int step = MAX<int32>(1, ref.actor->turn);
+			const int16 next = stepAngleToward(ref.actor->angle, w.turnTarget, step);
+			if (ref.actor->angle != next) {
+				ref.actor->angle = next;
+				engine._propRuntime.setDirty(true);
+			}
+			if (next == w.turnTarget) {
+				w.turnTarget = -1;
+				Completion c;
+				c.name = w.actorName;
+				c.walkDone = false;
+				completions.push_back(c);
+				if (w.turnOnly) {
+					_walks.remove_at(i);
+					continue;
+				}
+			}
+			++i;
+			continue; // native walks only after the turn completes
+		}
+
+		// Motion phase: linear interpolation from start toward destination,
+		// advancing by the actor's speed each pass (FUN_004250b0 case 1/2).
+		w.progress = MIN(w.total, w.progress + MAX<int32>(1, ref.actor->speed));
+		const int16 nx = static_cast<int16>(w.startX - (w.dx * w.progress) / w.total);
+		const int16 ny = static_cast<int16>(w.startY - (w.dy * w.progress) / w.total);
+		const int16 nz = static_cast<int16>(w.startZ - (w.dz * w.progress) / w.total);
+		if (ref.actor->x != nx || ref.actor->y != ny || ref.actor->z != nz) {
+			ref.actor->x = nx;
+			ref.actor->y = ny;
+			ref.actor->z = nz;
+			engine._propRuntime.setDirty(true);
+		}
+		if (w.progress >= w.total) {
+			Completion c;
+			c.name = w.actorName;
+			c.dest = w.destName;
+			c.walkDone = true;
+			completions.push_back(c);
+			_walks.remove_at(i);
+			continue;
+		}
+		++i;
+	}
+
+	for (uint32 i = 0; i < completions.size(); ++i) {
+		if (!completions[i].walkDone) {
+			dispatchTurnComplete(engine, completions[i].name);
+		} else {
+			// Arrival: assume the destination star (snaps any rounding error);
+			// xyz walks end off-star at the raw coordinates like native.
+			if (!completions[i].dest.empty())
+				setActorStar(engine, completions[i].name, completions[i].dest);
+			dispatchWalkComplete(engine, completions[i].name);
+		}
+	}
+}
+
 void ActorRuntime::stopWalk(const Common::String &name) {
 	clearWalkRecord(name.empty() ? Common::String("all") : name);
+}
+
+void ActorRuntime::pauseWalk(const Common::String &name, int flag) {
+	// FUN_00425590: bump or drop the pause nesting counter on the matching
+	// walk record(s) ("all" or empty name touches every record); the movement
+	// service skips records whose counter is above zero.
+	const bool all = name.empty() || name.equalsIgnoreCase("all");
+	Common::String key = name;
+	key.toLowercase();
+	for (uint32 i = 0; i < _walks.size(); ++i) {
+		if (!all && _walks[i].actorName != key)
+			continue;
+		if (flag)
+			_walks[i].pause++;
+		else
+			_walks[i].pause = MAX(0, _walks[i].pause - 1);
+	}
 }
 
 bool ActorRuntime::isWalk(const Common::String &name) const {

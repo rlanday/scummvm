@@ -91,7 +91,20 @@ public:
 			const Common::String &dest);
 	void walkToXYZ(CyberflixEngine &engine, const Common::String &name, int x, int y, int z);
 	void stopWalk(const Common::String &name);
+	void pauseWalk(const Common::String &name, int flag);
 	bool isWalk(const Common::String &name) const;
+
+	/**
+	 * Advance every queued walk/turn by one service pass, mirroring native
+	 * FUN_00423a60 -> FUN_004250b0: a turning phase first (endturn() when the
+	 * actor faces its target), then linear motion by the actor's speed until
+	 * the total distance is covered (destination star + endwalk()).
+	 */
+	void advanceWalks(CyberflixEngine &engine);
+
+	/** Step every actor's pose frame; run once per compositor pass like
+	 *  PropRuntime::advancePropPoses. */
+	void advanceActorPoses();
 	Common::String walkDest(const Common::String &name) const;
 	int starXYZ(CyberflixEngine &engine, const Common::String &name, int selector) const;
 
@@ -99,12 +112,33 @@ public:
 	const Common::Array<Common::SharedPtr<Cast> > &casts() const { return _casts; }
 
 private:
+	/**
+	 * One queued walk/turn, mirroring a native 16-slot walk record
+	 * (DAT_0045f540, built by FUN_00424ad0/FUN_00424be0/FUN_00424a60 and
+	 * advanced once per forceupdate()/update() service pass FUN_00423a60 ->
+	 * FUN_004250b0).
+	 */
 	struct WalkRecord {
 		Common::String actorName;
-		Common::String destName;
+		Common::String destName;    ///< Star assumed on arrival ("" for xyz walks).
+		int16 turnTarget = -1;      ///< Walk-direction angle ([4]); -1 once turned.
+		bool turnOnly = false;      ///< turntodeg record (native kind [2] == 0).
+		int16 startX = 0;           ///< Position when the walk was queued ([6]..[8]).
+		int16 startY = 0;
+		int16 startZ = 0;
+		int32 dx = 0;               ///< start - destination ([0xd]/[0xf]/[0x11]).
+		int32 dy = 0;
+		int32 dz = 0;
+		int32 total = 1;            ///< Total walk distance ([0x13]), min 1.
+		int32 progress = 0;         ///< Distance covered so far ([0xb]).
+		int pause = 0;              ///< pausewalk() nesting counter ([1]).
 	};
 
 	int findWalkRecord(const Common::String &name) const;
+	bool queueAnimatedWalk(CyberflixEngine &engine, Cast::Actor &actor,
+			const Common::String &name, const Common::String &dest,
+			int16 destX, int16 destY, int16 destZ);
+	void dispatchTurnComplete(CyberflixEngine &engine, const Common::String &name);
 	void clearWalkRecord(const Common::String &name);
 	void dispatchWalkComplete(CyberflixEngine &engine, const Common::String &name);
 	bool recoverExtraBaseActor(CyberflixEngine &engine, const Common::String &name);

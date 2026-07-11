@@ -395,6 +395,7 @@ void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool
 		engine.programPalette(rgb);
 
 	engine.propRuntime().advancePropPoses();
+	engine.actorRuntime().advanceActorPoses();
 	Graphics::Surface *screen = engine._system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
 	copyFrameToScreen(*screen, frame, 0, 0);

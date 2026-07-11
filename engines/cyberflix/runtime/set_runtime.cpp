@@ -417,6 +417,7 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		engine.programPalette(rgb);
 
 	engine.propRuntime().advancePropPoses();
+	engine.actorRuntime().advanceActorPoses();
 	const FrameImage *stageBg = engine.stageRuntime().stageShellFrame();
 	Graphics::Surface *screen = engine._system->lockScreen();
 	// Base layer: the stage's UI shell (MAIN.STG node 0 — art-deco frame +

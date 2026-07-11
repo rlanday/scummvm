@@ -224,6 +224,7 @@ public:
 		kMethodKeyAborts        = 0x3EAD,
 		kMethodPauseLoop        = 0x3EAE,
 		kMethodPauseCricket     = 0x3EAF,
+		kMethodPauseWalk        = 0x3EB0,
 		kMethodPuppetParam      = 0x3EB1,
 		kMethodPuppetVisible    = 0x3EB2,
 		kMethodActorZClip       = 0x3EB3,

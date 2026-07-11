@@ -175,6 +175,37 @@ bool Cast::addActorInstance(const Actor &source, const Common::String &newName) 
 	return true;
 }
 
+uint16 Cast::shapePoseCountFor(const Actor &actor) const {
+	const Actor::Shape *shape = nullptr;
+	for (uint32 i = 0; i < actor.shapes.size(); ++i) {
+		if (actor.shapes[i].name == actor.shapeName) {
+			shape = &actor.shapes[i];
+			break;
+		}
+	}
+	if (!shape)
+		return 0;
+	int shIdx = resourceIndexById(shape->resId);
+	const byte *sh = shIdx >= 0 ? engineBase(static_cast<uint32>(shIdx)) : nullptr;
+	const uint64 shapeLen = shIdx >= 0 ?
+			static_cast<uint64>(_archive.getResource(static_cast<uint32>(shIdx)).length) + 4 : 0;
+	if (!sh || shapeLen < static_cast<uint64>(kShapePoseCountOffset) + 2)
+		return 0;
+	return READ_LE_UINT16(sh + kShapePoseCountOffset);
+}
+
+void Cast::advanceActorPoses() {
+	for (uint32 i = 0; i < _actors.size(); ++i) {
+		Actor &a = *_actors[i];
+		const uint16 count = shapePoseCountFor(a);
+		if (count <= 1)
+			continue;
+		a.poseIndex++;
+		if (a.poseIndex >= count)
+			a.poseIndex = 0;
+	}
+}
+
 Cast::ActorCellResult Cast::resolveActorCell(const Actor &actor, int angle) const {
 	ActorCellResult result;
 	const Actor::Shape *shape = nullptr;

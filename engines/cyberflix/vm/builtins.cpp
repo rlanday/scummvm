@@ -122,6 +122,10 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 	case Script::kMethodStopWalk: // stopwalk(actor|'all') -> FUN_00423b50
 		_actorHost->stopWalk(args.empty() ? Common::String() : args[0].strValue);
 		return true;
+	case Script::kMethodPauseWalk: // pausewalk(actor, flag) -> FUN_00446ea0/FUN_00425590
+		if (args.size() >= 2)
+			_actorHost->pauseWalk(args[0].strValue, args[1].intValue);
+		return true;
 	case Script::kMethodActorExists: // actorexists(name) -> FUN_0041fb20/FUN_004225b0
 		result = Value::makeBool(!args.empty() && _actorHost->actorExists(args[0].strValue));
 		return true;

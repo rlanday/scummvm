@@ -504,6 +504,10 @@ public:
 	virtual void walkToXYZ(const Common::String &name, int x, int y, int z) {}
 	virtual void stopWalk(const Common::String &name) {}
 
+	/** pausewalk(actor, flag) (0x3eb0 FUN_00446ea0 -> FUN_00425590): pause or
+	 *  resume a queued walk record. */
+	virtual void pauseWalk(const Common::String &name, int flag) {}
+
 	/** actorexists(name) (0x4e37 FUN_0041fb20): whether the actor lookup
 	 *  (FUN_004225b0) succeeds. */
 	virtual bool actorExists(const Common::String &name) { return false; }

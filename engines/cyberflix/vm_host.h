@@ -186,6 +186,7 @@ public:
 	void walkOnPath(const Common::String &name, const Common::String &path, const Common::String &dest) override;
 	void walkToXYZ(const Common::String &name, int x, int y, int z) override;
 	void stopWalk(const Common::String &name) override;
+	void pauseWalk(const Common::String &name, int flag) override;
 	bool actorExists(const Common::String &name) override;
 	bool isWalk(const Common::String &name) override;
 	Common::String walkDest(const Common::String &name) override;
