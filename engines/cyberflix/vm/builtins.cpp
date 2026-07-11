@@ -745,6 +745,14 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 	// stubbed as logged no-ops until their subsystems (renderer/video/audio/
 	// navigation) are implemented. Arguments are fully evaluated so trace output
 	// reflects real call sites.
+	//
+	// Builtins go inert once the host is quitting: the statement loop only
+	// unwinds a running script at its periodic quit check, and the statements
+	// executed before that boundary must not keep rendering, playing audio, or
+	// mutating game state (e.g. a puppet dialogue advancing its options while
+	// the application exits).
+	if (_systemHost && _systemHost->hostQuitRequested())
+		return Value();
 	if (_trace) {
 		Common::String a;
 		for (uint32 i = 0; i < args.size(); ++i) {

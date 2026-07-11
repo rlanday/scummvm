@@ -851,6 +851,12 @@ void ActorRuntime::advanceActorPoses() {
 void ActorRuntime::advanceWalks(CyberflixEngine &engine) {
 	if (_walks.empty())
 		return;
+	// Freeze walks once the user is quitting. This service runs from
+	// forceupdate() outside any script, so the VM's quit unwind cannot stop
+	// it; without this check a queued walk would keep moving its actor (and
+	// dispatching endturn/endwalk) while the application exits.
+	if (engine.shouldQuit())
+		return;
 
 	// Advance records first, then dispatch endturn()/endwalk() afterwards:
 	// those handlers run scripts that may queue or clear walks, which would
