@@ -355,11 +355,17 @@ int CyberflixEngine::calcDeg(int32 a, int32 b) {
 }
 
 int CyberflixEngine::calcVectX(int deg, int dist) {
-	return fixedShift14(nativeTrigSin(deg) * dist);
+	// Native FUN_00437770 -> FUN_004432e0 indexes DAT_00486750 (the cos table,
+	// PE resource "TRIG2" whose first entry is 16384). The two TRIG resources
+	// are TRIG1=sin (starts 0) and TRIG2=cos (starts 16384); see FUN_00441d00,
+	// which assigns DAT_00486780=TRIG1 (sin) and DAT_00486750=TRIG2 (cos).
+	return fixedShift14(nativeTrigCos(deg) * dist);
 }
 
 int CyberflixEngine::calcVectY(int deg, int dist) {
-	return fixedShift14(nativeTrigCos(deg) * dist);
+	// Native FUN_004377f0 -> FUN_00443310 indexes DAT_00486780 (the sin table,
+	// PE resource "TRIG1" whose first entry is 0).
+	return fixedShift14(nativeTrigSin(deg) * dist);
 }
 
 int CyberflixEngine::calcDist(int32 a, int32 b) {

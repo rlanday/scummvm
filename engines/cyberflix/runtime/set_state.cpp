@@ -350,12 +350,15 @@ int SetRuntime::playerXYZ(int selector) const {
 
 	// FUN_00442e90 computes the player point from the camera point by stepping
 	// backward along the heading by DAT_00461196. The retail EXE initializes
-	// that distance global to zero and no Titanic script writes it yet.
+	// that distance global to zero and no Titanic script writes it yet. The X
+	// offset uses FUN_004432e0 (cos table, DAT_00486750) and the Y offset uses
+	// FUN_00443310 (sin table, DAT_00486780); see calcVectX/Y for the table
+	// assignment.
 	const int kPlayerCameraDistance = 0;
 	const int x = camera.cameraX -
-			fixedShift14(nativeTrigSin(camera.heading) * kPlayerCameraDistance);
-	const int y = camera.cameraY -
 			fixedShift14(nativeTrigCos(camera.heading) * kPlayerCameraDistance);
+	const int y = camera.cameraY -
+			fixedShift14(nativeTrigSin(camera.heading) * kPlayerCameraDistance);
 	return selectXYZ(selector, x, y, camera.cameraZ);
 }
 
