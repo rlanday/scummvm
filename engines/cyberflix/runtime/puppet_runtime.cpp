@@ -63,6 +63,7 @@ void PuppetRuntime::open(const Common::SharedPtr<Puppet> &puppet) {
 	_currentAction.clear();
 	_currentFrame = 0;
 	_bevels.clear();
+	_spokenActions.clear();
 }
 
 void PuppetRuntime::close(Audio::Mixer *mixer) {
@@ -74,6 +75,7 @@ void PuppetRuntime::close(Audio::Mixer *mixer) {
 	_currentAction.clear();
 	_currentFrame = 0;
 	_bevels.clear();
+	_spokenActions.clear();
 }
 
 // ---- Puppet subsystem (TI.EXE FUN_004473c0 and friends) --------------------
@@ -184,6 +186,14 @@ void PuppetRuntime::puppetSpeak(CyberflixEngine &engine, const Common::String &n
 		return;
 	}
 	debug(1, "Cyberflix: puppetspeak('%s', %d)", name.c_str(), mode);
+	// Record the spoken line for the click-to-repeat path (native FUN_00447ce0
+	// -> FUN_0044a470 pushes the action index into DAT_00486790). Skip a
+	// duplicate of the immediately-prior entry and cap at three, matching native.
+	if (_spokenActions.empty() || !name.equalsIgnoreCase(_spokenActions.back())) {
+		_spokenActions.push_back(name);
+		while (_spokenActions.size() > 3)
+			_spokenActions.remove_at(0);
+	}
 	playAction(engine, *action);
 }
 
@@ -271,12 +281,52 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 				renderCurrentFrame(engine, true);
 				return id;
 			}
+			// Click-on-character to repeat the last spoken line (native
+			// FUN_00449e40: a click that misses every bevel but lands in the
+			// puppet display area replays the most recent puppetspeak action).
+			if (replayLastSpokenAction(engine)) {
+				debug(1, "Cyberflix: puppetevent(%d) click (%d,%d) -> repeat",
+						timeout, mouse.x, mouse.y);
+				engine.setGameCursor("CURS.ARROW");
+				hoverState = -1;
+			}
 		}
 		if (cursorDirty)
 			engine._cursorPresentationDirty = true;
 		engine.presentCursorIfDirty();
 		engine.delayMillisWithCursorUpdates(10);
 	}
+}
+
+bool PuppetRuntime::replayLastSpokenAction(CyberflixEngine &engine) {
+	if (!isOpen() || _spokenActions.empty())
+		return false;
+
+	// Native FUN_00449e40 hit-tests the click against the puppet character
+	// display area (DAT_0046126c - 0x78 high band of the screen). The character
+	// is composited above the bevel option backdrop, which FUN_00449370 draws
+	// starting at screenH - 0x3c (renderBevelBackdrop). Treat clicks above that
+	// backdrop as "on the character".
+	const Common::Point mouse = engine._eventMan->getMousePos();
+	const int characterBottom = kScreenHeight - 0x3c;
+	if (mouse.y < 0 || mouse.y >= characterBottom || mouse.x < 0 || mouse.x >= kScreenWidth)
+		return false;
+
+	// Re-run the most recent spoken action only; native FUN_00448b60 walks the
+	// queue but each entry is replayed as a fresh puppetspeak in sequence, and
+	// the user-visible behaviour is "repeat the last line".
+	const Common::String &name = _spokenActions.back();
+	const Puppet::ActionEntry *action = _puppet->actionByName(name);
+	if (!action)
+		return false;
+	// playAction clears the bevels (as a fresh puppetspeak would); preserve and
+	// restore them so the dialogue options remain selectable after the repeat.
+	Common::Array<BevelOption> savedBevels;
+	savedBevels = _bevels;
+	playAction(engine, *action);
+	_bevels = savedBevels;
+	renderBevels(engine, true);
+	return true;
 }
 
 Common::String PuppetRuntime::getPuppetBase() const {

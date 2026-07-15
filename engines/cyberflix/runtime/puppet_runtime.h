@@ -95,6 +95,14 @@ private:
 	void renderBevels(CyberflixEngine &engine, bool present);
 	void playAction(CyberflixEngine &engine, const Puppet::ActionEntry &action);
 
+	/**
+	 * Re-play the most recently spoken line, mirroring native FUN_00449e40's
+	 * click-on-character path: a left-click that misses every bevel but lands
+	 * in the puppet display area re-runs the last puppetspeak action. Returns
+	 * true if a line was replayed (so the caller re-enters its input loop).
+	 */
+	bool replayLastSpokenAction(CyberflixEngine &engine);
+
 	/** Currently open puppet archive (TI.EXE DAT_00461200 cluster). */
 	Common::SharedPtr<Puppet> _puppet;
 	Common::String _base;
@@ -105,6 +113,13 @@ private:
 	int16 _params[10] = { 0, 0x80, 0xfa, 0xfb, 0x378, 0x0c, 0, 0, 2, 8 };
 	Audio::SoundHandle _speechHandle;
 	Common::Array<BevelOption> _bevels;
+	/**
+	 * Ring of recently spoken action names (native DAT_00486790, count
+	 * DAT_00486cb4, capped at 3). puppetspeak pushes the action name (skipping a
+	 * duplicate of the immediately-prior entry); a click on the character
+	 * replays the most recent.
+	 */
+	Common::Array<Common::String> _spokenActions;
 	Common::ScopedPtr<Graphics::Font> _nativeTextFont;
 	int _nativeTextFontSize = 0;
 };
