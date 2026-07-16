@@ -200,6 +200,8 @@ static bool runMovieCommand(MovieCommand command, const Common::String &currentM
 	}
 	case MovieCommand::kMarker:
 		if (!movieName.empty()) {
+			debug(0, "Cyberflix: movie '%s' MARKER at frame %d (%s) -> movie '%s'",
+					currentMovieName.c_str(), currentFrame, source, movieName.c_str());
 			nextMovieName = movieName;
 			nextMovieStartFrame = 0;
 		} else {
@@ -373,6 +375,17 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// logo plays at the TOP of the screen.
 	int movieX = 0, movieY = 0;
 
+	// Multi-segment movies (SINK1-6, LEAVE, DEBRIS, ...) chain segments via a
+	// linked list: each master header's dword at byte +0x2c gives the next
+	// segment's base resource index (0 = last segment). Within a segment, all
+	// resource IDs in the per-frame table and sub-resource references are
+	// RELATIVE to that segment's base. The native player (FUN_0040ca80) walks
+	// this chain after each segment reaches its natural end (status 3). We
+	// follow the same chain up front, concatenating every segment's frames into
+	// the arrays below so the frame loop plays them in order.
+	Common::Array<uint32> segmentStartFrame; // frame index where each segment begins
+	Common::Array<Palette> segmentPalette;   // each segment's palette from its master header +0x6c
+
 	int masterIdx = -1;
 	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
 		if (!archive.getResource(i).empty && archive.getResource(i).info == kMasterHeaderInfoTag) {
@@ -383,19 +396,56 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	if (masterIdx < 0) {
 		warning("Cyberflix: movie '%s' has no master header; playing without audio", currentMovieName.c_str());
 	} else {
-		const byte *hdr = resourceEngineBase(fileData, archive.getResource(masterIdx));
-		// Guard the per-frame table extent before trusting the header layout.
-		if (hdr && hdr + 0x87c <= fileData.end()) {
-			movieSkippable = (hdr[0x18] & 1) != 0;
-			movieHoverCursor = (hdr[0x18] & 0x10) == 0;
-			movieShowsCursor = (hdr[6] & 0x10) == 0;
-			// Dest position: rect {t,l} @+0x86c plus origin @+0x24/+0x26.
-			movieX = static_cast<int16>(READ_LE_UINT16(hdr + 0x86e)) + static_cast<int16>(READ_LE_UINT16(hdr + 0x24));
-			movieY = static_cast<int16>(READ_LE_UINT16(hdr + 0x86c)) + static_cast<int16>(READ_LE_UINT16(hdr + 0x26));
-			uint32 musicTableIdx = READ_LE_UINT32(hdr + 0x64); // masterHdr[0x19]
-			uint32 sfxTableIdx   = READ_LE_UINT32(hdr + 0x60); // masterHdr[0x18]
+		// Walk the segment chain starting from the first master header.
+		uint32 segBase = static_cast<uint32>(masterIdx);
+		Common::HashMap<uint32, bool> visited; // guard against cycles in malformed data
+		uint64 cumMs = 0; // accumulates frame hold times across all segments
+		while (segBase < archive.getResourceCount() && !visited.contains(segBase)) {
+			visited.setVal(segBase, true);
+			const byte *hdr = resourceEngineBase(fileData, archive.getResource(segBase));
+			if (!hdr || hdr + 0x87c > fileData.end())
+				break;
+			// Display/cursor properties come from the first segment only.
+			if (segBase == static_cast<uint32>(masterIdx)) {
+				movieSkippable = (hdr[0x18] & 1) != 0;
+				movieHoverCursor = (hdr[0x18] & 0x10) == 0;
+				movieShowsCursor = (hdr[6] & 0x10) == 0;
+				// Dest position: rect {t,l} @+0x86c plus origin @+0x24/+0x26.
+				movieX = static_cast<int16>(READ_LE_UINT16(hdr + 0x86e)) + static_cast<int16>(READ_LE_UINT16(hdr + 0x24));
+				movieY = static_cast<int16>(READ_LE_UINT16(hdr + 0x86c)) + static_cast<int16>(READ_LE_UINT16(hdr + 0x26));
+			}
+			// Sub-resource indices are relative to segBase (TI.EXE
+			// DAT_0045ef70 added to every id offset).
+			uint32 musicTableIdx = segBase + READ_LE_UINT32(hdr + 0x64);
+			uint32 sfxTableIdx   = segBase + READ_LE_UINT32(hdr + 0x60);
 			uint32 pfCount       = READ_LE_UINT32(hdr + 0x878);
-			const byte *pfTable  = hdr + 0x87c; // per-frame records, stride 0x2a
+			const byte *pfTable  = hdr + 0x87c;
+
+			segmentStartFrame.push_back(pfVideoRes.size());
+
+			// Extract this segment's palette from the master header (+0x6c..+0x86c,
+			// 0x800 bytes = 256 ColorSpec entries x 8 bytes). The native player
+			// (FUN_0040ca80 lines 228-236) copies these into DAT_0045ef94 on each
+			// segment load. Multi-segment movies (SINK1-6, LEAVE) have different
+			// palettes per segment; using segment 0's palette for all segments
+			// corrupts the colours of every subsequent segment.
+			if (hdr + 0x86c <= fileData.end()) {
+				Palette segPal = {};
+				const byte *clut = hdr + 0x6c;
+				for (uint32 k = 0; k < kPaletteColorCount; ++k) {
+					const byte *ent = clut + k * 8;
+					const uint32 color = Palette::colorOffset(k);
+					segPal[color + 0] = ent[3]; // high byte of R
+					segPal[color + 1] = ent[5]; // high byte of G
+					segPal[color + 2] = ent[7]; // high byte of B
+				}
+				segPal[0] = segPal[1] = segPal[2] = 0;
+				const uint32 lastColor = Palette::colorOffset(kPaletteLastColor);
+				segPal[lastColor + 0] = segPal[lastColor + 1] = segPal[lastColor + 2] = 0xff;
+				segmentPalette.push_back(segPal);
+			} else {
+				segmentPalette.push_back(Palette());
+			}
 			// Minimum per-frame hold, in the scaled timer's units (FUN_00405130
 			// returns timeGetTime * 0.06, so 1 unit == 1000/60 ms). For LOGO this
 			// floor is 3 units == 50 ms == 20 fps.
@@ -413,7 +463,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 						const byte *ent = mt + 0x10e + e * 0x1a;
 						if (ent + 0x1a > fileData.end())
 							break;
-						uint32 rid = READ_LE_UINT32(ent + 4);
+						uint32 rid = segBase + READ_LE_UINT32(ent + 4);
 						if (rid >= archive.getResourceCount())
 							continue;
 						const Archive::Resource &r = archive.getResource(rid);
@@ -440,13 +490,12 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			const byte *st = (sfxTableIdx < archive.getResourceCount())
 					? resourceEngineBase(fileData, archive.getResource(sfxTableIdx)) : nullptr;
 			uint32 sfxCount = (st && st + 8 <= fileData.end()) ? READ_LE_UINT32(st + 4) : 0;
-			uint64 cumMs = 0;
 			for (uint32 f = 0; f < pfCount; ++f) {
 				const byte *rec = pfTable + f * 0x2a;
 				if (rec + 0x2a > fileData.end())
 					break;
 				const byte *eb = nullptr;
-				uint32 eventId = READ_LE_UINT32(rec + 0x10);
+				uint32 eventId = segBase + READ_LE_UINT32(rec + 0x10);
 				uint32 ebLen = 0;
 				if (eventId < archive.getResourceCount()) {
 					eb = resourceEngineBase(fileData, archive.getResource(eventId));
@@ -454,7 +503,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				}
 
 				frameStartMs.push_back(cumMs);
-				pfVideoRes.push_back(READ_LE_UINT32(rec + 0xc));
+				pfVideoRes.push_back(segBase + READ_LE_UINT32(rec + 0xc));
 				pfNavCmd.push_back(static_cast<MovieCommand>((eb && eb + 2 <= fileData.end())
 						? READ_LE_UINT16(eb) : static_cast<uint16>(MovieCommand::kNext)));
 				pfDrawOp.push_back((eb && eb + 0xe <= fileData.end())
@@ -506,7 +555,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 							if (ent + 0x2a > fileData.end())
 								break;
 							if (readPascalString(ent + 0xa, fileData, true) == cue) {
-								sfxResId = READ_LE_UINT32(ent + 4);
+								sfxResId = segBase + READ_LE_UINT32(ent + 4);
 								break;
 							}
 						}
@@ -546,14 +595,21 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				pfHoldMs.push_back(static_cast<uint32>(holdMs));
 				cumMs += holdMs;
 			}
-			frameStartMs.push_back(cumMs); // total movie duration
 
 			// 3. Action-cue frames: resolve the master header's cue names
 			//    against the per-frame name column (TI.EXE iVar12/iVar9 in
 			//    FUN_0040ca80). Missing names resolve to -1 (never matched).
-			actionCue1 = resolveFrameName(pfName, readPascalString(hdr + 0x40, fileData, true));
-			actionCue2 = resolveFrameName(pfName, readPascalString(hdr + 0x50, fileData, true));
+			// Only the first segment's action cues are used.
+			if (segBase == static_cast<uint32>(masterIdx)) {
+				actionCue1 = resolveFrameName(pfName, readPascalString(hdr + 0x40, fileData, true));
+				actionCue2 = resolveFrameName(pfName, readPascalString(hdr + 0x50, fileData, true));
+			}
+
+			// Follow the segment chain: master header dword at byte +0x2c gives
+			// the next segment's base resource index (0 = last segment).
+			segBase = READ_LE_UINT32(hdr + 0x2c);
 		}
+		frameStartMs.push_back(cumMs); // total movie duration (all segments)
 	}
 
 	// A movie is interactive if any frame carries buttons (the main menu,
@@ -668,11 +724,37 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 
 	uint32 wallStartMs = engine._system->getMillis();
 	int fi = (initialFrame >= 0 && initialFrame < frameCount) ? initialFrame : 0;
+	debug(0, "Cyberflix: movie '%s' start frame=%d/%d segments=%d usePF=%d interactive=%d audio=%d skippable=%d cue1=%d cue2=%d",
+			currentMovieName.c_str(), fi, frameCount, static_cast<int>(segmentStartFrame.size()),
+			usePF ? 1 : 0, hasInteractive ? 1 : 0,
+			hasMovieAudio ? 1 : 0, movieSkippable ? 1 : 0, actionCue1, actionCue2);
 	while (fi >= 0 && fi < frameCount && !engine.shouldQuit() && !skip) {
 		const uint frameIndex = static_cast<uint>(fi);
+		// Multi-segment movies code each segment independently. The native
+		// player (FUN_0040ca80) re-enters the segment-load path (LAB_0040cad3)
+		// for each segment, reinitializing the decode context. Resetting the
+		// frame decoder here prevents the new segment's delta frames from
+		// coding against the stale content of the previous segment's last frame.
+		for (uint s = 1; s < segmentStartFrame.size(); ++s) {
+			if (segmentStartFrame[s] == frameIndex) {
+				seq.clear();
+				// Switch to this segment's palette and force it to be
+				// re-programmed (each segment fades in from black via drawOp
+				// 0x12, which sets moviePalApplied itself; for plain-blit
+				// segments the dirty-flag path handles it).
+				if (s < segmentPalette.size()) {
+					moviePal = segmentPalette[s];
+					moviePalApplied = false;
+				}
+				break;
+			}
+		}
 		uint32 resIdx = usePF ? pfVideoRes[frameIndex] : frames[frameIndex];
-		if (resIdx >= archive.getResourceCount())
+		if (resIdx >= archive.getResourceCount()) {
+			warning("Cyberflix: movie '%s' frame %d: resIdx %u out of range (%u resources)",
+					currentMovieName.c_str(), fi, resIdx, archive.getResourceCount());
 			break;
+		}
 		const Archive::Resource &res = archive.getResource(resIdx);
 		if (res.empty || res.dataOffset < 4 ||
 				seq.applyFrame(fileData.begin() + res.dataOffset - 4, res.length + 4) == 0) {
@@ -882,9 +964,25 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		}
 
 		if (nav == MovieCommand::kEnd) {
-			// END: nav cmd 1 is the last-frame marker. The original player
-			// (FUN_0040ca80: when FUN_0040d710 returns 1 -> goto cleanup) shows
-			// this frame and then RETURNS from playback, leaving it on screen.
+			// END: nav cmd 1 marks the last frame of a segment. The original
+			// player (FUN_0040ca80: when FUN_0040d710 returns 1 -> the outer
+			// segment loop checks for a next segment via master header +0x2c).
+			// For multi-segment movies we flatten all segments into one frame
+			// array: if the next frame index is the start of another segment,
+			// advance to it. Otherwise (single-segment movie, or the last
+			// segment's final frame) show this frame and RETURN from playback.
+			const uint nextFrameIndex = frameIndex + 1;
+			bool atSegmentBoundary = false;
+			for (uint s = 1; s < segmentStartFrame.size(); ++s) {
+				if (segmentStartFrame[s] == nextFrameIndex) {
+					atSegmentBoundary = true;
+					break;
+				}
+			}
+			if (atSegmentBoundary) {
+				fi = fi + 1;
+				continue;
+			}
 			break;
 		}
 
@@ -933,6 +1031,10 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			break;
 		fi = nextFi >= 0 ? nextFi : fi + 1;
 	}
+
+	debug(0, "Cyberflix: movie '%s' frame loop ended: fi=%d/%d quit=%d skip=%d nextMovie='%s'",
+			currentMovieName.c_str(), fi, frameCount, engine.shouldQuit() ? 1 : 0, skip ? 1 : 0,
+			nextMovieName.c_str());
 
 	engine._mixer->stopHandle(audioHandle);
 	for (uint i = 0; i < frameSfxHandles.size(); ++i)
