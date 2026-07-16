@@ -1015,6 +1015,10 @@ private:
 	uint32 _pc;
 	uint32 _executed; ///< Statements executed by the last runProgram (for the console).
 	bool _trace;
+	/// Unimplemented builtin opcodes already logged once via callMethod's
+	/// fall-through, so ~128 stubbed opcodes don't spam every frame. Maps
+	/// opcode -> true once reported.
+	Common::HashMap<uint16, bool> _unreportedOpcodes;
 	VMHost *_host; ///< Engine host for effectful builtins; null = no-op. Not owned.
 	VMMovieHost *_movieHost;
 	VMNavigationHost *_navigationHost;

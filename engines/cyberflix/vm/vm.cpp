@@ -93,7 +93,8 @@ static bool shouldLogEnigmaDispatch(const Common::String &name, const Common::St
 			name.equalsIgnoreCase("goodkey") ||
 			name.equalsIgnoreCase("badkey") ||
 			((name.equalsIgnoreCase("keydown") || name.equalsIgnoreCase("keyrepeat")) &&
-					isEnigmaStageContext(self));
+				(isEnigmaStageContext(self) ||
+					self.equalsIgnoreCase("ctl 1")));
 }
 
 static int32 stringToNum(const Common::String &text) {

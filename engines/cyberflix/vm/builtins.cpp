@@ -791,6 +791,23 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		if (callRuntimeMethod(opcode, args, result))
 			return result;
 	}
+	// ~128 of ~308 opcodes are still stubbed. Without this log they vanish
+	// silently and return int 0 / falsy, which can make scripts take wrong
+	// branches (e.g. gating on a getter that always returns 0). Report each
+	// unimplemented opcode once so a trace yields a clean manifest instead of
+	// hundreds of repeats per second.
+	if (!_unreportedOpcodes.contains(opcode)) {
+		_unreportedOpcodes.setVal(opcode, true);
+		Common::String a;
+		for (uint32 i = 0; i < args.size(); ++i) {
+			if (i)
+				a += ", ";
+			a += args[i].toString();
+		}
+		const char *builtin = Script::methodName(opcode);
+		debug(1, "Cyberflix: unimplemented builtin %s#%#06x(%s) -> 0",
+				builtin ? builtin : "?", opcode, a.c_str());
+	}
 	return Value();
 }
 
