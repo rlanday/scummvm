@@ -76,6 +76,10 @@ bool StageRuntime::queueStageNodeRedraw(CyberflixEngine &engine, int targetNode)
 	}
 
 	node() = targetNode;
+	// Invalidate the retained node frame so the next composite decodes the new
+	// node's background. Pre-render node 0 into the shell frame (used by the SET
+	// compositor as its base layer) to match the prior eager-decode behavior.
+	clearNodeFrame();
 	if (targetNode == 0) {
 		if (stage()->renderNode(0, shellFrameData()))
 			shellFrameValid() = true;
@@ -99,6 +103,7 @@ void StageRuntime::openStageFile(CyberflixEngine &engine, const Common::String &
 		return;
 	}
 	clearShellFrame();
+	clearNodeFrame();
 	stage() = newStage;
 	visible() = true;
 	debug(1, "Cyberflix: stage '%s' open (%u nodes)", name.c_str(), stage()->nodeCount());
@@ -386,9 +391,20 @@ void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool
 	}
 	node() = targetNode;
 
-	FrameImage frame;
-	if (!stage()->renderNode(static_cast<uint32>(targetNode), frame))
-		return;
+	// Use the retained node frame when valid for this node; this avoids
+	// re-decoding the inter-coded background on every compositor pass (the
+	// native engine retains a single backing bitmap) and preserves drawstring
+	// output that was written into the surface by script callbacks.
+	if (!_nodeFrameValid) {
+		if (!stage()->renderNode(static_cast<uint32>(targetNode), _nodeFrame))
+			return;
+		_nodeFrameValid = true;
+		if (targetNode == 0) {
+			shellFrameData() = _nodeFrame;
+			shellFrameValid() = true;
+		}
+	}
+	const FrameImage &frame = _nodeFrame;
 
 	Palette rgb = {};
 	if (stage()->loadStagePalette(rgb) && !engine.paletteIsBlack())
@@ -416,10 +432,6 @@ void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool
 	engine.propRuntime().clearDirtyRects();
 	engine.propRuntime().setDirty(false);
 	engine._system->updateScreen();
-	if (targetNode == 0) {
-		shellFrameData() = frame;
-		shellFrameValid() = true;
-	}
 
 	debug(1, "Cyberflix: rendered stage '%s' node %d (%ux%u)",
 			stage()->name().c_str(), targetNode, frame.width, frame.height);
@@ -434,10 +446,18 @@ void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
 		return;
 
 	FrameImage frame;
-	if (!stage()->renderNode(static_cast<uint32>(node()), frame)) {
-		renderStageNode(engine, node(), false);
-		return;
+	if (!_nodeFrameValid) {
+		if (!stage()->renderNode(static_cast<uint32>(node()), _nodeFrame)) {
+			renderStageNode(engine, node(), false);
+			return;
+		}
+		_nodeFrameValid = true;
+		if (node() == 0) {
+			shellFrameData() = _nodeFrame;
+			shellFrameValid() = true;
+		}
 	}
+	frame = _nodeFrame;
 
 	Common::Array<const Shop::Prop *> draw;
 	Common::Array<const Shop *> drawShop;

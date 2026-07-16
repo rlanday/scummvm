@@ -179,11 +179,33 @@ void CyberflixEngine::drawString(const Common::String &text, int32 packedPoint, 
 	if (x >= kScreenWidth || baselineY >= kScreenHeight)
 		return;
 
-	Graphics::Surface *screen = _system->lockScreen();
-	font->drawString(screen, text, x, baselineY - font->getFontAscent(),
-			kScreenWidth - x, static_cast<uint32>(CLIP(color, 0, 255)));
-	_system->unlockScreen();
-	_system->updateScreen();
+	// When a stage is open, draw into the retained node frame so the text
+	// survives background recomposites (the native engine draws into a single
+	// retained backing bitmap). Writing into the live screen instead would be
+	// overwritten by the next renderStageNode, causing the W/A/D direction-key
+	// labels on ctl.stg to flash and disappear.
+	FrameImage *backing = nullptr;
+	if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen() && _stageRuntime.nodeFrameValid())
+		backing = &_stageRuntime.nodeFrameData();
+
+	if (backing && !backing->pixels.empty()) {
+		Graphics::Surface surf;
+		surf.setPixels(backing->pixels.begin());
+		surf.w = backing->width;
+		surf.h = backing->height;
+		surf.pitch = backing->width;
+		surf.format = Graphics::PixelFormat::createFormatCLUT8();
+		font->drawString(&surf, text, x, baselineY - font->getFontAscent(),
+				kScreenWidth - x, static_cast<uint32>(CLIP(color, 0, 255)));
+		// Mark props dirty so the next compositor pass presents the text.
+		_propRuntime.setDirty(true);
+	} else {
+		Graphics::Surface *screen = _system->lockScreen();
+		font->drawString(screen, text, x, baselineY - font->getFontAscent(),
+				kScreenWidth - x, static_cast<uint32>(CLIP(color, 0, 255)));
+		_system->unlockScreen();
+		_system->updateScreen();
+	}
 }
 
 int CyberflixEngine::stringWidth(const Common::String &text, int fontId, int size) {

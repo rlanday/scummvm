@@ -53,6 +53,10 @@ public:
 	const FrameImage &shellFrameData() const { return _shellFrame; }
 	bool &shellFrameValid() { return _shellFrameValid; }
 	bool shellFrameValid() const { return _shellFrameValid; }
+	FrameImage &nodeFrameData() { return _nodeFrame; }
+	const FrameImage &nodeFrameData() const { return _nodeFrame; }
+	bool &nodeFrameValid() { return _nodeFrameValid; }
+	bool nodeFrameValid() const { return _nodeFrameValid; }
 
 	void openStageFile(CyberflixEngine &engine, const Common::String &name);
 	void closeStageFile(CyberflixEngine &engine);
@@ -89,12 +93,19 @@ public:
 		_shellFrame.pixels.clear();
 		_shellFrameValid = false;
 	}
+	void clearNodeFrame() {
+		_nodeFrame.width = 0;
+		_nodeFrame.height = 0;
+		_nodeFrame.pixels.clear();
+		_nodeFrameValid = false;
+	}
 
 	void reset() {
 		_stage.reset();
 		_visible = false;
 		_node = 0;
 		clearShellFrame();
+		clearNodeFrame();
 	}
 
 private:
@@ -107,6 +118,8 @@ private:
 	int _node = 0;
 	FrameImage _shellFrame;
 	bool _shellFrameValid = false;
+	FrameImage _nodeFrame;
+	bool _nodeFrameValid = false;
 };
 
 } // End of namespace Cyberflix
