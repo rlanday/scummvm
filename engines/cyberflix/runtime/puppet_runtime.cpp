@@ -266,8 +266,17 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 				continue;
 			}
 			if (event.type == Common::EVENT_KEYDOWN &&
-					event.kbd.keycode == Common::KEYCODE_ESCAPE)
+					event.kbd.keycode == Common::KEYCODE_ESCAPE) {
+				// Drain leftover key-repeat events so a single Escape doesn't
+				// cascade into the next modal consumer (see playAction above).
+				Common::Event drain;
+				while (engine.pollScriptEvent(drain)) {
+					if (drain.type == Common::EVENT_QUIT ||
+							drain.type == Common::EVENT_RETURN_TO_LAUNCHER)
+						engine.requestQuit();
+				}
 				return -1;
+			}
 			if (event.type != Common::EVENT_LBUTTONDOWN)
 				continue;
 			mouse = Common::Point(event.mouse.x, event.mouse.y);
@@ -660,8 +669,21 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 				break;
 			}
 		}
-		if (aborted)
+		if (aborted) {
+			// A single Escape should abort exactly one puppet action. ScummVM
+			// batches key-repeat events, so without draining, the leftover ESC
+			// keydowns skip the next modal consumer (e.g. a sinking movie that
+			// starts immediately after the dialogue closes). The native Win32
+			// message loop consumes one WM_KEYDOWN per GetMessage, so this
+			// matches its one-press-one-consumption semantics.
+			Common::Event drain;
+			while (engine.pollScriptEvent(drain)) {
+				if (drain.type == Common::EVENT_QUIT ||
+						drain.type == Common::EVENT_RETURN_TO_LAUNCHER)
+					engine.requestQuit();
+			}
 			break;
+		}
 		if (cursorDirty)
 			engine._cursorPresentationDirty = true;
 		engine.presentCursorIfDirty();
