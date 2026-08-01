@@ -70,7 +70,7 @@ public:
 
 	ThemeTrack *findTrack(const Common::String &name);
 	Common::SharedPtr<ThemeTrack> findTrackRef(const Common::String &name);
-	const ThemeTrack::Cue *findSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr);
+	const ThemeTrack::Cue *findSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr) const;
 	ThemeTrack::Cue *findMutableSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr);
 
 	byte effectiveAudioVolume(int baseVolume) const;

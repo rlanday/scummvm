@@ -174,18 +174,26 @@ private:
 			return;
 		}
 
-		do {
-			if (_cueIndex + 1 >= _cues.size())
+		// Skip zero-sample cues (missing/corrupt resources), wrapping through
+		// the loop point exactly like normal advancement — a looping theme
+		// whose FINAL playlist entry is empty must wrap, not finish. Bound the
+		// walk to one full pass so an all-empty playlist still terminates.
+		for (uint32 stepped = 0; stepped <= _cues.size(); ++stepped) {
+			if (_cueIndex + 1 >= _cues.size()) {
+				if (_loopSamples == 0) {
+					_finished = true;
+					return;
+				}
 				_cueIndex = _loopIdx;
-			else
+			} else {
 				++_cueIndex;
-		} while (_cues[_cueIndex].totalSamples == 0 && !_finished && _cueIndex + 1 < _cues.size());
-
-		if (_cues[_cueIndex].totalSamples == 0) {
-			_finished = true;
-			return;
+			}
+			if (_cues[_cueIndex].totalSamples != 0) {
+				_blockIndex = _blockOffset = _blockValid = 0;
+				return;
+			}
 		}
-		_blockIndex = _blockOffset = _blockValid = 0;
+		_finished = true;
 	}
 
 	void decodeCurrentBlock() {
@@ -229,7 +237,7 @@ private:
 };
 
 const AudioRuntime::ThemeTrack::Cue *AudioRuntime::findSfxCue(const Common::String &name,
-		ThemeTrack **trackOut) {
+		ThemeTrack **trackOut) const {
 	for (uint i = 0; i < _tracks.size(); ++i) {
 		for (uint j = 0; j < _tracks[i]->sfxCues.size(); ++j) {
 			if (_tracks[i]->sfxCues[j].name.equalsIgnoreCase(name)) {
@@ -244,16 +252,9 @@ const AudioRuntime::ThemeTrack::Cue *AudioRuntime::findSfxCue(const Common::Stri
 
 AudioRuntime::ThemeTrack::Cue *AudioRuntime::findMutableSfxCue(const Common::String &name,
 		ThemeTrack **trackOut) {
-	for (uint i = 0; i < _tracks.size(); ++i) {
-		for (uint j = 0; j < _tracks[i]->sfxCues.size(); ++j) {
-			if (_tracks[i]->sfxCues[j].name.equalsIgnoreCase(name)) {
-				if (trackOut)
-					*trackOut = _tracks[i].get();
-				return &_tracks[i]->sfxCues[j];
-			}
-		}
-	}
-	return nullptr;
+	// Cue storage is owned by heap-allocated ThemeTracks, so the const lookup's
+	// result can safely be handed back mutable for the setter paths.
+	return const_cast<ThemeTrack::Cue *>(findSfxCue(name, trackOut));
 }
 
 static byte nativeDirectSoundVolumeToMixerVolume(int volume) {

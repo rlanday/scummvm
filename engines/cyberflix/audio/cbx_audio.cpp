@@ -31,6 +31,7 @@ static const int8 kSignedNibble[16] = {
 };
 
 static const uint32 kMaxCbxBlockBytes = 0x10000;
+static const uint32 kMaxCbxBlockCount = 0x10000;
 
 static inline void emitCbxSample(byte *dst, uint32 outSize, uint32 &produced,
 		byte sample, bool duplicate) {
@@ -93,11 +94,10 @@ CbxAudioInfo getCbxAudioInfo(const byte *payload, uint32 payloadLen) {
 	const uint32 rate = READ_LE_UINT32(payload + 0x18);
 	const uint32 blockBytes = READ_LE_UINT32(payload + 0x1c);
 	const uint32 count = READ_LE_UINT32(payload + 0x24);
-	if (blockBytes == 0 || blockBytes > kMaxCbxBlockBytes || count == 0 || count > 0x10000)
+	if (blockBytes == 0 || blockBytes > kMaxCbxBlockBytes ||
+			count == 0 || count > kMaxCbxBlockCount)
 		return info;
 	const bool duplicate = rate != kAudioRate22050;
-	if (duplicate && blockBytes > 0x7fffffffU)
-		return info;
 	const uint32 outSize = blockBytes * (duplicate ? 2 : 1);
 
 	uint32 validBlocks = 0;
@@ -124,11 +124,12 @@ uint32 decodeCbxAudioBlock(const byte *payload, uint32 payloadLen, uint32 blockI
 	const uint32 rate = READ_LE_UINT32(payload + 0x18);
 	const uint32 blockBytes = READ_LE_UINT32(payload + 0x1c);
 	const uint32 count = READ_LE_UINT32(payload + 0x24);
-	if (blockBytes == 0 || blockBytes > kMaxCbxBlockBytes || blockIndex >= count)
+	// Same caps as getCbxAudioInfo: the count cap also keeps the offset-table
+	// arithmetic below from wrapping uint32 on a hostile header.
+	if (blockBytes == 0 || blockBytes > kMaxCbxBlockBytes ||
+			count == 0 || count > kMaxCbxBlockCount || blockIndex >= count)
 		return 0;
 	const bool duplicate = rate != kAudioRate22050;
-	if (duplicate && blockBytes > 0x7fffffffU)
-		return 0;
 	const uint32 blockSamples = blockBytes * (duplicate ? 2 : 1);
 	if (outSize < blockSamples)
 		return 0;
@@ -147,7 +148,8 @@ uint32 decodeCbxAudioBlock(const byte *payload, uint32 payloadLen, uint32 blockI
 uint32 decodeCbxAudio(const byte *payload, uint32 payloadLen, Common::Array<byte> &out) {
 	CbxAudioInfo info = getCbxAudioInfo(payload, payloadLen);
 	const uint32 startBytes = out.size();
-	if (info.blockSamples == 0 || info.blockSamples > (0xffffffffU - startBytes) / info.blockCount)
+	if (info.blockSamples == 0 || info.blockCount == 0 ||
+			info.blockSamples > (0xffffffffU - startBytes) / info.blockCount)
 		return 0;
 
 	out.resize(startBytes + info.blockSamples * info.blockCount);
