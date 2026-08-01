@@ -454,7 +454,13 @@ void PropRuntime::propView(const Common::String &name, const Common::String &sha
 		return;
 	}
 	// FUN_004293a0 validates the shape against the prop master (FUN_0042c0c0)
-	// and leaves the prop on the shape's LAST pose (+0x20 = poseCount - 1).
+	// and stores poseCount - 1 at +0x20. FUN_0042ba40 then increments and wraps
+	// that index before composing, making pose 0 the first displayed frame. Keep
+	// the first advance pending explicitly: unlike native, this engine may repaint
+	// immediately after the dispatch, so pose 0 must already be drawable, while
+	// scripts still expect N forceupdate() calls to display poses 0 through N-1.
+	// Without the pending advance, HOUSE.SHP's six-update bag animation displays
+	// poses 1,2,3,4,5,0 and visibly flickers as it wraps on the last update.
 	Shop::ShapePoseResult pose = shop->shapePoseCount(*prop, shape);
 	if (!pose.valid) {
 		warning("Cyberflix: propview('%s'): no shape '%s'", name.c_str(), shape.c_str());
@@ -465,7 +471,7 @@ void PropRuntime::propView(const Common::String &name, const Common::String &sha
 	if (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name))
 		debug(1, "Cyberflix: propview('%s', '%s') old='%s'", name.c_str(),
 				key.c_str(), prop->shapeName.c_str());
-	uint16 newPoseIndex = pose.poseCount ? pose.poseCount - 1 : 0;
+	const uint16 newPoseIndex = 0;
 	if (prop->shapeName != key || prop->poseCount != pose.poseCount || prop->poseIndex != newPoseIndex) {
 		Common::Rect oldRect;
 		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
@@ -474,6 +480,9 @@ void PropRuntime::propView(const Common::String &name, const Common::String &sha
 		prop->poseIndex = newPoseIndex;
 		markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 	}
+	// Native restarts the pose sequence even when the requested view is already
+	// selected, so this cannot be conditional on a visible state change above.
+	prop->poseAdvancePending = true;
 }
 
 int PropRuntime::propXY(const Common::String &name, int selector) {

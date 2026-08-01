@@ -121,7 +121,11 @@ bool Shop::open(const Common::String &name) {
 			ShapePoseResult pose = shapePoseCount(prop, prop.shapeName);
 			if (pose.valid) {
 				prop.poseCount = pose.poseCount;
-				prop.poseIndex = prop.poseCount ? prop.poseCount - 1 : 0;
+				// The native engine primes the pose immediately before its first
+				// compositor advance. We represent the same state explicitly so
+				// pose 0 is also safe if an on-demand repaint happens first.
+				prop.poseIndex = 0;
+				prop.poseAdvancePending = true;
 			}
 		}
 
@@ -164,6 +168,10 @@ void Shop::advancePropPoses() {
 		Prop &prop = _props[i];
 		if (prop.poseCount == 0)
 			continue;
+		if (prop.poseAdvancePending) {
+			prop.poseAdvancePending = false;
+			continue;
+		}
 		prop.poseIndex++;
 		if (prop.poseIndex >= prop.poseCount)
 			prop.poseIndex = 0;

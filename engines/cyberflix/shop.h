@@ -93,6 +93,7 @@ public:
 		int16 angle = 0;            ///< +0x18 (propdeg)
 		uint16 poseIndex = 0;       ///< +0x20 current pose-table index
 		uint16 poseCount = 0;       ///< +0x22 pose count for current shape
+		bool poseAdvancePending = true; ///< Keep pose 0 for the first compositor pass after a view change.
 		int16 depth = -1;           ///< +0x26 (negative = screen-clipped item)
 		int32 scale = 1000;         ///< +0x28
 		int32 zClip = 0;            ///< propzclip distance (world props pending)
