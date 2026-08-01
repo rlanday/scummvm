@@ -30,49 +30,25 @@
 
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/detection.h"
+#include "cyberflix/saveload.h"
 
 namespace Cyberflix {
 
-static bool readFastSaveString(Common::SeekableReadStream &in, int64 end, Common::String &s) {
-	if (in.pos() + 4 > end)
-		return false;
-	uint32 len = in.readUint32LE();
-	if (in.pos() + len > end)
-		return false;
-	s.clear();
-	if (!len)
-		return !in.err();
-	Common::Array<char> buf;
-	buf.resize(len);
-	return in.read(buf.begin(), len) == len && (s = Common::String(buf.begin(), len), true);
-}
-
-static bool readFastChunkHeader(Common::SeekableReadStream &in, char tag[5], int64 &end) {
-	if (in.pos() + 8 > in.size())
-		return false;
-	if (in.read(tag, 4) != 4)
-		return false;
-	tag[4] = 0;
-	uint32 size = in.readUint32LE();
-	end = in.pos() + size;
-	return end <= in.size();
-}
-
 static bool readCyberflixSaveDescription(Common::SeekableReadStream &in, Common::String &description) {
 	char magic[5] = {};
-	if (in.read(magic, 4) != 4 || memcmp(magic, "CFXS", 4))
+	if (in.read(magic, 4) != 4 || memcmp(magic, kCyberflixSaveMagic, 4))
 		return false;
-	if (in.readUint32LE() != 1)
+	if (in.readUint32LE() != kCyberflixSaveVersion)
 		return false;
 
 	char tag[5];
 	int64 end = 0;
-	if (!readFastChunkHeader(in, tag, end) || strcmp(tag, "HEAD"))
+	if (!readChunkHeader(in, tag, end) || strcmp(tag, "HEAD"))
 		return false;
 
 	Common::String signature;
-	if (!readFastSaveString(in, end, signature) ||
-			!readFastSaveString(in, end, description))
+	if (!readSaveString(in, end, signature) ||
+			!readSaveString(in, end, description))
 		return false;
 	return !in.err();
 }
@@ -117,6 +93,8 @@ public:
 
 		SaveStateList saveList;
 		for (const auto &file : filenames) {
+			if (file.size() < 3)
+				continue;
 			const char *slotStr = file.c_str() + file.size() - 2;
 			const char *prev = slotStr - 1;
 			if (*prev >= '0' && *prev <= '9')

@@ -34,8 +34,7 @@ enum CyberflixGameType {
 };
 
 enum CyberflixGameFileTypes {
-	GAME_BOOTFILE   = 1 << 0,    // DATA/BOOTFILE: boot script + globals
-	GAME_EXECUTABLE = 1 << 1     // TITANIC.EXE
+	GAME_BOOTFILE = 1 << 0    // DATA/BOOTFILE: boot script + globals
 };
 
 struct CyberflixGameDescription {

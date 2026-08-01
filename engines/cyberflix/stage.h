@@ -174,6 +174,15 @@ private:
 	uint16 _height = 0;
 };
 
+/**
+ * True when a stage other than the main interface stage (MAIN.STG) is open —
+ * a "replacement" stage such as CTL.STG or GYM.STG that covers the whole
+ * screen and takes over rendering/hit-testing from the SET view.
+ */
+inline bool isReplacementStage(const Common::SharedPtr<Stage> &stage) {
+	return stage && stage->isOpen() && !stage->name().equalsIgnoreCase("main.stg");
+}
+
 } // End of namespace Cyberflix
 
 #endif // CYBERFLIX_STAGE_H

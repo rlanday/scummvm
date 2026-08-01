@@ -135,7 +135,7 @@ private:
 	};
 
 	int findWalkRecord(const Common::String &name) const;
-	bool queueAnimatedWalk(CyberflixEngine &engine, Cast::Actor &actor,
+	void queueAnimatedWalk(CyberflixEngine &engine, Cast::Actor &actor,
 			const Common::String &name, const Common::String &dest,
 			int16 destX, int16 destY, int16 destZ);
 	void dispatchTurnComplete(CyberflixEngine &engine, const Common::String &name);

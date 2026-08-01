@@ -23,72 +23,72 @@
 
 namespace Cyberflix {
 
-void CyberflixAudioVMHost::openTrackFile(const Common::String &name) {
-	engine().audioRuntime().openTrackFile(name);
+void CyberflixEngine::openTrackFile(const Common::String &name) {
+	audioRuntime().openTrackFile(name);
 }
 
-void CyberflixAudioVMHost::closeTrackFile(const Common::String &name) {
-	engine().audioRuntime().closeTrackFile(name);
+void CyberflixEngine::closeTrackFile(const Common::String &name) {
+	audioRuntime().closeTrackFile(name);
 }
 
-void CyberflixAudioVMHost::playTheme(const Common::String &name) {
-	engine().audioRuntime().playTheme(engine(), name);
+void CyberflixEngine::playTheme(const Common::String &name) {
+	audioRuntime().playTheme(*this, name);
 }
 
-void CyberflixAudioVMHost::haltTheme() {
-	engine().audioRuntime().haltTheme(engine());
+void CyberflixEngine::haltTheme() {
+	audioRuntime().haltTheme(*this);
 }
 
-void CyberflixAudioVMHost::playSound(const Common::String &name, int mode) {
-	engine().audioRuntime().playSound(engine(), name, mode);
+void CyberflixEngine::playSound(const Common::String &name, int mode) {
+	audioRuntime().playSound(*this, name, mode);
 }
 
-void CyberflixAudioVMHost::playVoice(const Common::String &name) {
-	engine().audioRuntime().playVoice(engine(), name);
+void CyberflixEngine::playVoice(const Common::String &name) {
+	audioRuntime().playVoice(*this, name);
 }
 
-void CyberflixAudioVMHost::haltSound(int which) {
-	engine().audioRuntime().haltSound(engine(), which);
+void CyberflixEngine::haltSound(int which) {
+	audioRuntime().haltSound(*this, which);
 }
 
-void CyberflixAudioVMHost::haltVoice() {
-	engine().audioRuntime().haltVoice(engine());
+void CyberflixEngine::haltVoice() {
+	audioRuntime().haltVoice(*this);
 }
 
-void CyberflixAudioVMHost::themeVolume(const Common::String &name, int volume) {
-	engine().audioRuntime().themeVolume(engine(), name, volume);
+void CyberflixEngine::themeVolume(const Common::String &name, int volume) {
+	audioRuntime().themeVolume(*this, name, volume);
 }
 
-int CyberflixAudioVMHost::getWaveVolume() {
-	return engine().audioRuntime().getWaveVolume(engine());
+int CyberflixEngine::getWaveVolume() {
+	return audioRuntime().getWaveVolume(*this);
 }
 
-int CyberflixAudioVMHost::setWaveVolume(int newLevel) {
-	return engine().audioRuntime().setWaveVolume(engine(), newLevel);
+int CyberflixEngine::setWaveVolume(int newLevel) {
+	return audioRuntime().setWaveVolume(*this, newLevel);
 }
 
-int CyberflixAudioVMHost::getSoundVolume(const Common::String &name) {
-	return engine().audioRuntime().getSoundVolume(engine(), name);
+int CyberflixEngine::getSoundVolume(const Common::String &name) {
+	return audioRuntime().getSoundVolume(*this, name);
 }
 
-int CyberflixAudioVMHost::setSoundVolume(const Common::String &name, int newVolume) {
-	return engine().audioRuntime().setSoundVolume(engine(), name, newVolume);
+int CyberflixEngine::setSoundVolume(const Common::String &name, int newVolume) {
+	return audioRuntime().setSoundVolume(*this, name, newVolume);
 }
 
-Common::String CyberflixAudioVMHost::currentTheme(int which) {
-	return engine().audioRuntime().currentTheme(engine(), which);
+Common::String CyberflixEngine::currentTheme(int which) {
+	return audioRuntime().currentTheme(*this, which);
 }
 
-Common::String CyberflixAudioVMHost::currentSound(int which) {
-	return engine().audioRuntime().currentSound(engine(), which);
+Common::String CyberflixEngine::currentSound(int which) {
+	return audioRuntime().currentSound(*this, which);
 }
 
-Common::String CyberflixAudioVMHost::currentVoice() {
-	return engine().audioRuntime().currentVoice(engine());
+Common::String CyberflixEngine::currentVoice() {
+	return audioRuntime().currentVoice(*this);
 }
 
-bool CyberflixAudioVMHost::voiceDone() {
-	return engine().audioRuntime().voiceDone(engine());
+bool CyberflixEngine::voiceDone() {
+	return audioRuntime().voiceDone(*this);
 }
 
 } // End of namespace Cyberflix

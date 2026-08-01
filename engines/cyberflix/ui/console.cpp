@@ -53,6 +53,91 @@ Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
 	registerCmd("changeset", WRAP_METHOD(Console, cmdChangeSet));
 }
 
+// Opens an LPPALPPA container by path, reporting failures on the console.
+// When @p fileData is non-null the whole file is read into it and backs the
+// archive, so the caller can also scan the raw bytes (e.g. for an embedded
+// palette); the buffer must outlive @p archive.
+static bool openArchive(Console &console, const char *filename, Archive &archive,
+		Common::Array<byte> *fileData) {
+	Common::File file;
+	if (!file.open(filename)) {
+		console.debugPrintf("Could not open '%s'\n", filename);
+		return false;
+	}
+
+	bool ok;
+	if (fileData) {
+		uint32 size = static_cast<uint32>(file.size());
+		fileData->resize(size);
+		if (file.read(fileData->begin(), size) != size) {
+			console.debugPrintf("Could not read '%s'\n", filename);
+			return false;
+		}
+		ok = archive.open(new Common::MemoryReadStream(fileData->begin(), size, DisposeAfterUse::NO), filename);
+	} else {
+		ok = archive.open(file.readStream(file.size()), filename);
+	}
+	if (!ok) {
+		console.debugPrintf("'%s' is not a valid LPPALPPA container\n", filename);
+		return false;
+	}
+	return true;
+}
+
+// Resolves the palette for a show* command: from @p palFilename when one was
+// supplied on the command line, otherwise by scanning the subject file's own
+// data (@p fileData) for an embedded CLUT.
+static bool resolvePalette(Console &console, const char *palFilename, const char *filename,
+		const Common::Array<byte> &fileData, Palette &rgb) {
+	bool havePalette = false;
+	if (palFilename) {
+		Common::File palFile;
+		if (palFile.open(palFilename)) {
+			uint32 palSize = static_cast<uint32>(palFile.size());
+			Common::Array<byte> palData(palSize);
+			if (palFile.read(palData.begin(), palSize) == palSize)
+				havePalette = loadPalette(palData.begin(), palSize, rgb);
+		}
+		if (!havePalette)
+			console.debugPrintf("No palette found in '%s'; falling back to '%s'\n", palFilename, filename);
+	}
+	if (!havePalette)
+		havePalette = loadPalette(fileData.begin(), fileData.size(), rgb);
+	return havePalette;
+}
+
+// Shared tail of the show* commands: fills @p rgb with a grayscale identity
+// ramp when no palette was found, blits @p pixels centred on a black screen,
+// applies the palette and presents the result. @p opaque, when non-null, is a
+// per-pixel mask (non-zero = drawn) so transparent cel pixels show through as
+// black.
+static void blitCenteredWithPalette(Console &console, const byte *pixels,
+		const byte *opaque, int w, int h, Palette &rgb, bool havePalette) {
+	if (!havePalette)
+		for (int i = 0; i < kPaletteColorCount; ++i) {
+			const uint32 color = Palette::colorOffset(i);
+			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
+		}
+
+	Graphics::Surface *screen = g_system->lockScreen();
+	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	int x0 = (kScreenWidth - w) / 2;
+	int y0 = (kScreenHeight - h) / 2;
+	for (int y = 0; y < h; ++y) {
+		for (int x = 0; x < w; ++x) {
+			if (opaque && !opaque[static_cast<uint>(y) * w + x])
+				continue;
+			int sx = x0 + x, sy = y0 + y;
+			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
+				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = pixels[static_cast<uint>(y) * w + x];
+		}
+	}
+	g_system->unlockScreen();
+	g_system->getPaletteManager()->setPalette(rgb.data(), 0, kPaletteColorCount);
+	g_system->updateScreen();
+	console.debugPrintf("Blitted. Close the console to view.\n");
+}
+
 bool Console::cmdDumpArchive(int argc, const char **argv) {
 	if (argc < 2) {
 		debugPrintf("Parses and lists the resources of an LPPALPPA container file.\n");
@@ -60,17 +145,9 @@ bool Console::cmdDumpArchive(int argc, const char **argv) {
 		return true;
 	}
 
-	Common::File file;
-	if (!file.open(argv[1])) {
-		debugPrintf("Could not open '%s'\n", argv[1]);
-		return true;
-	}
-
 	Archive archive;
-	if (!archive.open(file.readStream(file.size()), argv[1])) {
-		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
+	if (!openArchive(*this, argv[1], archive, nullptr))
 		return true;
-	}
 
 	debugPrintf("%s: %u resources, declared size %u bytes\n",
 			archive.getName().c_str(), archive.getResourceCount(),
@@ -99,17 +176,9 @@ bool Console::cmdDisasm(int argc, const char **argv) {
 		return true;
 	}
 
-	Common::File file;
-	if (!file.open(argv[1])) {
-		debugPrintf("Could not open '%s'\n", argv[1]);
-		return true;
-	}
-
 	Archive archive;
-	if (!archive.open(file.readStream(file.size()), argv[1])) {
-		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
+	if (!openArchive(*this, argv[1], archive, nullptr))
 		return true;
-	}
 
 	uint32 idx = static_cast<uint32>(atoi(argv[2]));
 	if (idx >= archive.getResourceCount()) {
@@ -160,17 +229,9 @@ bool Console::cmdVmTrace(int argc, const char **argv) {
 		return true;
 	}
 
-	Common::File file;
-	if (!file.open(argv[1])) {
-		debugPrintf("Could not open '%s'\n", argv[1]);
-		return true;
-	}
-
 	Archive archive;
-	if (!archive.open(file.readStream(file.size()), argv[1])) {
-		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
+	if (!openArchive(*this, argv[1], archive, nullptr))
 		return true;
-	}
 
 	uint32 idx = static_cast<uint32>(atoi(argv[2]));
 	if (idx >= archive.getResourceCount()) {
@@ -210,17 +271,9 @@ bool Console::cmdVmRun(int argc, const char **argv) {
 		return true;
 	}
 
-	Common::File file;
-	if (!file.open(argv[1])) {
-		debugPrintf("Could not open '%s'\n", argv[1]);
-		return true;
-	}
-
 	Archive archive;
-	if (!archive.open(file.readStream(file.size()), argv[1])) {
-		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
+	if (!openArchive(*this, argv[1], archive, nullptr))
 		return true;
-	}
 
 	uint32 idx = static_cast<uint32>(atoi(argv[2]));
 	if (idx >= archive.getResourceCount()) {
@@ -258,26 +311,12 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 		return true;
 	}
 
-	Common::File file;
-	if (!file.open(argv[1])) {
-		debugPrintf("Could not open '%s'\n", argv[1]);
-		return true;
-	}
-
 	// Read the whole container so it can both back the archive and be scanned
 	// for the embedded palette.
-	uint32 size = static_cast<uint32>(file.size());
-	Common::Array<byte> fileData(size);
-	if (file.read(fileData.begin(), size) != size) {
-		debugPrintf("Could not read '%s'\n", argv[1]);
-		return true;
-	}
-
+	Common::Array<byte> fileData;
 	Archive archive;
-	if (!archive.open(new Common::MemoryReadStream(fileData.begin(), size, DisposeAfterUse::NO), argv[1])) {
-		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
+	if (!openArchive(*this, argv[1], archive, &fileData))
 		return true;
-	}
 
 	uint32 idx = static_cast<uint32>(atoi(argv[2]));
 	if (idx >= archive.getResourceCount()) {
@@ -307,48 +346,13 @@ bool Console::cmdShowShape(int argc, const char **argv) {
 	// Resolve a palette: from a separate container if supplied (inventory cels
 	// are drawn against the active room palette), otherwise from this file.
 	Palette rgb = {};
-	bool havePalette = false;
-	if (argc >= 4) {
-		Common::File palFile;
-		if (palFile.open(argv[3])) {
-			uint32 palSize = static_cast<uint32>(palFile.size());
-			Common::Array<byte> palData(palSize);
-			if (palFile.read(palData.begin(), palSize) == palSize)
-				havePalette = loadPalette(palData.begin(), palSize, rgb);
-		}
-		if (!havePalette)
-			debugPrintf("No palette found in '%s'; falling back to '%s'\n", argv[3], argv[1]);
-	}
-	if (!havePalette)
-		havePalette = loadPalette(fileData.begin(), size, rgb);
+	bool havePalette = resolvePalette(*this, argc >= 4 ? argv[3] : nullptr, argv[1], fileData, rgb);
 
 	debugPrintf("Resource %u: %ux%u, origin (%d,%d), palette %s\n", idx,
 			cel.width, cel.height, cel.originX, cel.originY,
 			havePalette ? "loaded" : "MISSING (grayscale)");
-	if (!havePalette)
-		for (int i = 0; i < kPaletteColorCount; ++i) {
-			const uint32 color = Palette::colorOffset(i);
-			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
-		}
-
-	// Blit centred on a black screen; transparent pixels show through as black.
-	Graphics::Surface *screen = g_system->lockScreen();
-	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
-	int x0 = (kScreenWidth - cel.width) / 2;
-	int y0 = (kScreenHeight - cel.height) / 2;
-	for (int y = 0; y < cel.height; ++y) {
-		for (int x = 0; x < cel.width; ++x) {
-			if (!cel.isOpaque(x, y))
-				continue;
-			int sx = x0 + x, sy = y0 + y;
-			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = cel.pixels[static_cast<uint>(y) * cel.width + x];
-		}
-	}
-	g_system->unlockScreen();
-	g_system->getPaletteManager()->setPalette(rgb.data(), 0, kPaletteColorCount);
-	g_system->updateScreen();
-	debugPrintf("Blitted. Close the console to view.\n");
+	blitCenteredWithPalette(*this, cel.pixels.begin(), cel.opaque.begin(),
+			cel.width, cel.height, rgb, havePalette);
 	return true;
 }
 
@@ -393,46 +397,13 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 	// Resolve a palette: from a separate container if supplied, otherwise scan
 	// the frame's own file for an embedded CLUT.
 	Palette rgb = {};
-	bool havePalette = false;
-	if (argc >= 4) {
-		Common::File palFile;
-		if (palFile.open(argv[3])) {
-			uint32 palSize = static_cast<uint32>(palFile.size());
-			Common::Array<byte> palData(palSize);
-			if (palFile.read(palData.begin(), palSize) == palSize)
-				havePalette = loadPalette(palData.begin(), palSize, rgb);
-		}
-		if (!havePalette)
-			debugPrintf("No palette found in '%s'; falling back to '%s'\n", argv[3], argv[1]);
-	}
-	if (!havePalette)
-		havePalette = loadPalette(fileData.begin(), size, rgb);
+	bool havePalette = resolvePalette(*this, argc >= 4 ? argv[3] : nullptr, argv[1], fileData, rgb);
 
 	debugPrintf("Frame at 0x%x: %ux%u, consumed %u bytes, palette %s\n", offset,
 			frame.width, frame.height, consumed,
 			havePalette ? "loaded" : "MISSING (grayscale)");
-	if (!havePalette)
-		for (int i = 0; i < kPaletteColorCount; ++i) {
-			const uint32 color = Palette::colorOffset(i);
-			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
-		}
-
-	// Blit centred on a black screen.
-	Graphics::Surface *screen = g_system->lockScreen();
-	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
-	int x0 = (kScreenWidth - frame.width) / 2;
-	int y0 = (kScreenHeight - frame.height) / 2;
-	for (int y = 0; y < frame.height; ++y) {
-		for (int x = 0; x < frame.width; ++x) {
-			int sx = x0 + x, sy = y0 + y;
-			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = frame.pixels[static_cast<uint>(y) * frame.width + x];
-		}
-	}
-	g_system->unlockScreen();
-	g_system->getPaletteManager()->setPalette(rgb.data(), 0, kPaletteColorCount);
-	g_system->updateScreen();
-	debugPrintf("Blitted. Close the console to view.\n");
+	blitCenteredWithPalette(*this, frame.pixels.begin(), nullptr,
+			frame.width, frame.height, rgb, havePalette);
 	return true;
 }
 
@@ -445,24 +416,10 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 		return true;
 	}
 
-	Common::File file;
-	if (!file.open(argv[1])) {
-		debugPrintf("Could not open '%s'\n", argv[1]);
-		return true;
-	}
-
-	uint32 size = static_cast<uint32>(file.size());
-	Common::Array<byte> fileData(size);
-	if (file.read(fileData.begin(), size) != size) {
-		debugPrintf("Could not read '%s'\n", argv[1]);
-		return true;
-	}
-
+	Common::Array<byte> fileData;
 	Archive archive;
-	if (!archive.open(new Common::MemoryReadStream(fileData.begin(), size, DisposeAfterUse::NO), argv[1])) {
-		debugPrintf("'%s' is not a valid LPPALPPA container\n", argv[1]);
+	if (!openArchive(*this, argv[1], archive, &fileData))
 		return true;
-	}
 
 	// Video frames are the resources whose info tag is kFrameInfoTag; that tag
 	// also doubles as the frame's {uint16 H, uint16 P} header, so the decoder
@@ -499,33 +456,13 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 	}
 
 	Palette rgb = {};
-	bool havePalette = loadPalette(fileData.begin(), size, rgb);
+	bool havePalette = loadPalette(fileData.begin(), fileData.size(), rgb);
 
 	debugPrintf("Movie '%s': %u frames, showing frame %u (%ux%u), palette %s\n",
 			argv[1], frameIndices.size(), target, seq.width(), seq.height(),
 			havePalette ? "loaded" : "MISSING (grayscale)");
-	if (!havePalette)
-		for (int i = 0; i < kPaletteColorCount; ++i) {
-			const uint32 color = Palette::colorOffset(i);
-			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
-		}
-
-	const byte *pixels = seq.pixels();
-	Graphics::Surface *screen = g_system->lockScreen();
-	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
-	int x0 = (kScreenWidth - seq.width()) / 2;
-	int y0 = (kScreenHeight - seq.height()) / 2;
-	for (int y = 0; y < seq.height(); ++y) {
-		for (int x = 0; x < seq.width(); ++x) {
-			int sx = x0 + x, sy = y0 + y;
-			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = pixels[static_cast<uint>(y) * seq.width() + x];
-		}
-	}
-	g_system->unlockScreen();
-	g_system->getPaletteManager()->setPalette(rgb.data(), 0, kPaletteColorCount);
-	g_system->updateScreen();
-	debugPrintf("Blitted. Close the console to view.\n");
+	blitCenteredWithPalette(*this, seq.pixels(), nullptr,
+			seq.width(), seq.height(), rgb, havePalette);
 	return true;
 }
 
@@ -562,27 +499,8 @@ bool Console::cmdShowNode(int argc, const char **argv) {
 	debugPrintf("Stage '%s': %ux%u, %u node(s); showing node %u (%ux%u), palette %s\n",
 			argv[1], stage.width(), stage.height(), stage.nodeCount(), node,
 			frame.width, frame.height, havePalette ? "loaded" : "MISSING (grayscale)");
-	if (!havePalette)
-		for (int i = 0; i < kPaletteColorCount; ++i) {
-			const uint32 color = Palette::colorOffset(i);
-			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
-		}
-
-	Graphics::Surface *screen = g_system->lockScreen();
-	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
-	int x0 = (kScreenWidth - frame.width) / 2;
-	int y0 = (kScreenHeight - frame.height) / 2;
-	for (int y = 0; y < frame.height; ++y) {
-		for (int x = 0; x < frame.width; ++x) {
-			int sx = x0 + x, sy = y0 + y;
-			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = frame.pixels[static_cast<uint>(y) * frame.width + x];
-		}
-	}
-	g_system->unlockScreen();
-	g_system->getPaletteManager()->setPalette(rgb.data(), 0, kPaletteColorCount);
-	g_system->updateScreen();
-	debugPrintf("Blitted. Close the console to view.\n");
+	blitCenteredWithPalette(*this, frame.pixels.begin(), nullptr,
+			frame.width, frame.height, rgb, havePalette);
 	return true;
 }
 
@@ -636,27 +554,8 @@ bool Console::cmdShowSet(int argc, const char **argv) {
 
 	debugPrintf("Showing scene %u table %u angle %u (%ux%u), palette %s\n", scene, table, angle,
 			frame.width, frame.height, havePalette ? "loaded" : "MISSING (grayscale)");
-	if (!havePalette)
-		for (int i = 0; i < kPaletteColorCount; ++i) {
-			const uint32 color = Palette::colorOffset(i);
-			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
-		}
-
-	Graphics::Surface *screen = g_system->lockScreen();
-	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
-	int x0 = (kScreenWidth - frame.width) / 2;
-	int y0 = (kScreenHeight - frame.height) / 2;
-	for (int y = 0; y < frame.height; ++y) {
-		for (int x = 0; x < frame.width; ++x) {
-			int sx = x0 + x, sy = y0 + y;
-			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
-				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = frame.pixels[static_cast<uint>(y) * frame.width + x];
-		}
-	}
-	g_system->unlockScreen();
-	g_system->getPaletteManager()->setPalette(rgb.data(), 0, kPaletteColorCount);
-	g_system->updateScreen();
-	debugPrintf("Blitted. Close the console to view.\n");
+	blitCenteredWithPalette(*this, frame.pixels.begin(), nullptr,
+			frame.width, frame.height, rgb, havePalette);
 	return true;
 }
 
@@ -679,6 +578,10 @@ bool Console::cmdChangeSet(int argc, const char **argv) {
 			scene = probe.sceneName(0);
 	}
 	_engine->openSetFile(argv[1], scene);
+	// The compositor never programs the palette (scripts own it via
+	// clut()/fades), and no script fade follows a console changeset, so
+	// program the set's embedded palette with an instant one-step fade.
+	_engine->fadePalette("set", 1, false);
 	debugPrintf("changeset('%s', '%s') issued. Close the console to view.\n",
 			argv[1], scene.c_str());
 	return true;

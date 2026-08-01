@@ -43,42 +43,9 @@
 #include "cyberflix/image.h"
 #include "cyberflix/audio/cbx_audio.h"
 #include "cyberflix/resource_helpers.h"
+#include "cyberflix/runtime/graphics_helpers.h"
 
 namespace Cyberflix {
-
-static void copyFramePixelsToScreen(Graphics::Surface &screen, const byte *pixels,
-		int width, int height, int dstX, int dstY) {
-	if (!pixels || width <= 0 || height <= 0)
-		return;
-
-	int srcX = 0;
-	int srcY = 0;
-	int copyWidth = width;
-	int copyHeight = height;
-	if (dstX < 0) {
-		srcX = -dstX;
-		copyWidth -= srcX;
-		dstX = 0;
-	}
-	if (dstY < 0) {
-		srcY = -dstY;
-		copyHeight -= srcY;
-		dstY = 0;
-	}
-	if (dstX + copyWidth > screen.w)
-		copyWidth = screen.w - dstX;
-	if (dstY + copyHeight > screen.h)
-		copyHeight = screen.h - dstY;
-	if (copyWidth <= 0 || copyHeight <= 0)
-		return;
-
-	// Frame backgrounds are fully opaque. Clip once, then copy whole rows; this
-	// avoids the per-pixel bounds checks in the SET transition hot path.
-	for (int y = 0; y < copyHeight; ++y) {
-		memcpy(screen.getBasePtr(dstX, dstY + y),
-				pixels + static_cast<uint>(srcY + y) * width + srcX, copyWidth);
-	}
-}
 
 // Sample-add an 8-bit unsigned mono SFX buffer into the music track at the given
 // sample offset, extending the track with silence (0x80) if needed and clamping.
@@ -139,6 +106,15 @@ enum class MovieCommand : uint16 {
 	kPrev = 7
 };
 
+// Per-frame draw command (event chunk +0xc; TI.EXE FUN_0040eef0 switch).
+enum MovieDrawOp {
+	kMovieDrawBlit = 0x10,    ///< plain blit
+	kMovieDrawFadeOut = 0x11, ///< blit + palette fade to black across the hold
+	kMovieDrawFadeIn = 0x12   ///< blit (palette black) + palette fade in
+};
+
+// Cap on nested GOSUB movies. The native player has no explicit stack limit;
+// this is a ScummVM guard against a malformed MARKER/RETURN loop.
 static const uint kMovieReturnStackLimit = 5;
 
 // A clickable region on an interactive movie frame. The original player reads
@@ -155,9 +131,9 @@ static const uint kMovieReturnStackLimit = 5;
 //   +0x20 Pascal string = MARKER/GOSUB movie name,
 //   +0x30 Pascal string = GOTO target frame name (or GOSUB return frame).
 struct MovieButton {
-	MovieCommand action;
-	byte flags;
-	int16 left, top, right, bottom;
+	MovieCommand action = MovieCommand::kEnd;
+	byte flags = 0;
+	int16 left = 0, top = 0, right = 0, bottom = 0;
 	Common::String marker;
 	Common::String target;
 	bool contains(int x, int y) const {
@@ -270,7 +246,12 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		return;
 	}
 
-	uint32 size = static_cast<uint32>(file.size());
+	int64 fileSize = file.size();
+	if (fileSize <= 0) {
+		warning("Cyberflix: could not stat movie '%s'", currentMovieName.c_str());
+		return;
+	}
+	uint32 size = static_cast<uint32>(fileSize);
 	// fileData is declared before archive so it outlives it: the archive owns a
 	// stream that points into this buffer, and the movie loop below reads
 	// payloads through raw pointers into it.
@@ -342,10 +323,8 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// frame (the menu and its pressed-button frames), independent of the audio
 	// timeline that paces linear movies.
 	Common::Array<uint32> pfHoldMs;
-	// Per-frame draw command (event chunk +0xc; TI.EXE FUN_0040eef0 switch).
-	// 0x10 = plain blit; 0x11 = blit + palette fade to black across the hold;
-	// 0x12 = blit (palette black) + palette fade in. These author the menu
-	// fade-out (PLAYMODE 'GAME 2' 0x11) and the movie fade-ins (frame 0 0x12).
+	// Per-frame draw command (MovieDrawOp). These author the menu fade-out
+	// (PLAYMODE 'GAME 2' 0x11) and the movie fade-ins (frame 0 0x12).
 	Common::Array<uint16> pfDrawOp;
 
 	// Whether the movie may be skipped by the user. The original input handler
@@ -386,13 +365,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	Common::Array<uint32> segmentStartFrame; // frame index where each segment begins
 	Common::Array<Palette> segmentPalette;   // each segment's palette from its master header +0x6c
 
-	int masterIdx = -1;
-	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
-		if (!archive.getResource(i).empty && archive.getResource(i).info == kMasterHeaderInfoTag) {
-			masterIdx = static_cast<int>(i);
-			break;
-		}
-	}
+	int masterIdx = findMasterHeaderIndex(archive);
 	if (masterIdx < 0) {
 		warning("Cyberflix: movie '%s' has no master header; playing without audio", currentMovieName.c_str());
 	} else {
@@ -467,7 +440,10 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 						if (rid >= archive.getResourceCount())
 							continue;
 						const Archive::Resource &r = archive.getResource(rid);
-						if (r.empty || r.info != kAudioResourceInfoTag || r.dataOffset < 4)
+						// The rate field lives at payload+0x18, so the resource
+						// must be at least a full 0x1c-byte audio header.
+						if (r.empty || r.info != kAudioResourceInfoTag || r.dataOffset < 4 ||
+								r.length < 0x1c)
 							continue;
 						const byte *payload = fileData.begin() + r.dataOffset;
 						if (READ_LE_UINT32(payload + 0x18) != kAudioRate22050)
@@ -507,7 +483,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				pfNavCmd.push_back(static_cast<MovieCommand>((eb && eb + 2 <= fileData.end())
 						? READ_LE_UINT16(eb) : static_cast<uint16>(MovieCommand::kNext)));
 				pfDrawOp.push_back((eb && eb + 0xe <= fileData.end())
-						? READ_LE_UINT16(eb + 0xc) : 0x10 /* plain blit */);
+						? READ_LE_UINT16(eb + 0xc) : static_cast<uint16>(kMovieDrawBlit));
 				pfName.push_back(readPascalString(rec + 0x1a, fileData, true));
 				// FUN_0040d710 commands 3/4 use a Pascal movie name at event
 				// chunk +0x22; commands 2/4 use a Pascal frame target at +0x32.
@@ -525,7 +501,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				// byte offsets.
 				Common::Array<MovieButton> buttons;
 				uint32 btnCount = (eb && ebLen >= 0x446) ? READ_LE_UINT32(eb + 0x442) : 0;
-				if (eb && ebLen > 0x446)
+				if (eb && ebLen >= 0x446) // clamp the file-supplied count to the chunk
 					btnCount = MIN<uint32>(btnCount, (ebLen - 0x446) / 0x40);
 				for (uint32 b = 0; b < btnCount; ++b) {
 					const byte *br = eb + 0x446 + b * 0x40;
@@ -606,8 +582,10 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			}
 
 			// Follow the segment chain: master header dword at byte +0x2c gives
-			// the next segment's base resource index (0 = last segment).
+			// the next segment's base resource index.
 			segBase = READ_LE_UINT32(hdr + 0x2c);
+			if (segBase == 0)
+				break; // 0 = last segment; never treat resource 0 as a segment
 		}
 		frameStartMs.push_back(cumMs); // total movie duration (all segments)
 	}
@@ -646,22 +624,9 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	bool haveMoviePal = loadPalette(fileData.begin(), size, moviePal);
 	bool moviePalApplied = false;
 
-	// Composite frames in order into a persistent surface (frames are
-	// inter-coded) and present them on the movie's own timeline. Esc skips a
-	// movie flagged skippable (header +0x18 bit 0); quit always stops.
-	//
-	// There is NO stored frames-per-second field. Each frame carries its own
-	// hold time in its event chunk (offset +2, floored by masterHdr[+0x1c]),
-	// expressed in the scaled-timer units returned by TI.EXE FUN_00405130
-	// (timeGetTime * 0.06, i.e. 1 unit == 1000/60 ms). We precomputed the
-	// cumulative start time of every frame into frameStartMs above, so the video
-	// is paced by that timeline against a wall clock - NOT slaved to the audio.
-	// The soundtrack (music with SFX mixed in at their frame times) is fired on
-	// the mixer and runs concurrently; both advance in real time so they stay in
-	// step. The video timeline can be slightly longer than the music (the two
-	// long-hold LOGO frames push it to ~16.6 s vs ~15.9 s of music), so the final
-	// fade is no longer cut short. With no usable timeline we fall back to a
-	// fixed cadence.
+	// Esc skips a movie flagged skippable (header +0x18 bit 0); quit always
+	// stops. Frame pacing is documented at the frame loop below; with no usable
+	// timeline we fall back to a fixed cadence.
 	FrameSequence seq;
 	const uint32 kFallbackFrameDelayMs = 66; // ~15 fps when there is no frame timeline
 	bool skip = false;
@@ -669,11 +634,17 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 
 	// Mirror the movie player's Win32 cursor setup: most Titanic movies show the
 	// arrow even during linear playback, so keep ScummVM's software cursor active
-	// instead of letting the host cursor appear over the movie surface.
-	if (movieShowsCursor && engine.setGameCursor("CURS.ARROW"))
+	// instead of letting the host cursor appear over the movie surface. Remember
+	// the actual decision: setGameCursor() can fail (missing TI.EXE), and the
+	// restore below must undo what really happened or the cursor stays hidden.
+	bool movieHidCursor;
+	if (movieShowsCursor && engine.setGameCursor("CURS.ARROW")) {
 		CursorMan.showMouse(true);
-	else
+		movieHidCursor = false;
+	} else {
 		CursorMan.showMouse(false);
+		movieHidCursor = true;
+	}
 
 	Audio::SoundHandle audioHandle;
 	Common::Array<Audio::SoundHandle> frameSfxHandles;
@@ -801,10 +772,10 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		// fade-out/fade-in frames; anything else is a plain blit that snaps
 		// the movie palette on if it is not up yet (the original's
 		// palette-dirty preamble in FUN_0040eef0).
-		uint16 drawOp = (usePF && frameIndex < pfDrawOp.size()) ? pfDrawOp[frameIndex] : 0x10;
+		uint16 drawOp = (usePF && frameIndex < pfDrawOp.size()) ? pfDrawOp[frameIndex] : static_cast<uint16>(kMovieDrawBlit);
 		bool fadedThisFrame = false;
 		if (present) {
-			if (haveMoviePal && !moviePalApplied && drawOp != 0x11 && drawOp != 0x12) {
+			if (haveMoviePal && !moviePalApplied && drawOp != kMovieDrawFadeOut && drawOp != kMovieDrawFadeIn) {
 				engine.programPalette(moviePal);
 				moviePalApplied = true;
 			}
@@ -819,12 +790,12 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			// 60 Hz tick (FUN_00410120 / FUN_004101a0): 0x12 = reveal the frame
 			// from black, 0x11 = fade the frame out, leaving the palette black
 			// for whatever follows (the menu -> room -> movie chain relies on it).
-			if (haveMoviePal && (drawOp == 0x11 || drawOp == 0x12)) {
+			if (haveMoviePal && (drawOp == kMovieDrawFadeOut || drawOp == kMovieDrawFadeIn)) {
 				uint32 holdMs = (usePF && frameIndex < pfHoldMs.size()) ? pfHoldMs[frameIndex]
 						: kFallbackFrameDelayMs;
 				int steps = static_cast<int>(holdMs * 60 / 1000);
 				Palette black = {};
-				if (drawOp == 0x12) {
+				if (drawOp == kMovieDrawFadeIn) {
 					engine.fadePaletteSteps(black, moviePal, steps);
 					moviePalApplied = true;
 				} else {
@@ -881,10 +852,12 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 						Common::Point m = engine._eventMan->getMousePos();
 						int fx = m.x - x0;
 						int fy = m.y - y0;
+						bool commandRan = false;
 						for (uint b = 0; b < pfButtons[frameIndex].size(); ++b) {
 							const MovieButton &mb = pfButtons[frameIndex][b];
 							if (!mb.contains(fx, fy))
 								continue;
+							commandRan = true;
 							if (runMovieCommand(mb.action, currentMovieName, fi, frameCount,
 									mb.marker, mb.target, pfName, returnStack,
 									fi, nextFi, nextMovieName,
@@ -898,6 +871,12 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 									nextFi, nextMovieName.c_str());
 							break;
 						}
+						// Stop draining the queue once a command has run: a second
+						// buffered click (double-click) must not dispatch another
+						// command and overwrite this one's target or double-push
+						// the GOSUB return stack.
+						if (commandRan)
+							break;
 					}
 				}
 				const Common::Point newMouse = engine._eventMan->getMousePos();
@@ -1040,7 +1019,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	for (uint i = 0; i < frameSfxHandles.size(); ++i)
 		engine._mixer->stopHandle(frameSfxHandles[i]);
 	engine._eventMan->purgeKeyboardEvents();
-	if (!movieShowsCursor)
+	if (movieHidCursor)
 		CursorMan.showMouse(true);
 	if (!nextMovieName.empty()) {
 		pendingMovieName = nextMovieName;

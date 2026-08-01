@@ -137,10 +137,6 @@ Value CyberflixEngine::sendToBootFx(const Common::String &message, const Common:
 			Common::String(), message, args, "bootfx");
 }
 
-static bool isReplacementStage(const Common::SharedPtr<Stage> &stage) {
-	return stage && stage->isOpen() && !stage->name().equalsIgnoreCase("main.stg");
-}
-
 // hittest(point) -> TI.EXE FUN_00435e70. The point packs (x << 16) | y; the
 // in-rect helper FUN_0041ac60 checks the high word against the {t,l,b,r}
 // rect's left/right and the low word against top/bottom. Probe order:
@@ -203,6 +199,10 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 			for (int i = static_cast<int>(itemType.size()) - 1; i >= 0; --i) {
 				const CelImage *cel = nullptr;
 				CelImage actorCel;
+				// Keeps the prop branch's cel alive for the hit test below; a
+				// raw .get() from the block-local render result would only be
+				// backed by the shop's cel cache, a non-local invariant.
+				Common::SharedPtr<CelImage> propCel;
 				Common::Rect r;
 				int16 depthBucket = 0;
 				Common::String name;
@@ -223,7 +223,8 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 							camera, _setRuntime.set()->setName());
 					if (!rendered.valid)
 						continue;
-					cel = rendered.cel.get();
+					propCel = rendered.cel;
+					cel = propCel.get();
 					r = rendered.rect;
 					depthBucket = rendered.depthBucket;
 					name = worldDraw[idx]->name;
@@ -311,11 +312,11 @@ Common::String CyberflixEngine::hitTestResult() {
 // other point value ((x << 16) | y).
 int32 CyberflixEngine::mousePoint() {
 	const Common::Point m = _eventMan->getMousePos();
-	return (static_cast<int32>(static_cast<int16>(m.x)) << 16) | (static_cast<int32>(m.y) & 0xffff);
+	return packPoint(m.x, m.y);
 }
 
 int32 CyberflixEngine::makePoint(int x, int y) {
-	return (static_cast<int32>(static_cast<int16>(x)) << 16) | (static_cast<int32>(y) & 0xffff);
+	return packPoint(x, y);
 }
 
 bool CyberflixEngine::buttonDown() {
@@ -383,7 +384,7 @@ int CyberflixEngine::calcMod(int a, int b) {
 }
 
 // cursor(...) -> TI.EXE FUN_00446920, with the script name already resolved
-// to a PE resource name by the VM (see VMHost::setCursorResource).
+// to a PE resource name by the VM (see CyberflixEngine::setCursorResource).
 void CyberflixEngine::setCursorResource(const Common::String &resourceName) {
 	if (setGameCursor(resourceName))
 		CursorMan.showMouse(true);
@@ -391,17 +392,6 @@ void CyberflixEngine::setCursorResource(const Common::String &resourceName) {
 		warning("Cyberflix: cursor resource '%s' not found in TI.EXE", resourceName.c_str());
 }
 
-// Dispatch a message with a freshly built scope chain, mirroring the
-// original's per-dispatch chains (FUN_0042ae80 builds [prop script, shop
-// script, BOOTFILE res2]; FUN_0042b2b0 [shop script, BOOTFILE res2]). The
-// chain REPLACES the active one for the duration of the call — TI.EXE passes
-// each dispatch's complete chain to the call executor FUN_0040b690, and
-// notably BOOTFILE res1 (the boot mousedown/idle handlers) is NOT part of a
-// prop/shop dispatch, so a prop without its own handler leaves the message
-// unhandled instead of recursing into the boot handler of the same name.
-// The 0xfba/0xfbb context atoms are saved and restored around the call. The
-// fixed one/two-scope helper is used by hot scheduled-loop callbacks to avoid
-// first building a temporary "scopes" array that is immediately reversed again.
 bool CyberflixEngine::actionFrame(int n) {
 	if (n < 1 || n > 2)
 		return false;
@@ -437,12 +427,12 @@ bool CyberflixEngine::keyAborts(const Common::String *resource, const Common::St
 }
 
 bool CyberflixEngine::optionKey() {
+	// Reading SHIFT here is not a bug: native optionkey (FUN_004376e0) and
+	// shiftkey (FUN_00437710) both read GetAsyncKeyState(VK_SHIFT).
 	return (_eventMan->getModifierState() & Common::KBD_SHIFT) != 0;
 }
 
 bool CyberflixEngine::shiftKey() {
-	// Native shiftkey (FUN_00437710) and optionkey (FUN_004376e0) both read
-	// GetAsyncKeyState(VK_SHIFT).
 	return optionKey();
 }
 
@@ -464,12 +454,22 @@ bool CyberflixEngine::shiftKey() {
 // puppet speech playback, and puppetevent() bevel selection. flushEvents()
 // clears this queue along with backend mouse/keyboard events for native
 // flush-events script calls.
+void CyberflixEngine::noteDeferredInputEvent(const Common::Event &event) {
+	if (event.type != Common::EVENT_LBUTTONDOWN && event.type != Common::EVENT_LBUTTONUP)
+		return;
+	debug(1, "Cyberflix: queued %s at (%d,%d) arrived t=%u",
+			event.type == Common::EVENT_LBUTTONDOWN ? "LBUTTONDOWN" : "LBUTTONUP",
+			event.mouse.x, event.mouse.y, _system->getMillis());
+}
+
 bool CyberflixEngine::pollScriptEvent(Common::Event &event) {
 	if (!_deferredInputEvents.empty()) {
 		event = _deferredInputEvents.pop();
+		_lastScriptEventWasDeferred = true;
 		return true;
 	}
 
+	_lastScriptEventWasDeferred = false;
 	return _eventMan->pollEvent(event);
 }
 
@@ -490,6 +490,17 @@ bool CyberflixEngine::pollInputStateEvents() {
 					_stageRuntime.stage()->name().equalsIgnoreCase("enigma.stg"))
 				debug(1, "Cyberflix: Enigma input poll mouse event %d at (%d,%d), buttons=0x%x",
 						event.type, event.mouse.x, event.mouse.y, _eventMan->getButtonState());
+			// Polling has already folded this event into getButtonState(),
+			// which is all button()/stilldown() need. Native (FUN_00436880/
+			// FUN_00436920) reads the live button state without consuming the
+			// queued WM_LBUTTONDOWN, which still reaches the window proc and
+			// becomes a boot mousedown afterwards — so keep the event for the
+			// script-visible queue instead of eating the click. Verified:
+			// native button()/stilldown() (FUN_00436880/FUN_00436920) call
+			// GetAsyncKeyState, a live hardware read that never touches the
+			// message queue.
+			noteDeferredInputEvent(event);
+			_deferredInputEvents.push(event);
 			sawMouseButtonEvent = true;
 			break;
 		case Common::EVENT_QUIT:
@@ -527,6 +538,7 @@ bool CyberflixEngine::pumpCursorMotionEvents() {
 			// artificial event source, which is dispatched after real backend
 			// events and can let newly typed telegram keys overtake older ones
 			// while script delay() loops poll only for cursor motion.
+			noteDeferredInputEvent(event);
 			_deferredInputEvents.push(event);
 			break;
 		}
@@ -635,14 +647,17 @@ void CyberflixEngine::forceUpdate() {
 	// Native FUN_00423a60 services walk records before scheduled loops.
 	_actorRuntime.advanceWalks(*this);
 	processScheduledLoops();
+	// Then step animation, exactly once per pass, as the native compositor does
+	// (FUN_004420b0/FUN_00442d90) — after the loop callbacks, so a one-shot
+	// animation whose makeloop() delay equals its pose count ends on the shape
+	// the callback selects instead of wrapping to its first frame first.
+	_propRuntime.advanceAnimationFrame(*this);
 	// FUN_004420b0 is the native writer for DAT_00461122, read by frame()
 	// (FUN_00435a30). The main interactive loop's idle timeout calls
 	// FUN_00442100 instead, so script-frame timers advance only on this
 	// forceupdate() compositor path, not on every quiet idle poll.
 	++_frameCounter;
 	debugCargoPaintingTimer();
-	if (!_propRuntime.dirty() && isReplacementStage(_stageRuntime.stage()) && propRuntime().hasAnimatedScreenProps())
-		_propRuntime.setDirty(true);
 	propRuntime().refreshPropsIfDirty(*this, true);
 	if (_puppetRuntime.isVisible()) {
 		puppetRuntime().renderCurrentFrame(*this, true);
@@ -733,7 +748,8 @@ void CyberflixEngine::debugCargoPaintingTimer() {
 }
 
 Common::Error CyberflixEngine::run() {
-	// The original is a 640x480 8-bit palettised WinG title.
+	// The original is a 512x384 8-bit palettised WinG title (see the
+	// kScreenWidth/kScreenHeight comment in cyberflix.h).
 	initGraphics(kScreenWidth, kScreenHeight);
 
 	_console = new Console(this);
@@ -841,9 +857,20 @@ Common::Error CyberflixEngine::run() {
 				_cursorPresentationDirty = true;
 			} else if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
 				quitGame();
+			} else if (event.type == Common::EVENT_LBUTTONUP) {
+				// Not script-visible, but logged so duplicated button events
+				// (e.g. from the SDL backend) are provable from a -d 1 trace.
+				// "queued" means the event waited in _deferredInputEvents while
+				// a script held the main loop, so its dispatch time here can be
+				// far later than the arrival time logged when it was queued.
+				debug(1, "Cyberflix: LBUTTONUP at (%d,%d) dispatch t=%u (%s)",
+						event.mouse.x, event.mouse.y, _system->getMillis(),
+						_lastScriptEventWasDeferred ? "queued" : "fresh");
 			} else if (event.type == Common::EVENT_LBUTTONDOWN) {
-				const int32 packed = (static_cast<int32>(static_cast<int16>(event.mouse.x)) << 16) |
-						(static_cast<int32>(event.mouse.y) & 0xffff);
+				debug(1, "Cyberflix: LBUTTONDOWN at (%d,%d) dispatch t=%u (%s)",
+						event.mouse.x, event.mouse.y, _system->getMillis(),
+						_lastScriptEventWasDeferred ? "queued" : "fresh");
+				const int32 packed = packPoint(event.mouse.x, event.mouse.y);
 				Common::Array<Value> args;
 				args.push_back(Value::makeInt(packed));
 				bool handled = false;

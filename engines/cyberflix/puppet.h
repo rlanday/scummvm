@@ -150,8 +150,6 @@ private:
 	bool renderCelImage(const CelImage &cel, int16 nativeY, int16 nativeX,
 			Graphics::Surface &screen) const;
 	uint32 baseDisplayListResource(int16 baseState) const;
-	uint32 displayLayerResourceId(uint32 displayListResourceId,
-			uint32 layer, int16 celIndex) const;
 	bool renderCelResource(uint32 resId, int16 nativeY, int16 nativeX,
 			Graphics::Surface &screen) const;
 

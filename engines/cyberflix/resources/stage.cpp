@@ -130,7 +130,8 @@ const byte *Stage::buttonRecord(uint32 node, const Common::String &button) const
 		const byte *rec = table + kButtonRecordsOffset + i * kButtonRecordStride;
 		if (kButtonRecordsOffset + i * kButtonRecordStride + kButtonRecordStride > length)
 			break;
-		if (button.equalsIgnoreCase(pascalString(rec + kButtonNameOffset)))
+		// In-place compare: this runs per button record on mouse-move hit tests.
+		if (pascalEqualsIgnoreCase(rec + kButtonNameOffset, _fileData.end(), button))
 			return rec;
 	}
 	return nullptr;
@@ -207,12 +208,7 @@ bool Stage::open(const Common::String &name) {
 	if (!openArchiveFile(name, "stage", _fileData, _archive))
 		return false;
 
-	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
-		if (!_archive.getResource(i).empty && _archive.getResource(i).info == kMasterHeaderInfoTag) {
-			_master = static_cast<int>(i);
-			break;
-		}
-	}
+	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
 		warning("Cyberflix: stage '%s' has no master header", name.c_str());
 		return false;

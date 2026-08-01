@@ -44,9 +44,17 @@ public:
 
 	void collectScreenProps(Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop) const;
-	void advancePropPoses();
-	void advancePropPosesAndMarkDirtyRects();
-	bool hasAnimatedScreenProps() const;
+	/** Step every prop and actor one animation frame and queue the dirty rects
+	 *  the change implies.
+	 *
+	 *  Native advances poses from the compositor pass (FUN_004420b0 /
+	 *  FUN_00442d90), which runs exactly once per scheduled-loop pass, so this
+	 *  must be driven from forceUpdate() and never from a repaint. FUSE.SHP's
+	 *  switch/switchon shapes are one-shot 9-pose animations paired with
+	 *  makeloop('prop', ..., 'fuseoff', 9): advancing them from the render path
+	 *  (which a single script dispatch can reach several times) wraps the pose
+	 *  index past the last frame and the fuse visibly flips back. */
+	void advanceAnimationFrame(CyberflixEngine &engine);
 	void collectWorldProps(CyberflixEngine &engine, Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
 			const Shop::WorldCamera &camera) const;
@@ -103,6 +111,8 @@ public:
 	void clearDirtyRects() { _dirtyRects.clear(); }
 
 private:
+	void advancePropPoses();
+
 	/**
 	 * Open shops (DATA/ .SHP files), in openshopfile order. The original keeps
 	 * ONE global prop array across all shops (DAT_0046113c/DAT_00461140), so

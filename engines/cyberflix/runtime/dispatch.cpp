@@ -27,6 +27,18 @@
 
 namespace Cyberflix {
 
+// Dispatch a message with a freshly built scope chain, mirroring the
+// original's per-dispatch chains (FUN_0042ae80 builds [prop script, shop
+// script, BOOTFILE res2]; FUN_0042b2b0 [shop script, BOOTFILE res2]). The
+// chain REPLACES the active one for the duration of the call — TI.EXE passes
+// each dispatch's complete chain to the call executor FUN_0040b690, and
+// notably BOOTFILE res1 (the boot mousedown/idle handlers) is NOT part of a
+// prop/shop dispatch, so a prop without its own handler leaves the message
+// unhandled instead of recursing into the boot handler of the same name.
+// The 0xfba/0xfbb context atoms are saved and restored around the call. The
+// fixed one/two/three-scope helpers are used by hot scheduled-loop callbacks
+// to avoid first building a temporary "scopes" array that is immediately
+// reversed again.
 void CyberflixEngine::dispatchWithScopes(const Script *scope1, const Script *scope2,
 		const Common::String &self, const Common::String &targetProp,
 		const Common::String &message, const Common::Array<Value> &args,
@@ -38,20 +50,8 @@ Value CyberflixEngine::dispatchWithScopesValue(const Script *scope1, const Scrip
 		const Common::String &self, const Common::String &targetProp,
 		const Common::String &message, const Common::Array<Value> &args,
 		const char *debugContext) {
-	Common::String prevSelf = _vm.contextSelf();
-	Common::String prevProp = _vm.contextProp();
-	ScriptVM::LibraryState prevChain = _vm.swapLibrariesFixed(
-			scope1, scope2, nullptr, _globalLib.get());
-	_vm.setDispatchContext(self, targetProp);
-
-	bool handled = false;
-	Value result = _vm.callFunction(message, args, &handled);
-	if (!handled)
-		debug(1, "Cyberflix: %s message '%s' unhandled", debugContext, message.c_str());
-
-	_vm.setDispatchContext(prevSelf, prevProp);
-	_vm.restoreLibraries(prevChain);
-	return result;
+	return dispatchWithThreeScopesValue(scope1, scope2, nullptr, self, targetProp,
+			message, args, debugContext);
 }
 
 Value CyberflixEngine::dispatchWithThreeScopesValue(const Script *scope1, const Script *scope2,
@@ -75,13 +75,6 @@ Value CyberflixEngine::dispatchWithThreeScopesValue(const Script *scope1, const 
 	_vm.setDispatchContext(prevSelf, prevProp);
 	_vm.restoreLibraries(prevChain);
 	return result;
-}
-
-void CyberflixEngine::dispatchWithScopeChain(const Common::Array<const Script *> &scopes,
-		const Common::String &self, const Common::String &targetProp,
-		const Common::String &message, const Common::Array<Value> &args,
-		const char *debugContext) {
-	dispatchWithScopeChainValue(scopes, self, targetProp, message, args, debugContext);
 }
 
 Value CyberflixEngine::dispatchWithScopeChainValue(const Common::Array<const Script *> &scopes,

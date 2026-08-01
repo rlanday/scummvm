@@ -95,6 +95,8 @@ public:
 		kOpTrue    = 0x0FB5, ///< Boolean TRUE literal atom (0x41a550 case 0xfb5).
 		kOpFalse   = 0x0FB6, ///< Boolean FALSE literal atom.
 		kOpNot     = 0x0FB7, ///< Prefix boolean NOT (applies to following atom).
+		kOpCtxSelf = 0x0FBA, ///< Push the dispatch context's "self" name (chain entry +0x1e).
+		kOpCtxProp = 0x0FBB, ///< Push the dispatch context's target-prop name (chain entry +0x3e).
 		kOpReturnValue = 0x0FB8, ///< return <expr>: yields the message's result.
 		kOpPass    = 0x0FB9, ///< Pretend unhandled: dispatcher tries next scope.
 
@@ -183,6 +185,7 @@ public:
 		kMethodNoteDialog       = 0x2F2F,
 		kMethodDrawString       = 0x2F30,
 		kMethodSendToBoot       = 0x2F31,
+		kMethodMixClut          = 0x2F32,
 		kMethodWalkOnPath       = 0x2F44,
 		kMethodWalkToXYZ        = 0x2F45,
 		kMethodActorVisible     = 0x3E81,
@@ -215,6 +218,7 @@ public:
 		kMethodPropOwner        = 0x3EA0,
 		kMethodWaveVolume       = 0x3EA1,
 		kMethodCurrentCD        = 0x3EA2,
+		kMethodCameraHi         = 0x3EA3,
 		kMethodActorTurn        = 0x3EA4,
 		kMethodSoundVol         = 0x3EA8,
 		kMethodThemeVol         = 0x3EA9,
@@ -473,6 +477,10 @@ public:
 private:
 	bool _valid;
 	bool _terminated;
+	/** Always empty; returned by reference on string-lookup misses (a
+	 *  function-local static Common::String would violate ScummVM's ban on
+	 *  objects with static constructors/destructors). */
+	Common::String _emptyString;
 	uint32 _poolOffset;
 	Common::Array<Instruction> _code;
 	Common::Array<byte> _payload;

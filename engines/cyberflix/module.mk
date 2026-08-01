@@ -30,7 +30,6 @@ MODULE_OBJS = \
 	runtime/timing.o \
 	saveload.o \
 	ui/console.o \
-	vm_host.o \
 	vm_host_actor.o \
 	vm_host_audio.o \
 	vm_host_movie.o \

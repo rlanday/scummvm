@@ -22,10 +22,8 @@
 #include "common/debug.h"
 #include "common/textconsole.h"
 
+#include "cyberflix/cyberflix.h"
 #include "cyberflix/vm.h"
-
-#include <cstdlib>
-#include <cstring>
 
 namespace Cyberflix {
 
@@ -39,10 +37,8 @@ Common::String Value::toString() const {
 	}
 }
 
-ScriptVM::ScriptVM() : _pc(0), _executed(0), _trace(false), _host(nullptr),
-		_movieHost(nullptr), _navigationHost(nullptr), _systemHost(nullptr),
-		_audioHost(nullptr), _inputHost(nullptr), _actorHost(nullptr),
-		_interactionHost(nullptr), _saveHost(nullptr), _callDepth(0) {
+ScriptVM::ScriptVM() : _callDepth(0), _exprDepth(0), _bodyDepth(0), _pc(0), _executed(0),
+		_trace(false), _host(nullptr) {
 }
 
 static bool shouldLogTransitionDispatch(const Common::String &name) {
@@ -96,6 +92,8 @@ static bool shouldLogEnigmaDispatch(const Common::String &name, const Common::St
 				(isEnigmaStageContext(self) ||
 					self.equalsIgnoreCase("ctl 1")));
 }
+
+static bool isSendToOpcode(uint16 op);
 
 static int32 stringToNum(const Common::String &text) {
 	return static_cast<int32>(strtol(text.c_str(), nullptr, 10));
@@ -152,9 +150,13 @@ static Common::String putWord(const Common::String &text, const Common::String &
 	for (uint32 i = 0; i + delimiter.size() <= terminated.size(); ++i) {
 		if (!memcmp(terminated.c_str() + i, delimiter.c_str(), delimiter.size())) {
 			if (--remaining <= 0) {
+				// Splice the tail from the ORIGINAL text: `terminated` has an
+				// extra delimiter appended, which must not leak into the result
+				// when the replaced word is the last one.
 				Common::String result(terminated.c_str(), wordStart);
 				result += replacement;
-				result += Common::String(terminated.c_str() + i, terminated.size() - i);
+				if (i < text.size())
+					result += Common::String(text.c_str() + i, text.size() - i);
 				return result;
 			}
 			i += delimiter.size() - 1;
@@ -197,17 +199,17 @@ Value ScriptVM::getVar(const Common::String &name) const {
 Value ScriptVM::getVar(const Common::String &name, const Common::String &key) const {
 	if (!_locals.empty() && _locals.back().contains(key)) {
 		Value v = _locals.back()[key];
-		if (key == "tour")
+		if (gDebugLevel > 0 && key == "tour")
 			debug(1, "Cyberflix: var tour local -> %s", v.toString().c_str());
 		return v;
 	}
 	if (_vars.contains(key)) {
 		Value v = _vars[key];
-		if (key == "tour")
+		if (gDebugLevel > 0 && key == "tour")
 			debug(1, "Cyberflix: var tour global -> %s", v.toString().c_str());
 		return v;
 	}
-	if (key == "tour")
+	if (gDebugLevel > 0 && key == "tour")
 		debug(1, "Cyberflix: var tour unbound");
 	return Value::makeSymbol(name);
 }
@@ -220,18 +222,18 @@ void ScriptVM::setVar(const Common::String &name, const Value &v) {
 	Common::String key = name;
 	key.toLowercase();
 	if (!_locals.empty() && _locals.back().contains(key)) {
-		if (shouldLogEnigmaVariable(key))
+		if (gDebugLevel > 0 && shouldLogEnigmaVariable(key))
 			debug(1, "Cyberflix: Enigma var %s local %s -> %s",
 					key.c_str(), _locals.back()[key].toString().c_str(), v.toString().c_str());
 		_locals.back()[key] = v;
 		return;
 	}
-	if (shouldLogEnigmaVariable(key)) {
+	if (gDebugLevel > 0 && shouldLogEnigmaVariable(key)) {
 		Common::String oldValue = _vars.contains(key) ? _vars[key].toString() : Common::String("<unset>");
 		debug(1, "Cyberflix: Enigma var %s global %s -> %s",
 				key.c_str(), oldValue.c_str(), v.toString().c_str());
 	}
-	if (shouldLogStoryVariable(key)) {
+	if (gDebugLevel > 0 && shouldLogStoryVariable(key)) {
 		Common::String oldValue = _vars.contains(key) ? _vars[key].toString() : Common::String("<unset>");
 		debug(1, "Cyberflix: story var %s global %s -> %s",
 				key.c_str(), oldValue.c_str(), v.toString().c_str());
@@ -352,6 +354,24 @@ Value ScriptVM::applyBinary(uint16 opcode, const Value &lhs, const Value &rhs) {
 }
 
 Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
+	// Callers legitimately hand us pc == count (a truncated body, or an
+	// expression ending at the terminator); getInstruction() is unchecked, so
+	// bound it here, at the single funnel every operand read goes through.
+	if (pc >= script.getInstructionCount())
+		return Value();
+	// Bound kOpNot / unary-minus / parenthesis recursion so a corrupt script
+	// cannot overflow the C stack (callFunction has the same guard at 64).
+	if (_exprDepth >= 64) {
+		debug(1, "Cyberflix: expression nesting too deep, abandoning atom");
+		return Value();
+	}
+	_exprDepth++;
+	Value v = decodeAtomInner(script, pc);
+	_exprDepth--;
+	return v;
+}
+
+Value ScriptVM::decodeAtomInner(const Script &script, uint32 &pc) {
 	const Script::Instruction &inst = script.getInstruction(pc);
 	const uint32 count = script.getInstructionCount();
 
@@ -370,7 +390,7 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 		pc++;
 		return Value::makeBool(false);
 
-	case 0x0fba:
+	case Script::kOpCtxSelf:
 		// Push the dispatch context's "self" name (chain entry +0x1e: the
 		// prop/shop/stage whose script is running; atom decoder 0x0041a550).
 		// Prop scripts use this as the name argument to propvisible/propxy/
@@ -378,7 +398,7 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 		pc++;
 		return Value::makeString(_ctxSelf);
 
-	case 0x0fbb:
+	case Script::kOpCtxProp:
 		// Push the dispatch context's target-prop name (chain entry +0x3e).
 		pc++;
 		return Value::makeString(_ctxProp);
@@ -461,19 +481,7 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 			// evaluated normally. Evaluating the message instead recurses:
 			// boot res1's mousedown sends mousedown(thepoint) to the hit
 			// scene/flat/button, which would re-enter itself.
-			if (headOp == Script::kMethodSendToActor || headOp == Script::kMethodSendToScene ||
-					headOp == Script::kMethodSendToPuppet || headOp == Script::kMethodSendToCast ||
-					headOp == Script::kMethodSendToProp || headOp == Script::kMethodSendToShop ||
-					headOp == Script::kMethodSendToPainting || headOp == Script::kMethodSendToSet ||
-					headOp == Script::kMethodSendToButton ||
-					headOp == Script::kMethodSendToFlat || headOp == Script::kMethodSendToStage ||
-					headOp == Script::kMethodSendToBoot || headOp == Script::kMethodSendToActorFx ||
-					headOp == Script::kMethodSendToSceneFx || headOp == Script::kMethodSendToPuppetFx ||
-					headOp == Script::kMethodSendToCastFx || headOp == Script::kMethodSendToPropFx ||
-					headOp == Script::kMethodSendToShopFx || headOp == Script::kMethodSendToPaintingFx ||
-					headOp == Script::kMethodSendToSetFx || headOp == Script::kMethodSendToButtonFx ||
-					headOp == Script::kMethodSendToFlatFx || headOp == Script::kMethodSendToStageFx ||
-					headOp == Script::kMethodSendToBootFx)
+			if (isSendToOpcode(headOp))
 				return dispatchMessageBuiltin(script, pc, headOp);
 			Common::Array<Value> args;
 			parseCallArgs(script, pc, args);
@@ -481,6 +489,29 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 		}
 		return Value();
 	}
+	}
+}
+
+// The message-carrying builtins: their trailing `message(args)` argument is
+// captured UNevaluated and dispatched against the target's script scope chain
+// (see dispatchMessageBuiltin below).
+static bool isSendToOpcode(uint16 op) {
+	switch (op) {
+	case Script::kMethodSendToActor:    case Script::kMethodSendToActorFx:
+	case Script::kMethodSendToScene:    case Script::kMethodSendToSceneFx:
+	case Script::kMethodSendToPuppet:   case Script::kMethodSendToPuppetFx:
+	case Script::kMethodSendToCast:     case Script::kMethodSendToCastFx:
+	case Script::kMethodSendToProp:     case Script::kMethodSendToPropFx:
+	case Script::kMethodSendToShop:     case Script::kMethodSendToShopFx:
+	case Script::kMethodSendToPainting: case Script::kMethodSendToPaintingFx:
+	case Script::kMethodSendToSet:      case Script::kMethodSendToSetFx:
+	case Script::kMethodSendToButton:   case Script::kMethodSendToButtonFx:
+	case Script::kMethodSendToFlat:     case Script::kMethodSendToFlatFx:
+	case Script::kMethodSendToStage:    case Script::kMethodSendToStageFx:
+	case Script::kMethodSendToBoot:     case Script::kMethodSendToBootFx:
+		return true;
+	default:
+		return false;
 	}
 }
 
@@ -515,9 +546,13 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 		if (head.opcode == Script::kOpPushSym && pc + 1 < count &&
 				script.getInstruction(pc + 1).opcode == Script::kOpOpenParen) {
 			// Alias the cached folded message name; sendto* dispatch consumes it
-			// synchronously below, so no ownership transfer is needed.
+			// synchronously below, so no ownership transfer is needed. If more
+			// than one `name(` group appears, the LAST one wins outright —
+			// clear any args captured for an earlier group rather than
+			// accumulating them across captures.
 			message = &script.getSelfRelStringLowercaseRef(pc);
 			pc++;
+			msgArgs.clear();
 			parseCallArgs(script, pc, msgArgs);
 		} else {
 			Value target = evaluateExpression(script, pc);
@@ -550,103 +585,103 @@ Value ScriptVM::dispatchMessageBuiltin(const Script &script, uint32 &pc, uint16 
 	switch (opcode) {
 	case Script::kMethodSendToStage: // sendtostage(message(...)) -> TI.EXE FUN_0040ad80
 		if (_host)
-			_navigationHost->sendToStage(*message, msgArgs);
+			_host->sendToStage(*message, msgArgs);
 		break;
 	case Script::kMethodSendToStageFx:
 		if (_host)
-			return _navigationHost->sendToStageFx(*message, msgArgs);
+			return _host->sendToStageFx(*message, msgArgs);
 		break;
 	case Script::kMethodSendToBoot: // sendtoboot(message(...)) -> TI.EXE FUN_00439080/FUN_004390a0
 		if (_host)
-			_navigationHost->sendToBoot(*message, msgArgs);
+			_host->sendToBoot(*message, msgArgs);
 		break;
 	case Script::kMethodSendToBootFx:
 		if (_host)
-			return _navigationHost->sendToBootFx(*message, msgArgs);
+			return _host->sendToBootFx(*message, msgArgs);
 		break;
 	case Script::kMethodSendToShop: // sendtoshop('file.shp', message) -> TI.EXE FUN_0042b2b0:
 	             // dispatch against [shop script, BOOTFILE res2].
 		if (_host)
-			_interactionHost->sendToShop(target0, *message, msgArgs);
+			_host->sendToShop(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToShopFx: // sendtoshopfx('file.shp', message) -> return dispatch result.
 		if (_host)
-			return _interactionHost->sendToShopFx(target0, *message, msgArgs);
+			return _host->sendToShopFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToProp: // sendtoprop('propname', message) -> TI.EXE FUN_0042ae80:
 	             // dispatch against [prop script, shop script, BOOTFILE res2].
 		if (_host)
-			_interactionHost->sendToProp(target0, *message, msgArgs);
+			_host->sendToProp(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPropFx:
 		if (_host)
-			return _interactionHost->sendToPropFx(target0, *message, msgArgs);
+			return _host->sendToPropFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToActor: // sendtoactor(actor, message) -> actor script, then cast script.
 		if (_host)
-			_actorHost->sendToActor(target0, *message, msgArgs);
+			_host->sendToActor(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToActorFx:
 		if (_host)
-			return _actorHost->sendToActorFx(target0, *message, msgArgs);
+			return _host->sendToActorFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToCast: // sendtocast('file.cst', message) -> per-cast script dispatch.
 		if (_host)
-			_actorHost->sendToCast(target0, *message, msgArgs);
+			_host->sendToCast(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToCastFx:
 		if (_host)
-			return _actorHost->sendToCastFx(target0, *message, msgArgs);
+			return _host->sendToCastFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPuppet: // sendtopuppet(target, message) -> [PUP script, BOOTFILE res2].
 		if (_host)
-			_navigationHost->sendToPuppet(target0, *message, msgArgs);
+			_host->sendToPuppet(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPuppetFx:
 		if (_host)
-			return _navigationHost->sendToPuppetFx(target0, *message, msgArgs);
+			return _host->sendToPuppetFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToScene: // sendtoscene(scene, message) -> TI.EXE FUN_004311e0/
 	             // FUN_00431200: dispatch against the scene's script chain.
 		if (_host)
-			_navigationHost->sendToScene(target0, *message, msgArgs);
+			_host->sendToScene(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToSceneFx:
 		if (_host)
-			return _navigationHost->sendToSceneFx(target0, *message, msgArgs);
+			return _host->sendToSceneFx(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPainting: // sendtopainting(scene, view, painting, message) -> FUN_00432550/FUN_00432570
 		if (_host)
-			_navigationHost->sendToPainting(target0, target1, target2, *message, msgArgs);
+			_host->sendToPainting(target0, target1, target2, *message, msgArgs);
 		break;
 	case Script::kMethodSendToPaintingFx:
 		if (_host)
-			return _navigationHost->sendToPaintingFx(target0, target1, target2, *message, msgArgs);
+			return _host->sendToPaintingFx(target0, target1, target2, *message, msgArgs);
 		break;
 	case Script::kMethodSendToSet: // sendtoset(message(...)) -> dispatch against the current set's script chain.
 		if (_host)
-			_navigationHost->sendToSet(*message, msgArgs);
+			_host->sendToSet(*message, msgArgs);
 		break;
 	case Script::kMethodSendToSetFx:
 		if (_host)
-			return _navigationHost->sendToSetFx(*message, msgArgs);
+			return _host->sendToSetFx(*message, msgArgs);
 		break;
 	case Script::kMethodSendToButton: // sendtobutton(flat, button, message) -> FUN_0040a410/FUN_0040a430:
 	             // chain [button script, node script, stage script, res2].
 		if (_host)
-			_navigationHost->sendToButton(target0, target1, *message, msgArgs);
+			_host->sendToButton(target0, target1, *message, msgArgs);
 		break;
 	case Script::kMethodSendToButtonFx:
 		if (_host)
-			return _navigationHost->sendToButtonFx(target0, target1, *message, msgArgs);
+			return _host->sendToButtonFx(target0, target1, *message, msgArgs);
 		break;
 	case Script::kMethodSendToFlat: // sendtoflat(flat, message) -> FUN_0040a940/FUN_0040a960
 		if (_host)
-			_navigationHost->sendToFlat(target0, *message, msgArgs);
+			_host->sendToFlat(target0, *message, msgArgs);
 		break;
 	case Script::kMethodSendToFlatFx:
 		if (_host)
-			return _navigationHost->sendToFlatFx(target0, *message, msgArgs);
+			return _host->sendToFlatFx(target0, *message, msgArgs);
 		break;
 	default:
 		break;
@@ -680,9 +715,20 @@ void ScriptVM::parseCallArgs(const Script &script, uint32 &pc, Common::Array<Val
 		}
 		// Defensive: an unexpected token means the evaluator did not consume the
 		// whole argument (e.g. an unimplemented atom span). Resynchronise on the
-		// matching close paren so the outer statement loop stays aligned.
-		int close = script.findCloseParen(pc);
-		pc = (close >= 0) ? static_cast<uint32>(close) + 1 : count;
+		// ')' that closes THIS list: we are already inside the list, so the one
+		// we want is the first close paren that takes the depth negative.
+		// (findCloseParen() cannot be used here: it assumes it starts ON the
+		// open paren, so the enclosing ')' would never match.)
+		int depth = 0;
+		uint32 scan = pc;
+		for (; scan < count; ++scan) {
+			uint16 t = script.getInstruction(scan).opcode;
+			if (t == Script::kOpOpenParen)
+				++depth;
+			else if (t == Script::kOpCloseParen && --depth < 0)
+				break;
+		}
+		pc = (scan < count) ? scan + 1 : count;
 		break;
 	}
 }
@@ -690,7 +736,7 @@ void ScriptVM::parseCallArgs(const Script &script, uint32 &pc, Common::Array<Val
 bool ScriptVM::callCoreMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
 	switch (opcode) {
 	case Script::kMethodRandom: // random(n) -> FUN_004366c0/FUN_0041b060
-		result = Value::makeInt(_systemHost ? _systemHost->randomNumber(args.empty() ? 0 : args[0].intValue) : 0);
+		result = Value::makeInt(_host ? _host->randomNumber(args.empty() ? 0 : args[0].intValue) : 0);
 		return true;
 	case Script::kMethodStringToNum: // stringtonum(str) -> FUN_00436ee0
 		result = Value::makeInt(stringToNum(args.empty() ? Common::String() : args[0].strValue));
@@ -711,7 +757,7 @@ bool ScriptVM::callCoreMethod(uint16 opcode, const Common::Array<Value> &args, V
 		result = Value::makeInt(args.empty() ? 0 : args[0].strValue.size());
 		return true;
 	case Script::kMethodStringWidth: // stringwidth(str, fontId, size) -> FUN_00435444
-		result = Value::makeInt(_systemHost ? _systemHost->stringWidth(
+		result = Value::makeInt(_host ? _host->stringWidth(
 				args.size() > 0 ? args[0].strValue : Common::String(),
 				args.size() > 1 ? args[1].intValue : 0,
 				args.size() > 2 ? args[2].intValue : 12) : 0);
@@ -791,6 +837,10 @@ Value ScriptVM::evaluateExpression(const Script &script, uint32 &pc, uint8 minBi
 }
 
 uint32 ScriptVM::runProgram(const Script &script, uint32 maxSteps) {
+	// Top-level entry only: it clears the shared interpreter stacks, so it must
+	// never be re-entered from a host callback while a body is executing
+	// (runBody save/restores its slice of the stacks instead).
+	assert(_bodyDepth == 0);
 	_stack.clear();
 	_whileStack.clear();
 	_forStack.clear();
@@ -822,8 +872,8 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 	if (handled)
 		*handled = false;
 	Value result;
-	const bool logTransitionDispatch = shouldLogTransitionDispatch(name);
-	const bool logEnigmaDispatch = shouldLogEnigmaDispatch(name, _ctxSelf);
+	const bool logTransitionDispatch = gDebugLevel > 0 && shouldLogTransitionDispatch(name);
+	const bool logEnigmaDispatch = gDebugLevel > 0 && shouldLogEnigmaDispatch(name, _ctxSelf);
 	Common::String enigmaArgText;
 
 	if (logEnigmaDispatch) {
@@ -874,8 +924,16 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 		_locals.pop_back();
 		setDispatchContext(prevSelf, prevProp);
 
-		if (rr == kRunPassed)
+		if (rr == kRunPassed) {
+			// The body may have re-entered the VM and mutated the scope chain
+			// (open*file handlers swap libraries). If the cached index no
+			// longer references the library we just ran, abandon the walk
+			// rather than indexing into a different chain.
+			if (static_cast<uint32>(li) >= _libraries.size() ||
+					_libraries[static_cast<uint32>(li)] != lib)
+				break;
 			continue; // try the next scope on the chain
+		}
 		if (handled)
 			*handled = true;
 		if (logTransitionDispatch)
@@ -903,6 +961,15 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 	uint32 executed = 0;
 	const uint32 count = script.getInstructionCount();
 
+	// Track body nesting so the engine can tell when the VM is executing:
+	// canLoadGameStateCurrently() defers GMM-initiated loads that would
+	// otherwise destroy script objects whose bodies are still on the C++ stack.
+	struct BodyDepthGuard {
+		uint32 &depth;
+		BodyDepthGuard(uint32 &d) : depth(d) { ++depth; }
+		~BodyDepthGuard() { --depth; }
+	} bodyDepthGuard(_bodyDepth);
+
 	// Loop stacks are per-body in TI.EXE (depth counters local_24/local_22 in
 	// FUN_0040ba20); save/restore so a dispatched call inside a loop body
 	// cannot corrupt the caller's frames.
@@ -915,7 +982,7 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 		// would otherwise never return after a window-close/Cmd-Q, forcing a
 		// force-quit. Throttled by the statement counter so the per-instruction
 		// cost is just a mask+branch, not a virtual call, on this hot path.
-		if ((executed & 0xff) == 0 && _systemHost && _systemHost->hostQuitRequested())
+		if ((executed & 0xff) == 0 && _host && _host->hostQuitRequested())
 			goto done;
 
 		uint32 here = pc;
@@ -1110,8 +1177,10 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 
 		case Script::kOpEndWhile: {
 			// Re-test the saved condition; loop back to the body or pop and exit
-			// (TI.EXE 0x0040c0eb).
-			if (_whileStack.empty()) {
+			// (TI.EXE 0x0040c0eb). Compare against THIS body's saved base, not
+			// global emptiness: a stray endwhile in a dispatched callee must not
+			// reuse (and jump through) the caller's loop frame.
+			if (_whileStack.size() <= whileBase) {
 				pc++;
 				break;
 			}
@@ -1174,8 +1243,9 @@ ScriptVM::RunResult ScriptVM::runBody(const Script &script, uint32 pc, Value &re
 		case Script::kOpForNext: {
 			// Increment the loop variable and compare against the inclusive
 			// bound; loop back to the body or pop the frame (TI.EXE 0x0040bda9
-			// continuation via the kOpForNext branch).
-			if (_forStack.empty()) {
+			// continuation via the kOpForNext branch). Guard against frames
+			// below this body's base, as with kOpEndWhile above.
+			if (_forStack.size() <= forBase) {
 				pc++;
 				break;
 			}

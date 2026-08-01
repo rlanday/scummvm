@@ -19,161 +19,178 @@
  *
  */
 
+#include "common/debug.h"
+
 #include "cyberflix/cyberflix.h"
 
 namespace Cyberflix {
 
-void CyberflixStageSetVMHost::openSetFile(const Common::String &name,
+void CyberflixEngine::openSetFile(const Common::String &name,
 		const Common::String &scene, const Common::String &view) {
-	engine().setRuntime().openSetFile(engine(), name, scene, view);
+	// FUN_004307f0 zeroes the camerahi base height for the incoming set;
+	// BOOTFILE's global openset handler then re-derives it via adjustcamera().
+	_cameraHiValue = 0;
+	setRuntime().openSetFile(*this, name, scene, view);
 }
 
-void CyberflixStageSetVMHost::closeSetFile() {
-	engine().setRuntime().closeSetFile(engine());
+void CyberflixEngine::closeSetFile() {
+	setRuntime().closeSetFile(*this);
 }
 
-Common::String CyberflixStageSetVMHost::currentSet() {
-	return engine().setRuntime().currentSet();
+Common::String CyberflixEngine::currentSet() {
+	return setRuntime().currentSet();
 }
 
-Common::String CyberflixStageSetVMHost::getCurrentView() {
-	return engine().setRuntime().getCurrentView();
+Common::String CyberflixEngine::getCurrentView() {
+	return setRuntime().getCurrentView();
 }
 
-Common::String CyberflixStageSetVMHost::setCurrentView(const Common::String &target) {
-	return engine().setRuntime().setCurrentView(engine(), target);
+Common::String CyberflixEngine::setCurrentView(const Common::String &target) {
+	return setRuntime().setCurrentView(*this, target);
 }
 
-int CyberflixStageSetVMHost::currentDeg() {
-	return engine().setRuntime().currentDeg();
+int CyberflixEngine::currentDeg() {
+	return setRuntime().currentDeg();
 }
 
-Common::String CyberflixStageSetVMHost::getCurrentScene() {
-	return engine().setRuntime().getCurrentScene(engine());
+Common::String CyberflixEngine::getCurrentScene() {
+	return setRuntime().getCurrentScene(*this);
 }
 
-Common::String CyberflixStageSetVMHost::setCurrentScene(const Common::String &target) {
-	return engine().setRuntime().setCurrentScene(engine(), target);
+Common::String CyberflixEngine::setCurrentScene(const Common::String &target) {
+	return setRuntime().setCurrentScene(*this, target);
 }
 
-bool CyberflixStageSetVMHost::getSetVisible() {
-	return engine().setRuntime().getSetVisible(engine());
+bool CyberflixEngine::getSetVisible() {
+	return setRuntime().getSetVisible(*this);
 }
 
-bool CyberflixStageSetVMHost::setSetVisible(bool visible) {
-	return engine().setRuntime().setSetVisible(engine(), visible);
+bool CyberflixEngine::setSetVisible(bool visible) {
+	return setRuntime().setSetVisible(*this, visible);
 }
 
-void CyberflixStageSetVMHost::sendToScene(const Common::String &scene,
+void CyberflixEngine::sendToScene(const Common::String &scene,
 		const Common::String &message, const Common::Array<Value> &args) {
-	engine().setRuntime().sendToScene(engine(), scene, message, args);
+	setRuntime().sendToScene(*this, scene, message, args);
 }
 
-Value CyberflixStageSetVMHost::sendToSceneFx(const Common::String &scene,
+Value CyberflixEngine::sendToSceneFx(const Common::String &scene,
 		const Common::String &message, const Common::Array<Value> &args) {
-	return engine().setRuntime().sendToSceneFx(engine(), scene, message, args);
+	return setRuntime().sendToSceneFx(*this, scene, message, args);
 }
 
-void CyberflixStageSetVMHost::sendToPainting(const Common::String &scene,
+void CyberflixEngine::sendToPainting(const Common::String &scene,
 		const Common::String &view, const Common::String &painting,
 		const Common::String &message, const Common::Array<Value> &args) {
-	engine().setRuntime().sendToPainting(engine(), scene, view, painting, message, args);
+	setRuntime().sendToPainting(*this, scene, view, painting, message, args);
 }
 
-Value CyberflixStageSetVMHost::sendToPaintingFx(const Common::String &scene,
+Value CyberflixEngine::sendToPaintingFx(const Common::String &scene,
 		const Common::String &view, const Common::String &painting,
 		const Common::String &message, const Common::Array<Value> &args) {
-	return engine().setRuntime().sendToPaintingFx(engine(), scene, view, painting, message, args);
+	return setRuntime().sendToPaintingFx(*this, scene, view, painting, message, args);
 }
 
-int CyberflixStageSetVMHost::countPaintings(const Common::String &scene, const Common::String &view) {
-	return engine().setRuntime().countPaintings(scene, view);
+int CyberflixEngine::countPaintings(const Common::String &scene, const Common::String &view) {
+	return setRuntime().countPaintings(scene, view);
 }
 
-Common::String CyberflixStageSetVMHost::indexToPainting(const Common::String &scene,
+Common::String CyberflixEngine::indexToPainting(const Common::String &scene,
 		const Common::String &view, int index) {
-	return engine().setRuntime().indexToPainting(scene, view, index);
+	return setRuntime().indexToPainting(scene, view, index);
 }
 
-bool CyberflixStageSetVMHost::roadAhead(const Common::String &scene, const Common::String &view) {
-	return engine().setRuntime().roadAhead(scene, view);
+bool CyberflixEngine::roadAhead(const Common::String &scene, const Common::String &view) {
+	return setRuntime().roadAhead(scene, view);
 }
 
-int CyberflixStageSetVMHost::cameraXYZ(int selector) {
-	return engine().setRuntime().cameraXYZ(selector);
+int CyberflixEngine::cameraXYZ(int selector) {
+	return setRuntime().cameraXYZ(selector);
 }
 
-int CyberflixStageSetVMHost::playerXYZ(int selector) {
-	return engine().setRuntime().playerXYZ(selector);
+int CyberflixEngine::playerXYZ(int selector) {
+	return setRuntime().playerXYZ(selector);
+}
+
+int CyberflixEngine::setCameraHi(int z) {
+	// FUN_00446190 stores a 16-bit value into DAT_0046119a.
+	_cameraHiValue = static_cast<int16>(z);
+	debug(1, "Cyberflix: camerahi(%d)", _cameraHiValue);
+	if (setRuntime().set() && setRuntime().set()->isOpen() &&
+			setRuntime().set()->baseZ() != _cameraHiValue) {
+		setRuntime().set()->setBaseZ(_cameraHiValue);
+		_propRuntime.setDirty(true);
+	}
+	return _cameraHiValue;
 }
 
 
-void CyberflixStageSetVMHost::openStageFile(const Common::String &name) {
-	engine().stageRuntime().openStageFile(engine(), name);
+void CyberflixEngine::openStageFile(const Common::String &name) {
+	stageRuntime().openStageFile(*this, name);
 }
 
-void CyberflixStageSetVMHost::closeStageFile() {
-	engine().stageRuntime().closeStageFile(engine());
+void CyberflixEngine::closeStageFile() {
+	stageRuntime().closeStageFile(*this);
 }
 
-void CyberflixStageSetVMHost::gotoFlat(const Value &flat) {
-	engine().stageRuntime().gotoFlat(engine(), flat);
+void CyberflixEngine::gotoFlat(const Value &flat) {
+	stageRuntime().gotoFlat(*this, flat);
 }
 
-Common::String CyberflixStageSetVMHost::currentStage() {
-	return engine().stageRuntime().currentStage();
+Common::String CyberflixEngine::currentStage() {
+	return stageRuntime().currentStage();
 }
 
-bool CyberflixStageSetVMHost::getStageVisible() {
-	return engine().stageRuntime().getStageVisible();
+bool CyberflixEngine::getStageVisible() {
+	return stageRuntime().getStageVisible();
 }
 
-bool CyberflixStageSetVMHost::setStageVisible(bool visible) {
-	return engine().stageRuntime().setStageVisible(visible);
+bool CyberflixEngine::setStageVisible(bool visible) {
+	return stageRuntime().setStageVisible(visible);
 }
 
-Common::String CyberflixStageSetVMHost::currentFlat() {
-	return engine().stageRuntime().currentFlat();
+Common::String CyberflixEngine::currentFlat() {
+	return stageRuntime().currentFlat();
 }
 
-int CyberflixStageSetVMHost::countFlats() {
-	return engine().stageRuntime().countFlats();
+int CyberflixEngine::countFlats() {
+	return stageRuntime().countFlats();
 }
 
-Common::String CyberflixStageSetVMHost::indexToFlat(int index) {
-	return engine().stageRuntime().indexToFlat(index);
+Common::String CyberflixEngine::indexToFlat(int index) {
+	return stageRuntime().indexToFlat(index);
 }
 
-int CyberflixStageSetVMHost::flatToIndex(const Common::String &name) {
-	return engine().stageRuntime().flatToIndex(name);
+int CyberflixEngine::flatToIndex(const Common::String &name) {
+	return stageRuntime().flatToIndex(name);
 }
 
-void CyberflixStageSetVMHost::sendToStage(const Common::String &message, const Common::Array<Value> &args) {
-	engine().stageRuntime().sendToStage(engine(), message, args);
+void CyberflixEngine::sendToStage(const Common::String &message, const Common::Array<Value> &args) {
+	stageRuntime().sendToStage(*this, message, args);
 }
 
-Value CyberflixStageSetVMHost::sendToStageFx(const Common::String &message, const Common::Array<Value> &args) {
-	return engine().stageRuntime().sendToStageFx(engine(), message, args);
+Value CyberflixEngine::sendToStageFx(const Common::String &message, const Common::Array<Value> &args) {
+	return stageRuntime().sendToStageFx(*this, message, args);
 }
 
-void CyberflixStageSetVMHost::sendToFlat(const Common::String &flat, const Common::String &message,
+void CyberflixEngine::sendToFlat(const Common::String &flat, const Common::String &message,
 		const Common::Array<Value> &args) {
-	engine().stageRuntime().sendToFlat(engine(), flat, message, args);
+	stageRuntime().sendToFlat(*this, flat, message, args);
 }
 
-Value CyberflixStageSetVMHost::sendToFlatFx(const Common::String &flat, const Common::String &message,
+Value CyberflixEngine::sendToFlatFx(const Common::String &flat, const Common::String &message,
 		const Common::Array<Value> &args) {
-	return engine().stageRuntime().sendToFlatFx(engine(), flat, message, args);
+	return stageRuntime().sendToFlatFx(*this, flat, message, args);
 }
 
-void CyberflixStageSetVMHost::sendToButton(const Common::String &flat, const Common::String &button,
+void CyberflixEngine::sendToButton(const Common::String &flat, const Common::String &button,
 		const Common::String &message, const Common::Array<Value> &args) {
-	engine().stageRuntime().sendToButton(engine(), flat, button, message, args);
+	stageRuntime().sendToButton(*this, flat, button, message, args);
 }
 
-Value CyberflixStageSetVMHost::sendToButtonFx(const Common::String &flat, const Common::String &button,
+Value CyberflixEngine::sendToButtonFx(const Common::String &flat, const Common::String &button,
 		const Common::String &message, const Common::Array<Value> &args) {
-	return engine().stageRuntime().sendToButtonFx(engine(), flat, button, message, args);
+	return stageRuntime().sendToButtonFx(*this, flat, button, message, args);
 }
 
 } // End of namespace Cyberflix

@@ -62,665 +62,16 @@ struct Value {
 };
 
 /**
- * Host interface through which the VM drives engine subsystems (video, audio,
- * navigation, ...). The interpreter itself is engine-agnostic and only knows
- * how to evaluate scripts; effectful builtins are forwarded here so the engine
- * can realise them. A null host (the default) makes every effectful builtin a
- * logged no-op, which keeps the VM usable as a standalone reverse-engineering
- * harness.
+ * Pack a screen point the way every native point value is stored:
+ * (x << 16) | (y & 0xffff). Computed in unsigned arithmetic because
+ * left-shifting a negative value is undefined behavior before C++20.
  */
-class VMMovieHost {
-public:
-	virtual ~VMMovieHost() {}
-
-	/** Play the movie named @p name (a MOVIES/ basename, e.g. "logo.mov"). */
-	virtual void playMovie(const Common::String &name) = 0;
-};
-
-class VMNavigationHost {
-public:
-	virtual ~VMNavigationHost() {}
-
-	/** Open the stage file @p name (a DATA/ basename, e.g. "main.stg"). */
-	virtual void openStageFile(const Common::String &name) {}
-
-	/** Close the current stage file (closestagefile, TI.EXE opcode 0x2f1d). */
-	virtual void closeStageFile() {}
-
-	/** gotoflat(name|index) (0x2f1e): switch to a 1-based stage node or node name. */
-	virtual void gotoFlat(const Value &flat) {}
-
-	/** currentstage() (0x4e50): open stage name, or native "None". */
-	virtual Common::String currentStage() { return "None"; }
-
-	/** stagevisible([flag]) (0x3e88): current stage visibility flag. */
-	virtual bool getStageVisible() { return false; }
-	virtual bool setStageVisible(bool visible) { return visible; }
-
-	/** currentflat() (0x4e46): current stage node name, or native "None". */
-	virtual Common::String currentFlat() { return "None"; }
-
-	/** countflats() (0x4e43 FUN_00409980): node count of the open stage. */
-	virtual int countFlats() { return 0; }
-
-	/** indextoflat(i) (0x4e44 FUN_004099e0): name of the 1-based flat i, or "None". */
-	virtual Common::String indexToFlat(int index) { return "None"; }
-
-	/** flattoindex(name) (0x4e45 FUN_00409d70): 1-based index of the flat, or 0. */
-	virtual int flatToIndex(const Common::String &name) { return 0; }
-
-	/**
-	 * Deliver the message call `message(args)` to the open stage's script. The
-	 * original sendtostage (TI.EXE FUN_0040ad80) passes the message UNevaluated
-	 * and dispatches it against the stage script's definitions with the global
-	 * library as fallback scope. The engine realises that by calling back into
-	 * ScriptVM::callFunction over its registered libraries.
-	 */
-	virtual void sendToStage(const Common::String &message, const Common::Array<Value> &args) {}
-	virtual Value sendToStageFx(const Common::String &message,
-			const Common::Array<Value> &args) { return Value(); }
-
-	/**
-	 * sendtoboot(message(args)) (0x2f31, FUN_00439080/FUN_004390a0): dispatch
-	 * against [BOOTFILE res1, BOOTFILE res2].
-	 */
-	virtual void sendToBoot(const Common::String &message, const Common::Array<Value> &args) {}
-	virtual Value sendToBootFx(const Common::String &message,
-			const Common::Array<Value> &args) { return Value(); }
-
-	/**
-	 * sendtoflat(flat, message(args)) (0x2f25): dispatch against
-	 * [flat/node script, stage script, BOOTFILE res2].
-	 */
-	virtual void sendToFlat(const Common::String &flat, const Common::String &message,
-			const Common::Array<Value> &args) {}
-	virtual Value sendToFlatFx(const Common::String &flat, const Common::String &message,
-			const Common::Array<Value> &args) { return Value(); }
-
-	/**
-	 * sendtobutton(flat, button, message(args)) (0x2f24): dispatch against
-	 * [button script, flat/node script, stage script, BOOTFILE res2].
-	 */
-	virtual void sendToButton(const Common::String &flat, const Common::String &button,
-			const Common::String &message, const Common::Array<Value> &args) {}
-	virtual Value sendToButtonFx(const Common::String &flat, const Common::String &button,
-			const Common::String &message, const Common::Array<Value> &args) { return Value(); }
-
-	/**
-	 * Open the set file @p name. @p scene / @p view optionally name the scene
-	 * and view to make current (the opensetfile optional args; TI.EXE
-	 * FUN_00430690). Empty = default to the set's first scene.
-	 */
-	virtual void openSetFile(const Common::String &name,
-			const Common::String &scene = Common::String(),
-			const Common::String &view = Common::String()) {}
-
-	/** Close the open set file (closesetfile, TI.EXE opcode 0x2f01). */
-	virtual void closeSetFile() {}
-
-	/** Name of the open set (currentset, 0x4e55), or "none". */
-	virtual Common::String currentSet() { return "none"; }
-	virtual void sendToSet(const Common::String &message,
-			const Common::Array<Value> &args) {}
-	virtual Value sendToSetFx(const Common::String &message,
-			const Common::Array<Value> &args) { return Value(); }
-
-	/**
-	 * currentview([name]) (0x3e8b): current SET view name, "Moving", or "none";
-	 * with a name, switch the current scene to that view.
-	 */
-	virtual Common::String getCurrentView() { return "none"; }
-	virtual Common::String setCurrentView(const Common::String &target) { return target; }
-
-	/** currentdeg() (0x3e9f FUN_00431d50): current SET heading, or -1. */
-	virtual int currentDeg() { return -1; }
-
-	/**
-	 * currentscene([name|left|right|strait]) (0x3e9d): no arg reads the current
-	 * SET scene name; an arg switches scene or starts the native navigation
-	 * action named by BOOTFILE's keydown fallback.
-	 */
-	virtual Common::String getCurrentScene() { return "none"; }
-	virtual Common::String setCurrentScene(const Common::String &target) { return target; }
-
-	/**
-	 * setvisible([flag]) (0x3e87): with no args, read the open-set visibility
-	 * flag (TI.EXE FUN_00431ca0 / DAT_00461182); with an arg, set it
-	 * (FUN_004318d0) and invalidate/redraw the set.
-	 */
-	virtual bool getSetVisible() { return false; }
-	virtual bool setSetVisible(bool visible) { return visible; }
-
-	/** currentpuppet() (0x4e51), or "none" while the puppet subsystem is absent. */
-	virtual Common::String currentPuppet() { return "none"; }
-
-	virtual void openPuppetFile(const Common::String &name) {}
-	virtual void closePuppetFile() {}
-	virtual void sendToPuppet(const Common::String &puppet, const Common::String &message,
-			const Common::Array<Value> &args) {}
-	virtual Value sendToPuppetFx(const Common::String &puppet, const Common::String &message,
-			const Common::Array<Value> &args) { return Value(); }
-	virtual void puppetScript(const Common::String &name) {}
-	virtual void puppetClear() {}
-	virtual void puppetSpeak(const Common::String &name, int mode) {}
-	virtual void puppetBevel(const Common::String &name, int mode) {}
-	virtual void puppetGrab(bool enabled) {}
-	virtual int puppetEvent(int timeout) { return -1; }
-	virtual Common::String getPuppetBase() { return Common::String(); }
-	virtual Common::String setPuppetBase(const Common::String &newBase) { return newBase; }
-	virtual bool getPuppetVisible() { return false; }
-	virtual bool setPuppetVisible(bool visible) { return visible; }
-	virtual int getPuppetParam(int selector) { return 0; }
-	virtual int setPuppetParam(int selector, int newValue) { return newValue; }
-	virtual int countPuppets() { return 0; }
-	virtual Common::String indexToPuppet(int index) { return Common::String(); }
-
-	/** Dispatch a scene message. The native sendtoscene() does not switch the
-	 *  current rendered scene; current scene changes are driven by currentscene()
-	 *  / SET navigation. */
-	virtual void sendToScene(const Common::String &scene,
-			const Common::String &message = Common::String(),
-			const Common::Array<Value> &args = Common::Array<Value>()) {}
-	virtual Value sendToSceneFx(const Common::String &scene, const Common::String &message,
-			const Common::Array<Value> &args) { return Value(); }
-
-	/**
-	 * sendtopainting(scene, view, painting, message(args)) (0x2f22): dispatch
-	 * against [painting script, scene script, set script, BOOTFILE res2].
-	 */
-	virtual void sendToPainting(const Common::String &scene, const Common::String &view,
-			const Common::String &painting, const Common::String &message,
-			const Common::Array<Value> &args) {}
-	virtual Value sendToPaintingFx(const Common::String &scene, const Common::String &view,
-			const Common::String &painting, const Common::String &message,
-			const Common::Array<Value> &args) { return Value(); }
-
-	/** countpaintings(scene, view) (0x4e32): SET painting records in the view. */
-	virtual int countPaintings(const Common::String &scene, const Common::String &view) { return 0; }
-
-	/** indextopainting(scene, view, index) (0x4e36): native 1-based painting lookup. */
-	virtual Common::String indexToPainting(const Common::String &scene,
-			const Common::String &view, int index) { return Common::String(); }
-
-	/** roadahead(scene, view) (0x4e94): whether the view has a forward transition. */
-	virtual bool roadAhead(const Common::String &scene, const Common::String &view) { return false; }
-
-	/** cameraxyz(selector) (0x4e5f FUN_00437870): selector 1/2/3 = x/y/z,
-	 *  4 = packed x/y point for the active SET camera. */
-	virtual int cameraXYZ(int selector) { return 0; }
-
-	/** playerxyz(selector) (0x4e60 FUN_00437950): selector 1/2/3 = x/y/z,
-	 *  4 = packed x/y point for the active SET player point. */
-	virtual int playerXYZ(int selector) { return 0; }
-};
-
-class VMSystemHost {
-public:
-	virtual ~VMSystemHost() {}
-
-	/**
-	 * actionframe(n): true if the last movie ended on action frame @p n —
-	 * i.e. which menu button the user clicked (TI.EXE 0x4e73 FUN_00435026).
-	 */
-	virtual bool actionFrame(int n) { return false; }
-
-	/** random(n) (0x4e21): script-visible range is 1..n. */
-	virtual int randomNumber(int n) { return 0; }
-
-	/** framerate([n]) (0x3e96): native compositor pacing in 60 Hz timer units. */
-	virtual int getFrameRate() { return 3; }
-	virtual int setFrameRate(int newRate) { return newRate; }
-
-	/** frame() (0x4e6a FUN_00435a30): native forceupdate compositor-pass counter. */
-	virtual int frameCounter() { return 0; }
-
-	/**
-	 * clut(name): snap the hardware palette to the named CLUT instantly
-	 * (TI.EXE 0x2f06 FUN_00446500 -> FUN_0041ba80). Built-in names include
-	 * "black", and "set"/"stage"/"puppet" resolve to the palette embedded in
-	 * the currently open file of that kind. Pixels are untouched.
-	 */
-	virtual void setClut(const Common::String &name) {}
-
-	/** blackscreen() (0x2f13 FUN_00446b80): fill the window with black
-	 *  pixels (a GDI rect fill in the original). Palette untouched. */
-	virtual void blackScreen() {}
-
-	/**
-	 * forceupdate() (0x2f14 -> FUN_00446910 -> FUN_00423a60): process the
-	 * display queues and present the current compositor state immediately.
-	 */
-	virtual void forceUpdate() {}
-
-	/**
-	 * True when the host has been asked to quit (window close / Cmd-Q). Script
-	 * wait loops poll this so they unwind back to the main loop instead of
-	 * spinning forever after a quit request.
-	 */
-	virtual bool hostQuitRequested() { return false; }
-
-	/** message(text) (0x2ee1): copy/log a script diagnostic message. */
-	virtual void message(const Common::String &text) {}
-
-	/** delay(ticks) (0x2ee4 -> FUN_00405160): pump events until the native
-	 *  60 Hz timer reaches tick() + ticks. */
-	virtual void delayTicks(int ticks) {}
-
-	/**
-	 * notedialog(text) (0x2f2f -> FUN_004461e0 -> FUN_00408fc0): show a modal
-	 * note dialog with an OK button. The original calls MessageBoxA with flags
-	 * 0x2040 (MB_OK | MB_ICONINFORMATION | MB_TASKMODAL). Unlike message(),
-	 * which only writes the debug-console line, notedialog() is user-visible:
-	 * the CTL.STG SAVE/OPEN button scripts use it (gated by `if (tour)`) to warn
-	 * "Sorry, you can't save/open a saved game during the tour."
-	 */
-	virtual void noteDialog(const Common::String &text) {}
-
-	/** flushevents() (0x2f29): purge queued input events. */
-	virtual void flushEvents() {}
-
-	/** drawstring(text, point, color, size) (0x2f30): draw text to the current port. */
-	virtual void drawString(const Common::String &text, int32 packedPoint, int color, int size) {}
-
-	/** stringwidth(text, fontId, size) (0x4e95): measure text in the drawstring font path. */
-	virtual int stringWidth(const Common::String &text, int fontId, int size) { return 0; }
-
-	/**
-	 * blacktoscreen(target, n) / screentoblack(target, n) (0x2f11/0x2f12,
-	 * FUN_00446b00/FUN_00446a80 -> FUN_0041b3f0/FUN_0041b3a0): fade the
-	 * hardware palette between black and the target CLUT, one interpolation
-	 * step per 60 Hz tick over @p n steps. The pixels are already on screen;
-	 * only the palette moves.
-	 */
-	virtual void fadePalette(const Common::String &target, int steps, bool toBlack) {}
-
-	/** visualeffect(effect, dur) (0x2ee9 FUN_00446400): set the global default
-	 *  transition for subsequent redraws ('plain' = opcode 0x5dce). */
-	virtual void setVisualEffect(uint16 effect, int duration) {}
-
-	/** makeloop(kind, target, message, delay): schedule a native loop callback. */
-	virtual void makeLoop(const Common::String &kind, const Common::String &target,
-			const Common::String &message, int delay) {}
-
-	/** stoploop(kind[, target]): remove scheduled loop callbacks. */
-	virtual void stopLoop(const Common::String &kind, const Common::String &target) {}
-
-	/** pauseloop(kind, paused): pause or resume scheduled loop callbacks. */
-	virtual void pauseLoop(const Common::String &kind, bool paused) {}
-
-	/** makecricket(name, ...): start a positional/ambient SFX cue. */
-	virtual void makeCricket(const Common::String &name) {}
-
-	/** stopcricket(name): stop a native cricket ambient cue. */
-	virtual void stopCricket(const Common::String &name) {}
-
-	/** pausecricket(kind, paused): pause or resume cricket ambient cues. */
-	virtual void pauseCricket(const Common::String &kind, bool paused) {}
-};
-
-class VMAudioHost {
-public:
-	virtual ~VMAudioHost() {}
-
-	/** opentrackfile('name.trk'): load a .TRK track file (TI.EXE FUN_00411be0). */
-	virtual void openTrackFile(const Common::String &name) {}
-
-	/** closetrackfile('name.trk'): unload a track file (TI.EXE FUN_00412070). */
-	virtual void closeTrackFile(const Common::String &name) {}
-
-	/**
-	 * playtheme('name.trk'): start the track's theme playlist (intro cues once,
-	 * then loop from the loop index forever) on the theme channel, replacing any
-	 * current theme (TI.EXE FUN_00412250).
-	 */
-	virtual void playTheme(const Common::String &name) {}
-
-	/** halttheme(): stop the theme channel (TI.EXE FUN_00412410). */
-	virtual void haltTheme() {}
-
-	/**
-	 * singlesound/multiplesound/dualsound/bothsound(name): play a named SFX cue
-	 * on the two normal sound channels (TI.EXE FUN_004122d0..00412390).
-	 */
-	virtual void playSound(const Common::String &name, int mode) {}
-
-	/** voicesound(name): play a named SFX cue on the voice channel (FUN_004123d0). */
-	virtual void playVoice(const Common::String &name) {}
-
-	/** haltsound(which): which 1/2 stop normal sound slot, 3 stops both. */
-	virtual void haltSound(int which) {}
-
-	/** haltvoice(): stop the voice channel. */
-	virtual void haltVoice() {}
-
-	/** themevol('name.trk', 0-255): set the track's theme volume (FUN_004125c0). */
-	virtual void themeVolume(const Common::String &name, int volume) {}
-
-	/** wavevolume([0..9]) (0x3ea1): get or set the global wave volume level. */
-	virtual int getWaveVolume() { return 9; }
-	virtual int setWaveVolume(int newLevel) { return newLevel; }
-
-	/** soundvol(name[, 0..255]) (0x3ea8): get or set a named SFX cue volume. */
-	virtual int getSoundVolume(const Common::String &name) { return 255; }
-	virtual int setSoundVolume(const Common::String &name, int newVolume) { return newVolume; }
-
-	/**
-	 * currenttheme(which): which==1 -> playing cue name, which==2 -> its track
-	 * file name; 'none' when silent (TI.EXE FUN_00412f20).
-	 */
-	virtual Common::String currentTheme(int which) { return "none"; }
-
-	/**
-	 * currentsound(which): which==1/2/3 query active SFX sound slots; "None"
-	 * when silent (TI.EXE FUN_00412e60).
-	 */
-	virtual Common::String currentSound(int) { return "None"; }
-
-	/** currentvoice(): active voice cue name, or "None" when silent. */
-	virtual Common::String currentVoice() { return "None"; }
-
-	/** voicedone(): true once the voicesound() channel has finished playing. */
-	virtual bool voiceDone() { return true; }
-};
-
-class VMInputHost {
-public:
-	virtual ~VMInputHost() {}
-
-	/** keyaborts([res, key, flag]) (0x3ead): key-abort table toggle/global state. */
-	virtual bool keyAborts(const Common::String *resource, const Common::String *key,
-			const bool *enabled) { return false; }
-
-	/** optionkey() (0x4e5a): true while the native Option/Shift key is down. */
-	virtual bool optionKey() { return false; }
-
-	/** shiftkey() (0x4e5b FUN_00437710): true while Shift is down. Native
-	 *  optionkey and shiftkey both read GetAsyncKeyState(VK_SHIFT). */
-	virtual bool shiftKey() { return false; }
-
-	/** path(slot[, value]) (0x3e89 FUN_004462a0): get or set a native path slot. */
-	virtual Common::String getPathSlot(int slot) { return Common::String(); }
-	virtual Common::String setPathSlot(int slot, const Common::String &newPath) { return newPath; }
-
-	/** currentcd([name]) (0x3ea2 FUN_00439df0/FUN_0043a290): switch/query current CD label. */
-	virtual Common::String getCurrentCD() { return Common::String(); }
-	virtual Common::String setCurrentCD(const Common::String &requested) { return requested; }
-};
-
-class VMActorHost {
-public:
-	virtual ~VMActorHost() {}
-
-	/** opencastfile('name.cst') (0x2eed FUN_0041f1c0): load actor records. */
-	virtual void openCastFile(const Common::String &name) {}
-
-	/** closecastfile('name.cst') (0x2eee FUN_004211b0): remove a cast and actors. */
-	virtual void closeCastFile(const Common::String &name) {}
-
-	/** actorinstance(source, newName) (0x2f2b FUN_0041f6a0): clone a runtime actor record. */
-	virtual void actorInstance(const Common::String &source, const Common::String &newName) {}
-
-	/** sendtocast('file.cst', message(args)): dispatch against the cast script. */
-	virtual void sendToCast(const Common::String &cast, const Common::String &message,
-			const Common::Array<Value> &args) {}
-	virtual Value sendToCastFx(const Common::String &cast, const Common::String &message,
-			const Common::Array<Value> &args) { return Value(); }
-
-	/** sendtoactor(actor, message(args)): dispatch [actor script, cast script]. */
-	virtual void sendToActor(const Common::String &actor, const Common::String &message,
-			const Common::Array<Value> &args) {}
-	virtual Value sendToActorFx(const Common::String &actor, const Common::String &message,
-			const Common::Array<Value> &args) { return Value(); }
-
-	/** countactors()/ indextoactor(i): native global actor list. */
-	virtual int countActors() { return 0; }
-	virtual Common::String indexToActor(int index) { return Common::String(); }
-
-	virtual bool getActorVisible(const Common::String &name) { return false; }
-	virtual bool setActorVisible(const Common::String &name, bool visible) { return visible; }
-	virtual Common::String getActorSet(const Common::String &name) { return Common::String(); }
-	virtual Common::String setActorSet(const Common::String &name, const Common::String &newSet) { return newSet; }
-	virtual Common::String getActorStar(const Common::String &name) { return Common::String(); }
-	virtual Common::String setActorStar(const Common::String &name, const Common::String &newStar) { return newStar; }
-	virtual Common::String getActorPose(const Common::String &name) { return Common::String(); }
-	virtual Common::String setActorPose(const Common::String &name, const Common::String &newPose) { return newPose; }
-	virtual void actorXYZ(const Common::String &name, int x, int y, int z) {}
-	virtual int actorXYZ(const Common::String &name, int selector) { return 0; }
-	virtual int getActorDeg(const Common::String &name) { return 0; }
-	virtual int setActorDeg(const Common::String &name, int newDeg) { return newDeg; }
-	virtual int getActorDist(const Common::String &name) { return 0; }
-	virtual void setActorDist(const Common::String &name, int newDist) {}
-	virtual int getActorValue(const Common::String &name) { return 0; }
-	virtual int setActorValue(const Common::String &name, int newValue) { return newValue; }
-	virtual Common::String getActorOwner(const Common::String &name) { return Common::String(); }
-	virtual Common::String setActorOwner(const Common::String &name, const Common::String &newOwner) { return newOwner; }
-	virtual void actorZClip(const Common::String &name, int zClip) {}
-	virtual void actorSpeed(const Common::String &name, int speed) {}
-	virtual void actorScale(const Common::String &name, int scale) {}
-	virtual void actorTurn(const Common::String &name, int turn) {}
-	virtual void turnToDeg(const Common::String &name, int deg) {}
-	virtual void walkToStar(const Common::String &name, const Common::String &star) {}
-	virtual void walkOnPath(const Common::String &name, const Common::String &path, const Common::String &dest) {}
-	virtual void walkToXYZ(const Common::String &name, int x, int y, int z) {}
-	virtual void stopWalk(const Common::String &name) {}
-
-	/** pausewalk(actor, flag) (0x3eb0 FUN_00446ea0 -> FUN_00425590): pause or
-	 *  resume a queued walk record. */
-	virtual void pauseWalk(const Common::String &name, int flag) {}
-
-	/** actorexists(name) (0x4e37 FUN_0041fb20): whether the actor lookup
-	 *  (FUN_004225b0) succeeds. */
-	virtual bool actorExists(const Common::String &name) { return false; }
-	virtual bool isWalk(const Common::String &name) { return false; }
-	virtual Common::String walkDest(const Common::String &name) { return "None"; }
-	virtual int starXYZ(const Common::String &name, int selector) { return 0; }
-};
-
-class VMInteractionHost {
-public:
-	virtual ~VMInteractionHost() {}
-
-	/** openshopfile('name.shp'): load a .SHP prop container and dispatch its
-	 *  openshop()/openprop() messages (TI.EXE 0x2f18 FUN_00428450). */
-	virtual void openShopFile(const Common::String &name) {}
-
-	/** closeshopfile('name.shp'): remove the shop and its props (0x2f19). */
-	virtual void closeShopFile(const Common::String &name) {}
-	virtual void propInstance(const Common::String &source, const Common::String &newName) {}
-
-	/**
-	 * sendtoshop('file.shp', message(args)): dispatch @p message against the
-	 * shop's script with the global library as fallback (TI.EXE 0x2f1b
-	 * FUN_0042b2b0; chain [shop script, BOOTFILE res2]). The message arrives
-	 * with its arguments already evaluated in the caller's scope.
-	 */
-	virtual void sendToShop(const Common::String &shop, const Common::String &message,
-			const Common::Array<Value> &args) {}
-	virtual Value sendToShopFx(const Common::String &shop, const Common::String &message,
-			const Common::Array<Value> &args) { return Value(); }
-
-	/**
-	 * sendtoprop('propname', message(args)): dispatch against the prop's own
-	 * script, then its shop's script, then the global library (TI.EXE 0x2f17
-	 * FUN_0042ae80; 3-entry chain with "Prop Script: "/"Shop Script: "/
-	 * "System: " labels).
-	 */
-	virtual void sendToProp(const Common::String &prop, const Common::String &message,
-			const Common::Array<Value> &args) {}
-	virtual Value sendToPropFx(const Common::String &prop, const Common::String &message,
-			const Common::Array<Value> &args) { return Value(); }
-
-	/** propexists(name) (0x4e38 FUN_00428fc0): whether the prop lookup
-	 *  (FUN_0042b700) succeeds. */
-	virtual bool propExists(const Common::String &name) { return false; }
-
-	/** propvisible(name) getter (0x3e8f FUN_00429dc0). */
-	virtual bool propVisible(const Common::String &name) { return false; }
-
-	/** propvisible(name, flag) setter (0x3e8f FUN_00429d00). */
-	virtual void propVisible(const Common::String &name, bool visible) {}
-
-	/** propview(name) getter (0x3e99 FUN_004294a0). */
-	virtual Common::String propView(const Common::String &name) { return Common::String(); }
-
-	/** propview(name, shape) setter (0x3e99 FUN_004293a0): select the named shape. */
-	virtual void propView(const Common::String &name, const Common::String &shape) {}
-
-	/** propset(name, set) (0x3e9b FUN_00428c20): assign SET placement and
-	 * switch back to world/SET-space mode. */
-	virtual void propSet(const Common::String &name, const Common::String &setName) {}
-
-	/** propxyz(name, x, y, z) (0x3e91 FUN_0042a140): world/SET-space placement,
-	 * setting mode=1 so the prop is no longer a screen overlay. */
-	virtual void propXYZ(const Common::String &name, int x, int y, int z) {}
-
-	/** propxyz(name, selector) (0x3e91 FUN_0042a250): world-position getter;
-	 *  1=x, 2=y, 3=z, 4=packed x/y point. */
-	virtual int propXYZ(const Common::String &name, int selector) { return 0; }
-
-	/** propstar(name[, star]) (0x3e94 FUN_00429320/FUN_004291f0): get or set
-	 *  the prop's SET star, a named 3D placement point in the current .SET room. */
-	virtual Common::String getPropStar(const Common::String &name) { return Common::String(); }
-	virtual Common::String setPropStar(const Common::String &name, const Common::String &newStar) { return newStar; }
-
-	/** propxy(name, selector) (0x3e92 FUN_0042a450): selector 1 = x,
-	 *  2 = y, 3 = packed point. */
-	virtual int propXY(const Common::String &name, int selector) { return 0; }
-
-	/** propxy(name, x, y) (0x3e92 FUN_0042a370): screen-space placement —
-	 *  sets mode=0 and changes non-negative depths to -1 alongside the anchor point. */
-	virtual void setPropXY(const Common::String &name, int x, int y) {}
-
-	/** propscale(name, scale) (0x3e9c FUN_00429870): non-negative world scale. */
-	virtual void propScale(const Common::String &name, int scale) {}
-
-	/** propzclip(name, dist) (0x3eb4 FUN_00428ea0): world z clip distance. */
-	virtual void propZClip(const Common::String &name, int dist) {}
-
-	/** propdist(name) getter (0x3e8d FUN_00429670): screen-space depth, or
-	 *  projected world depth if the prop is in SET space. */
-	virtual int getPropDist(const Common::String &name) { return 0; }
-
-	/** propdist(name, d) setter (0x3e8d FUN_004295c0): screen-space stacking depth
-	 *  (only applied when d < 0 and the prop is in screen mode). */
-	virtual void propDist(const Common::String &name, int dist) {}
-
-	/** propdeg(name[, deg]) (0x3e90 FUN_00429730/FUN_00429520): get or set
-	 *  the prop's 0..255 view angle. */
-	virtual int getPropDeg(const Common::String &name) { return 0; }
-	virtual int setPropDeg(const Common::String &name, int newDeg) { return newDeg; }
-
-	/** propowner(name[, owner]) (0x3ea0 FUN_00428d40): set (2 args) or get
-	 *  (1 arg) the prop's owner string; the player is "frank". */
-	virtual Common::String getPropOwner(const Common::String &name) { return Common::String(); }
-	virtual Common::String setPropOwner(const Common::String &name, const Common::String &newOwner) { return newOwner; }
-
-	/** propvalue(name[, value]) (0x3eaa FUN_004290d0/FUN_00428e00): stored int. */
-	virtual int getPropValue(const Common::String &name) { return 0; }
-	virtual int setPropValue(const Common::String &name, int newValue) { return newValue; }
-
-	/** countprops() (0x4e3f FUN_0042b4f0): total props across ALL open shops. */
-	virtual int countProps() { return 0; }
-
-	/** indextoprop(i) (0x4e40 FUN_0042b550): 1-based global index -> name. */
-	virtual Common::String indexToProp(int index) { return Common::String(); }
-
-	/** pointinbutton(flat, button, point) (0x4e4b FUN_0040a0d0): named STG
-	 *  button rect containment, with point packed as (x << 16) | y. */
-	virtual bool pointInButton(const Common::String &flat,
-			const Common::String &button, int32 packedPoint) { return false; }
-
-	/** pointinpainting(scene, view, painting, point) (0x4e31 FUN_004322e0):
-	 *  named SET painting rect containment, with point packed as (x << 16) | y. */
-	virtual bool pointInPainting(const Common::String &scene,
-			const Common::String &view, const Common::String &painting,
-			int32 packedPoint) { return false; }
-
-	/** pointinprop(prop, point) (0x4e48 FUN_00434af1): named screen prop
-	 *  containment through the current cel opacity mask. */
-	virtual bool pointInProp(const Common::String &prop, int32 packedPoint) { return false; }
-
-	/**
-	 * hittest(point) (0x4e66 FUN_00435e70). @p packedPoint packs the screen
-	 * point as (x << 16) | (y & 0xffff) (the in-rect test FUN_0041ac60 checks
-	 * the high word against left/right and the low word against top/bottom of
-	 * {t,l,b,r} rects). Returns the name of the topmost hit and records its
-	 * kind for result(): sprite items first (per-pixel through the cel mask,
-	 * top-down — FUN_004430f0 walks the compositor item list backwards) ->
-	 * "actor"/"prop"; then the open set's viewport -> "painting"/"scene";
-	 * then the open stage -> "button"/"flat"; else "None" with empty name.
-	 */
-	virtual Common::String hitTest(int32 packedPoint) { return Common::String(); }
-
-	/** result() (0x3e8a FUN_004366a0): kind recorded by the last hittest
-	 *  (global DAT_00461298). */
-	virtual Common::String hitTestResult() { return Common::String(); }
-
-	/** mouse() (0x4e26 FUN_004368b0): current mouse point, packed as
-	 *  (x << 16) | (y & 0xffff). */
-	virtual int32 mousePoint() { return 0; }
-
-	/** makepoint(x, y) (0x4e24 FUN_00436800): pack an x/y point value. */
-	virtual int32 makePoint(int x, int y) { return (static_cast<int32>(static_cast<int16>(x)) << 16) | (static_cast<int32>(y) & 0xffff); }
-
-	/** button() (0x4e25 FUN_00436880): current left mouse button state. */
-	virtual bool buttonDown() { return false; }
-
-	/** stilldown() (0x4e27 FUN_00436920): whether a mouse button is still down. */
-	virtual bool stillDown() { return false; }
-
-	/** tick() (0x4e28 FUN_004368f0): the native 60 Hz scaled timer. */
-	virtual int tick() { return 0; }
-
-	/**
-	 * cursor(arg) (0x2f07 FUN_00446920), with the name already resolved to a
-	 * TI.EXE PE resource name: int arg n -> "CURS<n>" (FUN_0041b700, format
-	 * "%s%d"), "arrow" -> "CURS.ARROW" (FUN_004051b0), "watch" -> "CURS2002"
-	 * (the wait cursor preloaded into DAT_00461280 by FUN_0043b610), any other
-	 * name -> "CURS.<NAME>" (FUN_0041b580, format "%s.%s" + strupr).
-	 */
-	virtual void setCursorResource(const Common::String &resourceName) {}
-
-	/** calcdeg(a, b) (0x4e67 FUN_00435c70): signed 8-bit angle in 256ths of a
-	 *  full turn from packed point @p a to packed point @p b. */
-	virtual int calcDeg(int32 a, int32 b) { return 0; }
-
-	/** calcvectx/y(deg, dist) (0x4e5d/0x4e5e FUN_00437770/004377f0):
-	 *  fixed-point trig vector components in native 256-unit angles. */
-	virtual int calcVectX(int deg, int dist) { return 0; }
-	virtual int calcVectY(int deg, int dist) { return 0; }
-
-	/** calcdist(pointA, pointB) (0x4e71 FUN_00435d20): integer Euclidean distance. */
-	virtual int calcDist(int32 a, int32 b) { return 0; }
-
-	/** calcmod(a, b) (0x4e72 FUN_004358f0): signed integer remainder. */
-	virtual int calcMod(int a, int b) { return b != 0 ? a % b : 0; }
-};
-
-class VMSaveHost {
-public:
-	virtual ~VMSaveHost() {}
-
-	/** savegame(signature) (0x2f2d FUN_00426620): open the save UI and persist state. */
-	virtual void saveGame(const Common::String &signature) {}
-
-	/** opengame(signature) (0x2f2e FUN_004266e0/FUN_00426f00): open the load UI. */
-	virtual void openGame(const Common::String &signature) {}
-
-	/** questiondialog(text) (0x4e64 FUN_004363f0): native yes/no message box. */
-	virtual bool questionDialog(const Common::String &message) { return false; }
-
-	/** quit() (0x2f27 FUN_00446c80): request engine shutdown. */
-	virtual void requestQuit() {}
-};
-
-class VMHost : public virtual VMMovieHost, public virtual VMNavigationHost,
-		public virtual VMSystemHost, public virtual VMAudioHost,
-		public virtual VMInputHost, public virtual VMActorHost,
-		public virtual VMInteractionHost, public virtual VMSaveHost {
-public:
-	~VMHost() override {}
-};
+inline int32 packPoint(int x, int y) {
+	return static_cast<int32>((static_cast<uint32>(static_cast<uint16>(x)) << 16) |
+			static_cast<uint32>(static_cast<uint16>(y)));
+}
+
+class CyberflixEngine;
 
 /**
  * Executes a parsed CyberFlix Script. This is the structural harness that
@@ -736,20 +87,12 @@ public:
 	void setTrace(bool on) { _trace = on; }
 
 	/**
-	 * Attach the engine host that realises effectful builtins (playMovie, ...).
-	 * Without a host, those builtins are logged no-ops. Not owned.
+	 * Attach the engine that realises effectful builtins (playMovie, ...).
+	 * Without a host, those builtins are logged no-ops, which keeps the VM
+	 * usable as a standalone reverse-engineering harness (the debug console
+	 * runs hostless ScriptVMs). Not owned.
 	 */
-	void setHost(VMHost *host) {
-		_host = host;
-		_movieHost = host;
-		_navigationHost = host;
-		_systemHost = host;
-		_audioHost = host;
-		_inputHost = host;
-		_actorHost = host;
-		_interactionHost = host;
-		_saveHost = host;
-	}
+	void setHost(CyberflixEngine *host) { _host = host; }
 
 	/** Run @p script from the top until the terminator or a step budget. */
 	void run(const Script &script, uint32 maxSteps = 100000);
@@ -777,12 +120,6 @@ public:
 		_librarySelf.push_back(Common::String());
 		_libraryProp.push_back(Common::String());
 	}
-	void clearLibraries() {
-		_libraries.clear();
-		_librarySelf.clear();
-		_libraryProp.clear();
-	}
-
 	struct LibraryState {
 		Common::Array<const Script *> libraries;
 		Common::Array<Common::String> self;
@@ -797,12 +134,6 @@ public:
 	 * and boot messages (FUN_004390a0) exactly [BOOTFILE res1, BOOTFILE res2]
 	 * — so inner dispatches REPLACE the outer chain rather than stack on it.
 	 */
-	LibraryState swapLibraries(const Common::Array<const Script *> &libs) {
-		Common::Array<Common::String> self;
-		Common::Array<Common::String> prop;
-		return swapLibrariesWithContexts(libs, self, prop);
-	}
-
 	LibraryState swapLibrariesWithContexts(const Common::Array<const Script *> &libs,
 			const Common::Array<Common::String> &self,
 			const Common::Array<Common::String> &prop) {
@@ -852,18 +183,6 @@ public:
 		_libraryProp.swap(state.prop);
 	}
 
-	/** Remove the most recent registration of @p script from the scope chain
-	 *  (used to pop temporary shop/prop dispatch scopes). */
-	void removeLibrary(const Script *script) {
-		for (int i = static_cast<int>(_libraries.size()) - 1; i >= 0; --i)
-			if (_libraries[i] == script) {
-				_libraries.remove_at(i);
-				_librarySelf.remove_at(i);
-				_libraryProp.remove_at(i);
-				return;
-			}
-	}
-
 	/**
 	 * Set the dispatch context strings read by the atom opcodes 0xfba ("self":
 	 * the name of the prop/shop/stage whose script is running, chain entry
@@ -894,6 +213,11 @@ public:
 
 	const Common::HashMap<Common::String, Value> &globalVars() const { return _vars; }
 	Common::HashMap<Common::String, Value> &globalVars() { return _vars; }
+
+	/** True while a script body is executing (at any nesting depth). The
+	 *  engine uses this to defer GMM loads that would destroy objects whose
+	 *  scripts are still on the C++ stack. */
+	bool executing() const { return _bodyDepth > 0; }
 
 private:
 	void execute(const Script &script, uint32 index);
@@ -939,8 +263,11 @@ private:
 	Value evaluateExpression(const Script &script, uint32 &pc);
 	Value evaluateExpression(const Script &script, uint32 &pc, uint8 minBindingPower);
 
-	/** Decode a single atom (literal/symbol/call) at @p pc, advancing @p pc. */
+	/** Decode a single atom (literal/symbol/call) at @p pc, advancing @p pc.
+	 *  Bounds-checks @p pc and the recursion depth, then defers to the inner
+	 *  decoder. Every operand read in the expression layer funnels through here. */
 	Value decodeAtom(const Script &script, uint32 &pc);
+	Value decodeAtomInner(const Script &script, uint32 &pc);
 
 	/**
 	 * Handle a message-carrying builtin (sendtostage/sendtocast/sendtoshop/
@@ -1011,6 +338,8 @@ private:
 	Common::Array<Common::String> _librarySelf;
 	Common::Array<Common::String> _libraryProp;
 	uint32 _callDepth; ///< Recursion guard for script-to-script calls.
+	uint32 _exprDepth; ///< Recursion guard for nested expression atoms.
+	uint32 _bodyDepth; ///< Active runBody() nesting (see executing()).
 
 	uint32 _pc;
 	uint32 _executed; ///< Statements executed by the last runProgram (for the console).
@@ -1018,16 +347,8 @@ private:
 	/// Unimplemented builtin opcodes already logged once via callMethod's
 	/// fall-through, so ~128 stubbed opcodes don't spam every frame. Maps
 	/// opcode -> true once reported.
-	Common::HashMap<uint16, bool> _unreportedOpcodes;
-	VMHost *_host; ///< Engine host for effectful builtins; null = no-op. Not owned.
-	VMMovieHost *_movieHost;
-	VMNavigationHost *_navigationHost;
-	VMSystemHost *_systemHost;
-	VMAudioHost *_audioHost;
-	VMInputHost *_inputHost;
-	VMActorHost *_actorHost;
-	VMInteractionHost *_interactionHost;
-	VMSaveHost *_saveHost;
+	Common::HashMap<uint16, bool> _reportedOpcodes;
+	CyberflixEngine *_host; ///< Engine host for effectful builtins; null = no-op. Not owned.
 
 	/// Dispatch context for the atoms 0xfba/0xfbb (see setDispatchContext).
 	Common::String _ctxSelf;

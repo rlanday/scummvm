@@ -30,7 +30,7 @@
 
 namespace Cyberflix {
 
-inline void drawScaledCel(Graphics::Surface *screen, const CelImage &cel,
+inline void drawScaledCel(Graphics::Surface &screen, const CelImage &cel,
 		const Common::Rect &dest, const Common::Rect &clip,
 		const FrameSequence *depthFrame = nullptr, int depthBucket = 0) {
 	const int destW = dest.width();
@@ -39,6 +39,9 @@ inline void drawScaledCel(Graphics::Surface *screen, const CelImage &cel,
 		return;
 	Common::Rect paint = dest;
 	paint.clip(clip);
+	// The clip rect can come from file-sourced camera data (the SET viewport),
+	// so never trust it as a write bound on its own.
+	paint.clip(Common::Rect(0, 0, screen.w, screen.h));
 	if (paint.isEmpty())
 		return;
 	for (int y = paint.top; y < paint.bottom; ++y) {
@@ -47,13 +50,13 @@ inline void drawScaledCel(Graphics::Surface *screen, const CelImage &cel,
 			int srcX = static_cast<int>(static_cast<int64>(x - dest.left) * cel.width / destW);
 			if (cel.isOpaque(srcX, srcY) &&
 					(!depthFrame || depthFrame->depthVisibleAt(x, y, depthBucket)))
-				*(reinterpret_cast<byte *>(screen->getBasePtr(x, y))) =
+				*(reinterpret_cast<byte *>(screen.getBasePtr(x, y))) =
 						cel.pixels[static_cast<uint>(srcY) * cel.width + srcX];
 		}
 	}
 }
 
-inline void drawCel(Graphics::Surface *screen, const CelImage &cel,
+inline void drawCel(Graphics::Surface &screen, const CelImage &cel,
 		const Common::Rect &dest, const Common::Rect &clip) {
 	Common::Rect paint = dest;
 	paint.clip(clip);
@@ -67,7 +70,7 @@ inline void drawCel(Graphics::Surface *screen, const CelImage &cel,
 		const int srcX = paint.left - dest.left;
 		const byte *src = cel.pixels.begin() + static_cast<uint>(srcY) * cel.width + srcX;
 		const byte *opaque = cel.opaque.begin() + static_cast<uint>(srcY) * cel.width + srcX;
-		byte *dst = reinterpret_cast<byte *>(screen->getBasePtr(paint.left, y));
+		byte *dst = reinterpret_cast<byte *>(screen.getBasePtr(paint.left, y));
 		for (int x = 0; x < copyWidth; ++x) {
 			if (opaque[x])
 				dst[x] = src[x];

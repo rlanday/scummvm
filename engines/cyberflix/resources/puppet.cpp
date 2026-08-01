@@ -85,12 +85,7 @@ bool Puppet::open(const Common::String &name) {
 	if (!openArchiveFile(name, "puppet", _fileData, _archive))
 		return false;
 
-	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
-		if (!_archive.getResource(i).empty && _archive.getResource(i).info == kMasterHeaderInfoTag) {
-			_master = static_cast<int>(i);
-			break;
-		}
-	}
+	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
 		warning("Cyberflix: puppet '%s' has no master header", name.c_str());
 		return false;
@@ -369,29 +364,6 @@ uint32 Puppet::baseDisplayListResource(int16 baseState) const {
 	if (resId == 0 && _baseDisplayListResources[0] != 0)
 		resId = _baseDisplayListResources[0];
 	return resId;
-}
-
-uint32 Puppet::displayLayerResourceId(uint32 displayListResourceId,
-		uint32 layer, int16 celIndex) const {
-	if (layer >= kDisplayLayerCount || celIndex < 0)
-		return 0;
-	int idx = resourceIndexById(displayListResourceId);
-	if (idx < 0)
-		return 0;
-	const byte *base = engineBase(static_cast<uint32>(idx));
-	if (!base)
-		return 0;
-	uint32 off = kDisplayLayerOffset + layer * kDisplayLayerStride;
-	if (base + off + 2 > _fileData.end())
-		return 0;
-	int16 count = static_cast<int16>(READ_LE_UINT16(base + off));
-	if (count < 0 || count > kDisplayLayerMaxResources || celIndex >= count)
-		return 0;
-	const byte *entry = base + off + kDisplayLayerResourceListOffset + celIndex * 4;
-	if (entry + 4 > _fileData.end())
-		return 0;
-	uint32 resId = READ_LE_UINT32(entry);
-	return resId == 0xffffffff ? 0 : resId;
 }
 
 bool Puppet::renderCelResource(uint32 resId, int16 nativeY, int16 nativeX,

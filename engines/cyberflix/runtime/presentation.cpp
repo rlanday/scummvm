@@ -246,6 +246,34 @@ bool CyberflixEngine::paletteIsBlack() const {
 	return _paletteRuntime.isBlack();
 }
 
+// mixclut(a, b, first, last, weight) (FUN_00446570): resolve both cluts,
+// blend entries first..last of a toward b by weight/255 (all three ints
+// clamped to 0..255), and program the mix as the current palette. A14.SET's
+// lights-out state uses ("set", "black", 0, 127, 240): the room's colors go
+// nearly black while the interface half of the palette stays untouched.
+void CyberflixEngine::mixClut(const Common::String &nameA, const Common::String &nameB,
+		int first, int last, int weight) {
+	Palette a = {};
+	Palette b = {};
+	if (!resolveClut(nameA, a) || !resolveClut(nameB, b)) {
+		warning("Cyberflix: mixclut('%s', '%s'): clut not found", nameA.c_str(), nameB.c_str());
+		return;
+	}
+	first = CLIP(first, 0, static_cast<int>(kPaletteLastColor));
+	last = CLIP(last, 0, static_cast<int>(kPaletteLastColor));
+	weight = CLIP(weight, 0, 255);
+	debug(1, "Cyberflix: mixclut('%s', '%s', %d, %d, %d)",
+			nameA.c_str(), nameB.c_str(), first, last, weight);
+	for (int i = first; i <= last; ++i) {
+		for (int c = 0; c < kPaletteChannelCount; ++c) {
+			const uint off = Palette::colorOffset(static_cast<uint>(i)) + static_cast<uint>(c);
+			a[off] = static_cast<byte>(a[off] +
+					(static_cast<int>(b[off]) - static_cast<int>(a[off])) * weight / 255);
+		}
+	}
+	programPalette(a);
+}
+
 void CyberflixEngine::fadePaletteSteps(const Palette &from, const Palette &to, int steps) {
 	if (steps < 1)
 		steps = 1;

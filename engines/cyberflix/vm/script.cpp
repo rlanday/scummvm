@@ -26,11 +26,6 @@
 
 namespace Cyberflix {
 
-static const Common::String &emptyScriptString() {
-	static const Common::String empty;
-	return empty;
-}
-
 Script::Script() : _valid(false), _terminated(false), _poolOffset(0), _defsScanned(false) {
 }
 
@@ -51,9 +46,10 @@ bool Script::parse(Common::SeekableReadStream *stream) {
 	if (!stream)
 		return false;
 
-	uint32 size = static_cast<uint32>(stream->size());
-	if (size < 8)
+	int64 streamSize = stream->size();
+	if (streamSize < 8) // also rejects the -1 stream-error result
 		return false;
+	uint32 size = static_cast<uint32>(streamSize);
 
 	// Keep a private copy of the payload so pool strings can be resolved later.
 	_payload.resize(size);
@@ -129,7 +125,7 @@ Common::String Script::getSelfRelString(uint32 index) const {
 
 const Common::String &Script::getSelfRelStringRef(uint32 index) const {
 	if (index >= _code.size() || index >= _selfRelStringCache.size())
-		return emptyScriptString();
+		return _emptyString;
 	// Script resources are immutable after parse, so hot VM paths can hold a
 	// reference to the cached pool string and avoid Common::String refcount churn
 	// for each decoded atom.
@@ -150,7 +146,7 @@ Common::String Script::getSelfRelStringLowercase(uint32 index) const {
 
 const Common::String &Script::getSelfRelStringLowercaseRef(uint32 index) const {
 	if (index >= _code.size() || index >= _selfRelLowerStringCache.size())
-		return emptyScriptString();
+		return _emptyString;
 	if (index < _selfRelLowerStringCached.size() && _selfRelLowerStringCached[index])
 		return _selfRelLowerStringCache[index];
 
@@ -529,18 +525,12 @@ static const MethodName kMethodNames[] = {
 };
 
 const char *Script::methodName(uint16 opcode) {
-int lo = 0, hi = static_cast<int>((sizeof(kMethodNames) / sizeof(kMethodNames[0]))) - 1;
-while (lo <= hi) {
-int mid = (lo + hi) / 2;
-uint16 m = kMethodNames[mid].opcode;
-if (m == opcode)
-return kMethodNames[mid].name;
-if (m < opcode)
-lo = mid + 1;
-else
-hi = mid - 1;
-}
-return nullptr;
+	// Diagnostic-only lookup (unimplemented-opcode logging), so a linear scan
+	// is fine and avoids depending on kMethodNames staying hand-sorted.
+	for (uint i = 0; i < ARRAYSIZE(kMethodNames); ++i)
+		if (kMethodNames[i].opcode == opcode)
+			return kMethodNames[i].name;
+	return nullptr;
 }
 
 uint8 Script::operatorPrecedence(uint16 opcode) {

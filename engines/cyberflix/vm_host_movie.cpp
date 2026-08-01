@@ -23,8 +23,8 @@
 
 namespace Cyberflix {
 
-void CyberflixMovieVMHost::playMovie(const Common::String &name) {
-	engine().movieRuntime().playMovie(engine(), name);
+void CyberflixEngine::playMovie(const Common::String &name) {
+	movieRuntime().playMovie(*this, name);
 }
 
 } // End of namespace Cyberflix

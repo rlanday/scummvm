@@ -23,136 +23,136 @@
 
 namespace Cyberflix {
 
-void CyberflixPropVMHost::openShopFile(const Common::String &name) {
-	engine().propRuntime().openShopFile(engine(), name);
+void CyberflixEngine::openShopFile(const Common::String &name) {
+	propRuntime().openShopFile(*this, name);
 }
 
-void CyberflixPropVMHost::closeShopFile(const Common::String &name) {
-	engine().propRuntime().closeShopFile(engine(), name);
+void CyberflixEngine::closeShopFile(const Common::String &name) {
+	propRuntime().closeShopFile(*this, name);
 }
 
-void CyberflixPropVMHost::propInstance(const Common::String &source, const Common::String &newName) {
-	engine().propRuntime().propInstance(source, newName);
+void CyberflixEngine::propInstance(const Common::String &source, const Common::String &newName) {
+	propRuntime().propInstance(source, newName);
 }
 
-void CyberflixPropVMHost::sendToShop(const Common::String &shopName, const Common::String &message,
+void CyberflixEngine::sendToShop(const Common::String &shopName, const Common::String &message,
 		const Common::Array<Value> &args) {
-	engine().propRuntime().sendToShop(engine(), shopName, message, args);
+	propRuntime().sendToShop(*this, shopName, message, args);
 }
 
-Value CyberflixPropVMHost::sendToShopFx(const Common::String &shopName, const Common::String &message,
+Value CyberflixEngine::sendToShopFx(const Common::String &shopName, const Common::String &message,
 		const Common::Array<Value> &args) {
-	return engine().propRuntime().sendToShopFx(engine(), shopName, message, args);
+	return propRuntime().sendToShopFx(*this, shopName, message, args);
 }
 
-void CyberflixPropVMHost::sendToProp(const Common::String &propName, const Common::String &message,
+void CyberflixEngine::sendToProp(const Common::String &propName, const Common::String &message,
 		const Common::Array<Value> &args) {
-	engine().propRuntime().sendToProp(engine(), propName, message, args);
+	propRuntime().sendToProp(*this, propName, message, args);
 }
 
-Value CyberflixPropVMHost::sendToPropFx(const Common::String &propName, const Common::String &message,
+Value CyberflixEngine::sendToPropFx(const Common::String &propName, const Common::String &message,
 		const Common::Array<Value> &args) {
-	return engine().propRuntime().sendToPropFx(engine(), propName, message, args);
+	return propRuntime().sendToPropFx(*this, propName, message, args);
 }
 
-bool CyberflixPropVMHost::propExists(const Common::String &name) {
-	return engine().propRuntime().findProp(name) != nullptr;
+bool CyberflixEngine::propExists(const Common::String &name) {
+	return propRuntime().findProp(name) != nullptr;
 }
 
-int CyberflixPropVMHost::propXYZ(const Common::String &name, int selector) {
-	return engine().propRuntime().propXYZ(engine(), name, selector);
+int CyberflixEngine::propXYZ(const Common::String &name, int selector) {
+	return propRuntime().propXYZ(*this, name, selector);
 }
 
-bool CyberflixPropVMHost::propVisible(const Common::String &name) {
-	return engine().propRuntime().propVisible(name);
+bool CyberflixEngine::propVisible(const Common::String &name) {
+	return propRuntime().propVisible(name);
 }
 
-void CyberflixPropVMHost::propVisible(const Common::String &name, bool visible) {
-	engine().propRuntime().propVisible(name, visible);
+void CyberflixEngine::propVisible(const Common::String &name, bool visible) {
+	propRuntime().propVisible(name, visible);
 }
 
-Common::String CyberflixPropVMHost::propView(const Common::String &name) {
-	return engine().propRuntime().propView(name);
+Common::String CyberflixEngine::propView(const Common::String &name) {
+	return propRuntime().propView(name);
 }
 
-void CyberflixPropVMHost::propView(const Common::String &name, const Common::String &shape) {
-	engine().propRuntime().propView(name, shape);
+void CyberflixEngine::propView(const Common::String &name, const Common::String &shape) {
+	propRuntime().propView(name, shape);
 }
 
-int CyberflixPropVMHost::propXY(const Common::String &name, int selector) {
-	return engine().propRuntime().propXY(name, selector);
+int CyberflixEngine::propXY(const Common::String &name, int selector) {
+	return propRuntime().propXY(name, selector);
 }
 
-void CyberflixPropVMHost::setPropXY(const Common::String &name, int x, int y) {
-	engine().propRuntime().setPropXY(name, x, y);
+void CyberflixEngine::setPropXY(const Common::String &name, int x, int y) {
+	propRuntime().setPropXY(name, x, y);
 }
 
-void CyberflixPropVMHost::propSet(const Common::String &name, const Common::String &setName) {
-	engine().propRuntime().propSet(engine(), name, setName);
+void CyberflixEngine::propSet(const Common::String &name, const Common::String &setName) {
+	propRuntime().propSet(*this, name, setName);
 }
 
-void CyberflixPropVMHost::propXYZ(const Common::String &name, int x, int y, int z) {
-	engine().propRuntime().propXYZ(name, x, y, z);
+void CyberflixEngine::propXYZ(const Common::String &name, int x, int y, int z) {
+	propRuntime().propXYZ(name, x, y, z);
 }
 
-Common::String CyberflixPropVMHost::getPropStar(const Common::String &name) {
-	return engine().propRuntime().getPropStar(name);
+Common::String CyberflixEngine::getPropStar(const Common::String &name) {
+	return propRuntime().getPropStar(name);
 }
 
-Common::String CyberflixPropVMHost::setPropStar(const Common::String &name, const Common::String &newStar) {
-	return engine().propRuntime().setPropStar(engine(), name, newStar);
+Common::String CyberflixEngine::setPropStar(const Common::String &name, const Common::String &newStar) {
+	return propRuntime().setPropStar(*this, name, newStar);
 }
 
-void CyberflixPropVMHost::propScale(const Common::String &name, int scale) {
-	engine().propRuntime().propScale(name, scale);
+void CyberflixEngine::propScale(const Common::String &name, int scale) {
+	propRuntime().propScale(name, scale);
 }
 
-void CyberflixPropVMHost::propZClip(const Common::String &name, int dist) {
-	engine().propRuntime().propZClip(name, dist);
+void CyberflixEngine::propZClip(const Common::String &name, int dist) {
+	propRuntime().propZClip(name, dist);
 }
 
-int CyberflixPropVMHost::getPropDist(const Common::String &name) {
-	return engine().propRuntime().getPropDist(engine(), name);
+int CyberflixEngine::getPropDist(const Common::String &name) {
+	return propRuntime().getPropDist(*this, name);
 }
 
-void CyberflixPropVMHost::propDist(const Common::String &name, int dist) {
-	engine().propRuntime().propDist(name, dist);
+void CyberflixEngine::propDist(const Common::String &name, int dist) {
+	propRuntime().propDist(name, dist);
 }
 
-int CyberflixPropVMHost::getPropDeg(const Common::String &name) {
-	return engine().propRuntime().getPropDeg(name);
+int CyberflixEngine::getPropDeg(const Common::String &name) {
+	return propRuntime().getPropDeg(name);
 }
 
-int CyberflixPropVMHost::setPropDeg(const Common::String &name, int newDeg) {
-	return engine().propRuntime().setPropDeg(name, newDeg);
+int CyberflixEngine::setPropDeg(const Common::String &name, int newDeg) {
+	return propRuntime().setPropDeg(name, newDeg);
 }
 
-Common::String CyberflixPropVMHost::getPropOwner(const Common::String &name) {
-	return engine().propRuntime().getPropOwner(name);
+Common::String CyberflixEngine::getPropOwner(const Common::String &name) {
+	return propRuntime().getPropOwner(name);
 }
 
-Common::String CyberflixPropVMHost::setPropOwner(const Common::String &name, const Common::String &newOwner) {
-	return engine().propRuntime().setPropOwner(name, newOwner);
+Common::String CyberflixEngine::setPropOwner(const Common::String &name, const Common::String &newOwner) {
+	return propRuntime().setPropOwner(name, newOwner);
 }
 
-int CyberflixPropVMHost::getPropValue(const Common::String &name) {
-	return engine().propRuntime().getPropValue(name);
+int CyberflixEngine::getPropValue(const Common::String &name) {
+	return propRuntime().getPropValue(name);
 }
 
-int CyberflixPropVMHost::setPropValue(const Common::String &name, int newValue) {
-	return engine().propRuntime().setPropValue(name, newValue);
+int CyberflixEngine::setPropValue(const Common::String &name, int newValue) {
+	return propRuntime().setPropValue(name, newValue);
 }
 
-int CyberflixPropVMHost::countProps() {
-	return engine().propRuntime().countProps();
+int CyberflixEngine::countProps() {
+	return propRuntime().countProps();
 }
 
-Common::String CyberflixPropVMHost::indexToProp(int index) {
-	return engine().propRuntime().indexToProp(index);
+Common::String CyberflixEngine::indexToProp(int index) {
+	return propRuntime().indexToProp(index);
 }
 
-bool CyberflixPropVMHost::pointInProp(const Common::String &name, int32 packedPoint) {
-	return engine().propRuntime().pointInProp(name, packedPoint);
+bool CyberflixEngine::pointInProp(const Common::String &name, int32 packedPoint) {
+	return propRuntime().pointInProp(name, packedPoint);
 }
 
 } // End of namespace Cyberflix

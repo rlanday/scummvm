@@ -53,12 +53,7 @@ bool Cast::open(const Common::String &name) {
 	if (!openArchiveFile(name, "cast", _fileData, _archive))
 		return false;
 
-	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
-		if (!_archive.getResource(i).empty && _archive.getResource(i).info == kMasterHeaderInfoTag) {
-			_master = static_cast<int>(i);
-			break;
-		}
-	}
+	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
 		warning("Cyberflix: cast '%s' has no master header", name.c_str());
 		return false;
@@ -71,18 +66,31 @@ bool Cast::open(const Common::String &name) {
 		return false;
 	}
 
+	// Archive ids start at 0, so a zero id means "no script", not resource 0.
 	uint32 scriptRes = READ_LE_UINT32(hdr + kMasterScriptOffset);
-	int scriptIdx = resourceIndexById(scriptRes);
-	if (scriptIdx >= 0) {
-		Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource(static_cast<uint32>(scriptIdx)));
-		Common::ScopedPtr<Script> script(new Script());
-		if (s && script->parse(s.get()))
-			_script.reset(script.release());
+	if (scriptRes != 0) {
+		int scriptIdx = resourceIndexById(scriptRes);
+		if (scriptIdx >= 0) {
+			Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource(static_cast<uint32>(scriptIdx)));
+			Common::ScopedPtr<Script> script(new Script());
+			if (s && script->parse(s.get()))
+				_script.reset(script.release());
+			if (!_script)
+				warning("Cyberflix: cast '%s' script res %u failed to parse", name.c_str(), scriptRes);
+		} else {
+			warning("Cyberflix: cast '%s' script res %u missing", name.c_str(), scriptRes);
+		}
 	}
-	if (!_script)
-		warning("Cyberflix: cast '%s' script res %u missing", name.c_str(), scriptRes);
 
+	// Clamp the file-supplied actor count to the master resource's length
+	// (engine-base frame is res.length + 4 bytes), as puppet.cpp does, so a
+	// corrupt count cannot parse neighbouring resources' bytes as actors.
+	const uint32 masterLen = _archive.getResource(static_cast<uint32>(_master)).length + 4;
 	uint32 actorCount = READ_LE_UINT32(hdr + kMasterActorCountOffset);
+	if (masterLen >= kMasterActorTableOffset)
+		actorCount = MIN<uint32>(actorCount, (masterLen - kMasterActorTableOffset) / kMasterActorStride);
+	else
+		actorCount = 0;
 	const byte *entry = hdr + kMasterActorTableOffset;
 	for (uint32 i = 0; i < actorCount; ++i, entry += kMasterActorStride) {
 		if (entry + kMasterActorStride > _fileData.end())

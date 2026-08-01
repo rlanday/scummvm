@@ -110,6 +110,15 @@ private:
 	uint32 _currentFrame = 0;
 	bool _visible = false;
 	bool _grab = false;
+	/** puppetparam() slot indices (the script-visible selector is index + 1).
+	 *  Named for the slots the engine itself consumes; the rest are stored and
+	 *  read back by scripts only. */
+	enum PuppetParamIndex {
+		kPuppetParamTextColor = 2, ///< Speech text palette index.
+		kPuppetParamTextSize = 5,  ///< Speech text point size.
+		kPuppetParamTextIndent = 9 ///< Speech text x-offset inside the bevel.
+	};
+	/// Native defaults (TI.EXE puppet-param table).
 	int16 _params[10] = { 0, 0x80, 0xfa, 0xfb, 0x378, 0x0c, 0, 0, 2, 8 };
 	Audio::SoundHandle _speechHandle;
 	Common::Array<BevelOption> _bevels;

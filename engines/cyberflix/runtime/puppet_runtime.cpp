@@ -46,6 +46,10 @@
 
 namespace Cyberflix {
 
+// Puppet action playback cadence: the native player advances one action frame
+// per two 60 Hz timer ticks (FUN_00448a60), i.e. 30 fps.
+static const uint32 kPuppetFps = 30;
+
 PuppetRuntime::~PuppetRuntime() {
 }
 
@@ -576,7 +580,7 @@ void PuppetRuntime::renderBevels(CyberflixEngine &engine, bool present) {
 	// during speech beats that offer no clickable choices.
 	_puppet->renderBevelBackdrop(*screen, kScreenHeight, kScreenWidth);
 
-	const Graphics::Font *font = textFont(_params[5]);
+	const Graphics::Font *font = textFont(_params[kPuppetParamTextSize]);
 	if (font) {
 		for (uint i = 0; i < _bevels.size(); ++i) {
 			const Common::Rect &rect = _bevels[i].rect;
@@ -585,9 +589,9 @@ void PuppetRuntime::renderBevels(CyberflixEngine &engine, bool present) {
 			if (clipped.isEmpty())
 				continue;
 			const int baselineY = rect.top + 0x10;
-			const int x = rect.left + _params[9];
+			const int x = rect.left + _params[kPuppetParamTextIndent];
 			font->drawString(screen, _bevels[i].text, x, baselineY - font->getFontAscent(),
-					kScreenWidth - x, static_cast<uint32>(CLIP<int>(_params[2], 0, 255)));
+					kScreenWidth - x, static_cast<uint32>(CLIP<int>(_params[kPuppetParamTextColor], 0, 255)));
 		}
 	}
 	engine._system->unlockScreen();
@@ -636,7 +640,7 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 		uint32 elapsed = engine._mixer->isSoundHandleActive(_speechHandle)
 				? engine._mixer->getSoundElapsedTime(_speechHandle)
 				: (engine._system->getMillis() - wallStart);
-		uint32 frame = static_cast<uint32>((static_cast<uint64>(elapsed) * 60 / 1000 / 2));
+		uint32 frame = static_cast<uint32>(static_cast<uint64>(elapsed) * kPuppetFps / 1000);
 		if (frame >= frameCount)
 			frame = frameCount - 1;
 		if (frame != lastFrame) {
@@ -689,7 +693,7 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 		engine.presentCursorIfDirty();
 		if (!engine._mixer->isSoundHandleActive(_speechHandle)) {
 			if (pcm.empty() && frame + 1 < frameCount) {
-				const uint32 nextFrameMs = static_cast<uint32>(((static_cast<uint64>(frame) + 1) * 1000 + 29)) / 30;
+				const uint32 nextFrameMs = static_cast<uint32>(((static_cast<uint64>(frame) + 1) * 1000 + kPuppetFps - 1) / kPuppetFps);
 				// Silent puppet actions are clocked from wall time at the same
 				// 30 fps cadence as speech. Sleep toward the next frame boundary
 				// while keeping ScummVM's software cursor responsive between
@@ -700,7 +704,7 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 			}
 			break;
 		}
-		const uint32 nextFrameMs = static_cast<uint32>(((static_cast<uint64>(frame) + 1) * 1000 + 29)) / 30;
+		const uint32 nextFrameMs = static_cast<uint32>(((static_cast<uint64>(frame) + 1) * 1000 + kPuppetFps - 1) / kPuppetFps);
 		// Speech playback is frame-clocked from the mixer at native 30 fps.
 		// The picture only changes on those frames, but the software cursor must
 		// still be pumped/presented between them to approximate native Win32

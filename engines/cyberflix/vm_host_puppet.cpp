@@ -23,82 +23,82 @@
 
 namespace Cyberflix {
 
-Common::String CyberflixPuppetVMHost::currentPuppet() {
-	return engine().puppetRuntime().currentPuppet();
+Common::String CyberflixEngine::currentPuppet() {
+	return puppetRuntime().currentPuppet();
 }
 
-void CyberflixPuppetVMHost::openPuppetFile(const Common::String &name) {
-	engine().puppetRuntime().openPuppetFile(name);
+void CyberflixEngine::openPuppetFile(const Common::String &name) {
+	puppetRuntime().openPuppetFile(name);
 }
 
-void CyberflixPuppetVMHost::closePuppetFile() {
-	engine().puppetRuntime().closePuppetFile(engine());
+void CyberflixEngine::closePuppetFile() {
+	puppetRuntime().closePuppetFile(*this);
 }
 
-void CyberflixPuppetVMHost::sendToPuppet(const Common::String &puppetName,
+void CyberflixEngine::sendToPuppet(const Common::String &puppetName,
 		const Common::String &message, const Common::Array<Value> &args) {
-	engine().puppetRuntime().sendToPuppet(engine(), puppetName, message, args);
+	puppetRuntime().sendToPuppet(*this, puppetName, message, args);
 }
 
-Value CyberflixPuppetVMHost::sendToPuppetFx(const Common::String &puppetName,
+Value CyberflixEngine::sendToPuppetFx(const Common::String &puppetName,
 		const Common::String &message, const Common::Array<Value> &args) {
-	return engine().puppetRuntime().sendToPuppetFx(engine(), puppetName, message, args);
+	return puppetRuntime().sendToPuppetFx(*this, puppetName, message, args);
 }
 
-void CyberflixPuppetVMHost::puppetScript(const Common::String &name) {
-	engine().puppetRuntime().puppetScript(name);
+void CyberflixEngine::puppetScript(const Common::String &name) {
+	puppetRuntime().puppetScript(name);
 }
 
-void CyberflixPuppetVMHost::puppetClear() {
-	engine().puppetRuntime().puppetClear(engine());
+void CyberflixEngine::puppetClear() {
+	puppetRuntime().puppetClear(*this);
 }
 
-void CyberflixPuppetVMHost::puppetSpeak(const Common::String &name, int mode) {
-	engine().puppetRuntime().puppetSpeak(engine(), name, mode);
+void CyberflixEngine::puppetSpeak(const Common::String &name, int mode) {
+	puppetRuntime().puppetSpeak(*this, name, mode);
 }
 
-void CyberflixPuppetVMHost::puppetBevel(const Common::String &name, int mode) {
-	engine().puppetRuntime().puppetBevel(engine(), name, mode);
+void CyberflixEngine::puppetBevel(const Common::String &name, int mode) {
+	puppetRuntime().puppetBevel(*this, name, mode);
 }
 
-void CyberflixPuppetVMHost::puppetGrab(bool enabled) {
-	engine().puppetRuntime().puppetGrab(enabled);
+void CyberflixEngine::puppetGrab(bool enabled) {
+	puppetRuntime().puppetGrab(enabled);
 }
 
-int CyberflixPuppetVMHost::puppetEvent(int timeout) {
-	return engine().puppetRuntime().puppetEvent(engine(), timeout);
+int CyberflixEngine::puppetEvent(int timeout) {
+	return puppetRuntime().puppetEvent(*this, timeout);
 }
 
-Common::String CyberflixPuppetVMHost::getPuppetBase() {
-	return engine().puppetRuntime().getPuppetBase();
+Common::String CyberflixEngine::getPuppetBase() {
+	return puppetRuntime().getPuppetBase();
 }
 
-Common::String CyberflixPuppetVMHost::setPuppetBase(const Common::String &newBase) {
-	return engine().puppetRuntime().setPuppetBase(newBase);
+Common::String CyberflixEngine::setPuppetBase(const Common::String &newBase) {
+	return puppetRuntime().setPuppetBase(newBase);
 }
 
-bool CyberflixPuppetVMHost::getPuppetVisible() {
-	return engine().puppetRuntime().getPuppetVisible();
+bool CyberflixEngine::getPuppetVisible() {
+	return puppetRuntime().getPuppetVisible();
 }
 
-bool CyberflixPuppetVMHost::setPuppetVisible(bool visible) {
-	return engine().puppetRuntime().setPuppetVisible(engine(), visible);
+bool CyberflixEngine::setPuppetVisible(bool visible) {
+	return puppetRuntime().setPuppetVisible(*this, visible);
 }
 
-int CyberflixPuppetVMHost::getPuppetParam(int selector) {
-	return engine().puppetRuntime().getPuppetParam(selector);
+int CyberflixEngine::getPuppetParam(int selector) {
+	return puppetRuntime().getPuppetParam(selector);
 }
 
-int CyberflixPuppetVMHost::setPuppetParam(int selector, int newValue) {
-	return engine().puppetRuntime().setPuppetParam(selector, newValue);
+int CyberflixEngine::setPuppetParam(int selector, int newValue) {
+	return puppetRuntime().setPuppetParam(selector, newValue);
 }
 
-int CyberflixPuppetVMHost::countPuppets() {
-	return engine().puppetRuntime().countPuppets();
+int CyberflixEngine::countPuppets() {
+	return puppetRuntime().countPuppets();
 }
 
-Common::String CyberflixPuppetVMHost::indexToPuppet(int index) {
-	return engine().puppetRuntime().indexToPuppet(index);
+Common::String CyberflixEngine::indexToPuppet(int index) {
+	return puppetRuntime().indexToPuppet(index);
 }
 
 } // End of namespace Cyberflix

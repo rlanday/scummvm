@@ -38,6 +38,7 @@
 #include "audio/mixer.h"
 
 #include "cyberflix/cyberflix.h"
+#include "cyberflix/saveload.h"
 #include "cyberflix/detection.h"
 #include "cyberflix/runtime/set_helpers.h"
 #include "cyberflix/set.h"
@@ -50,10 +51,6 @@
 namespace Cyberflix {
 
 typedef AudioRuntime::ThemeTrack ThemeTrack;
-
-enum {
-	kCyberflixSaveVersion = 1
-};
 
 static void writeSaveString(Common::WriteStream &out, const Common::String &s) {
 	out.writeUint32LE(static_cast<uint32>(s.size()));
@@ -71,20 +68,6 @@ static void writeValue(Common::WriteStream &out, const Value &value) {
 	out.writeUint32LE(static_cast<uint32>(value.type));
 	out.writeSint32LE(value.intValue);
 	writeSaveString(out, value.strValue);
-}
-
-static bool readSaveString(Common::SeekableReadStream &in, int64 end, Common::String &s) {
-	if (in.pos() + 4 > end)
-		return false;
-	uint32 len = in.readUint32LE();
-	if (in.pos() + len > end)
-		return false;
-	s.clear();
-	if (!len)
-		return !in.err();
-	Common::Array<char> buf;
-	buf.resize(len);
-	return in.read(buf.begin(), len) == len && (s = Common::String(buf.begin(), len), true);
 }
 
 static bool readSaveData(Common::SeekableReadStream &in, int64 end, Common::Array<byte> &data) {
@@ -111,17 +94,6 @@ static bool readValue(Common::SeekableReadStream &in, int64 end, Value &value) {
 	return readSaveString(in, end, value.strValue);
 }
 
-static bool readChunkHeader(Common::SeekableReadStream &in, char tag[5], int64 &end) {
-	if (in.pos() + 8 > in.size())
-		return false;
-	if (in.read(tag, 4) != 4)
-		return false;
-	tag[4] = 0;
-	uint32 size = in.readUint32LE();
-	end = in.pos() + size;
-	return end <= in.size();
-}
-
 static void writeChunk(Common::WriteStream &out, const char tag[4], Common::MemoryWriteStreamDynamic &payload) {
 	out.write(tag, 4);
 	out.writeUint32LE(static_cast<uint32>(payload.size()));
@@ -133,10 +105,6 @@ static Common::String defaultSaveSignature(int gameType) {
 	if (gameType == GType_Titanic)
 		return "Titanic 1.0";
 	return Common::String();
-}
-
-static bool isLoadedReplacementStage(const Common::SharedPtr<Stage> &stage) {
-	return stage && stage->isOpen() && !stage->name().equalsIgnoreCase("main.stg");
 }
 
 static bool isTourMode(const ScriptVM &vm) {
@@ -373,7 +341,7 @@ static bool parseHeaderChunk(Common::SeekableReadStream &in, int64 end, HeaderSt
 	if (!readSaveString(in, end, header.signature) ||
 			!readSaveString(in, end, header.description) ||
 			!readSaveString(in, end, header.gameId) ||
-			in.pos() + 18 > end)
+			in.pos() + 12 > end) // platform + language + gameType
 		return false;
 	header.platform = in.readUint32LE();
 	header.language = in.readUint32LE();
@@ -394,12 +362,12 @@ static bool parseHeaderChunk(Common::SeekableReadStream &in, int64 end, HeaderSt
 		return false;
 	header.setScene = in.readSint32LE();
 	if (!readSaveString(in, end, header.sceneName) ||
-			in.pos() + 21 > end)
+			in.pos() + 8 > end) // setTable + setAngle
 		return false;
 	header.setTable = in.readSint32LE();
 	header.setAngle = in.readSint32LE();
 	if (!readSaveString(in, end, header.setView) ||
-			in.pos() + 13 > end)
+			in.pos() + 13 > end) // setVisible + 3 transition uint32s
 		return false;
 	header.setVisible = in.readByte() != 0;
 	header.setTransitionType = in.readUint32LE();
@@ -446,10 +414,11 @@ static bool parseShopChunk(Common::SeekableReadStream &in, int64 end, Common::Ar
 		uint32 propCount = in.readUint32LE();
 		for (uint32 p = 0; p < propCount; ++p) {
 			PropState prop;
+			// 2 uint32 ids + visible byte + 5 int16s + mode uint16 + 3 int32s.
 			if (!readSaveString(in, end, prop.name) ||
 					!readSaveString(in, end, prop.setName) ||
 					!readSaveString(in, end, prop.sceneName) ||
-					in.pos() + 35 > end)
+					in.pos() + 33 > end)
 				return false;
 			prop.masterResId = in.readUint32LE();
 			prop.scriptResId = in.readUint32LE();
@@ -495,12 +464,13 @@ static bool parseCastChunk(Common::SeekableReadStream &in, int64 end, Common::Ar
 		uint32 actorCount = in.readUint32LE();
 		for (uint32 a = 0; a < actorCount; ++a) {
 			ActorState actor;
+			// 2 uint32 ids + visible byte + 4 int16s + 5 int32s = 37 bytes.
 			if (!readSaveString(in, end, actor.name) ||
 					!readSaveString(in, end, actor.setName) ||
 					!readSaveString(in, end, actor.sceneName) ||
 					!readSaveString(in, end, actor.shapeName) ||
 					!readSaveString(in, end, actor.owner) ||
-					in.pos() + 35 > end)
+					in.pos() + 37 > end)
 				return false;
 			actor.masterResId = in.readUint32LE();
 			actor.scriptResId = in.readUint32LE();
@@ -549,12 +519,14 @@ static bool parseTrackChunk(Common::SeekableReadStream &in, int64 end, Common::A
 		if (!readSaveString(in, end, track.sourceName) ||
 				!readSaveString(in, end, track.name) ||
 				!readSaveData(in, end, track.fileData) ||
-				in.pos() + 16 > end)
+				in.pos() + 12 > end) // loopIdx + volume + playlistCount
 			return false;
 		track.loopIdx = in.readUint32LE();
 		track.volume = in.readSint32LE();
 		uint32 playlistCount = in.readUint32LE();
-		if (in.pos() + playlistCount * 2 > end)
+		// Divide-form bound: `playlistCount * 2` can wrap uint32 on a corrupt
+		// count and slip past an additive check.
+		if (in.pos() > end || playlistCount > static_cast<uint64>(end - in.pos()) / 2)
 			return false;
 		for (uint32 i = 0; i < playlistCount; ++i)
 			track.playlist.push_back(in.readUint16LE());
@@ -570,9 +542,11 @@ static bool parseSoundSlot(Common::SeekableReadStream &in, int64 end, SoundSlotS
 	if (in.pos() + 1 > end)
 		return false;
 	slot.active = in.readByte() != 0;
-	return readSaveString(in, end, slot.cueName) &&
-			in.pos() + 8 <= end &&
-			(slot.resId = in.readUint32LE(), slot.elapsedMillis = in.readUint32LE(), !in.err());
+	if (!readSaveString(in, end, slot.cueName) || in.pos() + 8 > end)
+		return false;
+	slot.resId = in.readUint32LE();
+	slot.elapsedMillis = in.readUint32LE();
+	return !in.err();
 }
 
 static bool parseAudioChunk(Common::SeekableReadStream &in, int64 end, AudioState &audio) {
@@ -1090,6 +1064,11 @@ bool CyberflixEngine::canLoadGameStateCurrently(Common::U32String *msg) {
 			*msg = _("You can't open a saved game right now.");
 		return false;
 	}
+	// NOTE: no _vm.executing() check here. This predicate also gates the
+	// script-facing opengame() builtin (the CTL.STG OPEN button), which always
+	// runs mid-dispatch and is safe: it only records _pendingLoadSlot. The
+	// mid-script hazard is handled inside loadGameState() itself, which defers
+	// through the same pending-load mechanism.
 	return true;
 }
 
@@ -1146,13 +1125,25 @@ bool CyberflixEngine::processPendingLoad() {
 }
 
 Common::Error CyberflixEngine::loadGameState(int slot) {
+	// A framework-initiated load (GMM/F7) can be reached from event pumping
+	// inside a VM builtin (delayticks/voicedone waits open the GMM
+	// synchronously). Restoring there would destroy shops/casts whose scripts
+	// are still on the C++ stack, so defer to the main loop through the same
+	// pending-load mechanism the script-facing opengame() builtin uses; the
+	// restore runs on the next processPendingLoad() once the VM has unwound.
+	if (_vm.executing()) {
+		_pendingLoadSlot = slot;
+		_pendingLoadSignature.clear();
+		return Common::kNoError;
+	}
+
 	Common::InSaveFile *inFile = _saveFileMan->openForLoading(getSaveStateName(slot));
 	if (!inFile)
 		return Common::Error(Common::kReadingFailed, getSaveStateName(slot));
 	Common::ScopedPtr<Common::InSaveFile> saveFile(inFile);
 
 	char magic[5] = {};
-	if (saveFile->read(magic, 4) != 4 || memcmp(magic, "CFXS", 4))
+	if (saveFile->read(magic, 4) != 4 || memcmp(magic, kCyberflixSaveMagic, 4))
 		return Common::Error(Common::kReadingFailed, "Not a CyberFlix save");
 	uint32 version = saveFile->readUint32LE();
 	if (version != kCyberflixSaveVersion)
@@ -1341,7 +1332,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	}
 
 	if (setRuntime().visible() && setRuntime().set() && setRuntime().set()->isOpen() && setRuntime().scene() >= 0 &&
-			!isLoadedReplacementStage(stageRuntime().stage())) {
+			!isReplacementStage(stageRuntime().stage())) {
 		setRuntime().renderSetScene(*this, setRuntime().scene(), setRuntime().table(), setRuntime().angle(), setRuntime().view());
 	} else if (stageRuntime().stage() && stageRuntime().stage()->isOpen()) {
 		stageRuntime().renderStageNode(*this, stageRuntime().node());
@@ -1369,7 +1360,8 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	_lastCargoPaintingTimerLogBucket = -1;
 	_cargoPaintingTimerExpiredLogged = false;
 
-	logTitanicGymLoadDiagnostics(*this);
+	if (gDebugLevel > 0)
+		logTitanicGymLoadDiagnostics(*this);
 
 	programPalette(savedClut);
 	_hitKind = header.hitKind;
@@ -1377,6 +1369,10 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	_cursorRuntime.setActiveCursorName(header.activeCursor);
 	if (!_cursorRuntime.activeCursor().empty())
 		setGameCursor(_cursorRuntime.activeCursor());
+	// Drop input queued before the load so a stale click/keystroke cannot
+	// replay into the freshly restored room (the script path drains this
+	// queue itself; the direct GMM path does not).
+	_deferredInputEvents.clear();
 	_system->updateScreen();
 
 	return Common::kNoError;
@@ -1391,7 +1387,7 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 	const Common::String signature = !_saveSignature.empty()
 			? _saveSignature : defaultSaveSignature(getGameType());
 
-	saveFile->write("CFXS", 4);
+	saveFile->write(kCyberflixSaveMagic, 4);
 	saveFile->writeUint32LE(kCyberflixSaveVersion);
 
 	{

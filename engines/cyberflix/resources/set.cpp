@@ -28,21 +28,6 @@
 
 namespace Cyberflix {
 
-// Compare SET/STG Pascal names in-place. These lookups sit on idle/mouse hot
-// paths, so avoid constructing temporary Common::String objects for every
-// scene/view/painting table record just to do case-insensitive matching.
-static bool pascalEqualsIgnoreCase(const byte *p, const byte *end, const Common::String &name) {
-	if (!p || p >= end)
-		return false;
-	const uint len = *p;
-	if (p + 1 + len > end || len != name.size())
-		return false;
-	for (uint i = 0; i < len; ++i)
-		if (tolower((unsigned char)p[1 + i]) != tolower((unsigned char)name[i]))
-			return false;
-	return true;
-}
-
 const byte *Set::engineBase(uint32 index) const {
 	if (index >= _archive.getResourceCount())
 		return nullptr;
@@ -85,21 +70,35 @@ const byte *Set::sceneRecord(uint32 scene) const {
 	return rec;
 }
 
+const byte *Set::viewDirectory(uint32 scene, uint32 &count) const {
+	count = 0;
+	const byte *rec = sceneRecord(scene);
+	if (!rec)
+		return nullptr;
+	int idx = resourceIndexById(READ_LE_UINT32(rec + kSceneViewDirOffset));
+	if (idx < 0)
+		return nullptr;
+	const byte *dir = payload(static_cast<uint32>(idx));
+	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
+		return nullptr;
+	// Validate the file-supplied record count against the directory resource's
+	// length (as the panorama/painting/star tables do), so a corrupt count
+	// cannot make the lookups parse neighbouring resources' bytes as records.
+	const uint32 length = _archive.getResource(static_cast<uint32>(idx)).length;
+	uint32 c = READ_LE_UINT32(dir + kViewDirCountOffset);
+	if (static_cast<uint64>(c) * kViewRecordStride + kViewDirRecordsOffset > length)
+		return nullptr;
+	count = c;
+	return dir;
+}
+
 const byte *Set::viewRecord(uint32 scene, const Common::String &view) const {
 	int viewIdx = findView(scene, view);
 	if (viewIdx < 0)
 		return nullptr;
-	const byte *rec = sceneRecord(scene);
-	if (!rec)
-		return nullptr;
-	int dirIdx = resourceIndexById(READ_LE_UINT32(rec + kSceneViewDirOffset));
-	if (dirIdx < 0)
-		return nullptr;
-	const byte *dir = payload(static_cast<uint32>(dirIdx));
-	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
-		return nullptr;
-	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
-	if (static_cast<uint32>(viewIdx) >= count)
+	uint32 count = 0;
+	const byte *dir = viewDirectory(scene, count);
+	if (!dir || static_cast<uint32>(viewIdx) >= count)
 		return nullptr;
 	const byte *v = dir + kViewDirRecordsOffset + static_cast<uint32>(viewIdx) * kViewRecordStride;
 	if (v + kViewRecordStride > _fileData.end())
@@ -207,26 +206,20 @@ int Set::findSceneByViewDirId(uint32 viewDirId) const {
 }
 
 int Set::nearestViewForHeading(uint32 scene, int heading) const {
-	const byte *rec = sceneRecord(scene);
-	if (!rec)
+	uint32 count = 0;
+	const byte *dir = viewDirectory(scene, count);
+	if (!dir)
 		return -1;
-	int idx = resourceIndexById(READ_LE_UINT32(rec + kSceneViewDirOffset));
-	if (idx < 0)
-		return -1;
-	const byte *dir = payload(static_cast<uint32>(idx));
-	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
-		return -1;
-	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
 	int best = -1;
 	int bestDist = 1000;
 	for (uint32 i = 0; i < count; ++i) {
 		const byte *v = dir + kViewDirRecordsOffset + i * kViewRecordStride;
 		if (v + kViewRecordStride > _fileData.end())
 			break;
-		int delta = READ_LE_INT16(v + kViewHeadingOffset) - heading;
-		if (delta < 0)
-			delta = -delta;
-		int dist = MIN(delta, 256 - delta);
+		// Circular distance on the 256-unit compass. nativeAngleDistance()
+		// masks both operands, so an out-of-range stored heading cannot
+		// produce a negative distance that would always win the comparison.
+		int dist = nativeAngleDistance(READ_LE_INT16(v + kViewHeadingOffset), heading);
 		if (dist < bestDist) {
 			bestDist = dist;
 			best = static_cast<int>(i);
@@ -272,6 +265,7 @@ bool Set::open(const Common::String &name) {
 	_master = -1;
 	_sceneTable = -1;
 	_starTable = -1;
+	_baseZ = 0; // FUN_004307f0 zeroes DAT_0046119a for the incoming set.
 	_sceneCount = 0;
 	_setScriptId = 0;
 	_scripts.clear();
@@ -284,12 +278,7 @@ bool Set::open(const Common::String &name) {
 	if (!openArchiveFile(name, "set", _fileData, _archive))
 		return false;
 
-	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
-		if (!_archive.getResource(i).empty && _archive.getResource(i).info == kMasterHeaderInfoTag) {
-			_master = static_cast<int>(i);
-			break;
-		}
-	}
+	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
 		warning("Cyberflix: set '%s' has no master header", name.c_str());
 		return false;
@@ -372,17 +361,10 @@ uint32 Set::angleCount(uint32 scene, uint32 table) const {
 int Set::findView(uint32 scene, const Common::String &name) const {
 	if (name.empty())
 		return -1;
-	const byte *rec = sceneRecord(scene);
-	if (!rec)
+	uint32 count = 0;
+	const byte *dir = viewDirectory(scene, count);
+	if (!dir)
 		return -1;
-	uint32 dirId = READ_LE_UINT32(rec + kSceneViewDirOffset);
-	int idx = resourceIndexById(dirId);
-	if (idx < 0)
-		return -1;
-	const byte *dir = payload(static_cast<uint32>(idx));
-	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
-		return -1;
-	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
 	for (uint32 i = 0; i < count; ++i) {
 		const byte *v = dir + kViewDirRecordsOffset + i * kViewRecordStride;
 		if (v + kViewRecordStride > _fileData.end())
@@ -396,17 +378,9 @@ int Set::findView(uint32 scene, const Common::String &name) const {
 }
 
 Common::String Set::viewName(uint32 scene, uint32 index) const {
-	const byte *rec = sceneRecord(scene);
-	if (!rec)
-		return Common::String();
-	int idx = resourceIndexById(READ_LE_UINT32(rec + kSceneViewDirOffset));
-	if (idx < 0)
-		return Common::String();
-	const byte *dir = payload(static_cast<uint32>(idx));
-	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
-		return Common::String();
-	uint32 count = READ_LE_UINT32(dir + kViewDirCountOffset);
-	if (index >= count)
+	uint32 count = 0;
+	const byte *dir = viewDirectory(scene, count);
+	if (!dir || index >= count)
 		return Common::String();
 	const byte *v = dir + kViewDirRecordsOffset + index * kViewRecordStride;
 	if (v + kViewRecordStride > _fileData.end())
@@ -449,26 +423,22 @@ int Set::viewTagAtAngle(uint32 scene, uint32 table, uint32 angle) const {
 	return tag >= 0 ? static_cast<int>(tag): -1;
 }
 
-bool Set::cameraData(uint32 scene, uint32 table, uint32 angle, CameraData &camera) const {
-	uint32 count = 0;
-	const byte *pano = panoramaTable(scene, table, count);
-	if (!pano || angle >= count)
-		return false;
-	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
-	if (r + kPanoramaRecordStride > _fileData.end())
-		return false;
-
+bool Set::fillCameraFromRecord(const byte *record, CameraData &camera) const {
 	const byte *hdr = _master >= 0 ? engineBase(static_cast<uint32>(_master)) : nullptr;
-	if (!hdr || hdr + 0xa0c > _fileData.end())
+	if (!hdr || hdr + kMasterCameraFieldsEnd > _fileData.end())
 		return false;
 
-	camera.heading = READ_LE_INT16(r + 0x26);
-	camera.cameraX = READ_LE_INT16(r + 0x20);
-	camera.cameraY = READ_LE_INT16(r + 0x22);
-	camera.cameraZ = READ_LE_INT16(r + 0x24);
-	camera.baseZ = 0; // FUN_004307f0 initializes DAT_0046119a to zero.
-	int16 farPlane = READ_LE_INT16(hdr + 0xa08);
-	int16 nearDivisor = READ_LE_INT16(hdr + 0x9fa);
+	camera.heading = READ_LE_INT16(record + kPanoramaHeadingOffset);
+	camera.cameraX = READ_LE_INT16(record + kPanoramaCameraXOffset);
+	camera.cameraY = READ_LE_INT16(record + kPanoramaCameraYOffset);
+	camera.cameraZ = READ_LE_INT16(record + kPanoramaCameraZOffset);
+	// DAT_0046119a: zeroed at set open (FUN_004307f0), then script-driven via
+	// the camerahi builtin — BOOTFILE's global openset handler calls
+	// adjustcamera(), which sets it per set (halla 139, hallc 80, halld 150,
+	// everything else 0).
+	camera.baseZ = _baseZ;
+	int16 farPlane = READ_LE_INT16(hdr + kMasterFarPlaneOffset);
+	int16 nearDivisor = READ_LE_INT16(hdr + kMasterNearDivisorOffset);
 	camera.nearPlane = nearDivisor ? farPlane / nearDivisor : farPlane;
 	camera.farPlane = farPlane;
 	camera.viewportLeft = _viewLeft;
@@ -486,6 +456,17 @@ bool Set::cameraData(uint32 scene, uint32 table, uint32 angle, CameraData &camer
 	return true;
 }
 
+bool Set::cameraData(uint32 scene, uint32 table, uint32 angle, CameraData &camera) const {
+	uint32 count = 0;
+	const byte *pano = panoramaTable(scene, table, count);
+	if (!pano || angle >= count)
+		return false;
+	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
+	if (r + kPanoramaRecordStride > _fileData.end())
+		return false;
+	return fillCameraFromRecord(r, camera);
+}
+
 bool Set::transitionCameraData(uint32 transitionId, uint32 frame, CameraData &camera) const {
 	uint32 count = 0;
 	const byte *transition = transitionTable(transitionId, count);
@@ -494,33 +475,7 @@ bool Set::transitionCameraData(uint32 transitionId, uint32 frame, CameraData &ca
 	const byte *r = transition + 0x0c + frame * kPanoramaRecordStride;
 	if (r + kPanoramaRecordStride > _fileData.end())
 		return false;
-
-	const byte *hdr = _master >= 0 ? engineBase(static_cast<uint32>(_master)) : nullptr;
-	if (!hdr || hdr + 0xa0c > _fileData.end())
-		return false;
-
-	camera.heading = READ_LE_INT16(r + 0x26);
-	camera.cameraX = READ_LE_INT16(r + 0x20);
-	camera.cameraY = READ_LE_INT16(r + 0x22);
-	camera.cameraZ = READ_LE_INT16(r + 0x24);
-	camera.baseZ = 0;
-	int16 farPlane = READ_LE_INT16(hdr + 0xa08);
-	int16 nearDivisor = READ_LE_INT16(hdr + 0x9fa);
-	camera.nearPlane = nearDivisor ? farPlane / nearDivisor : farPlane;
-	camera.farPlane = farPlane;
-	camera.viewportLeft = _viewLeft;
-	camera.viewportTop = _viewTop;
-	camera.viewportRight = _viewLeft + static_cast<int16>(_width);
-	camera.viewportBottom = _viewTop + static_cast<int16>(_height);
-	// Focal length for the software pinhole projection used by world actors and
-	// props; see Foley/van Dam et al., Computer Graphics: Principles and
-	// Practice, perspective projection/viewing pipeline.
-	camera.centerX = _viewLeft + static_cast<int16>(_width / 2);
-	camera.centerY = _viewTop + static_cast<int16>(_height / 2);
-	int16 halfW = static_cast<int16>(_width / 2);
-	int16 halfH = static_cast<int16>(_height / 2);
-	camera.focal = MAX(halfW, halfH);
-	return true;
+	return fillCameraFromRecord(r, camera);
 }
 
 int Set::nextTaggedAngle(uint32 scene, uint32 table, int startAngle) const {
@@ -705,7 +660,7 @@ bool Set::transitionDestination(uint32 transitionId, uint32 &scene,
 		Common::String &view, int &angle) const {
 	uint32 count = 0;
 	const byte *transition = transitionTable(transitionId, count);
-	if (count == 0)
+	if (!transition || count == 0)
 		return false;
 	int sceneIdx = findSceneByViewDirId(READ_LE_UINT32(transition + 0x08));
 	if (sceneIdx < 0)
@@ -750,13 +705,13 @@ bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &s
 	const byte *first = pano + 8;
 	if (first + kPanoramaRecordStride > _fileData.end())
 		return false;
-	if (READ_LE_UINT32(first + 0x2c) != 0)
+	if (READ_LE_UINT32(first + kPanoramaFrameIdOffset) != 0)
 		seq.clear();
 	for (uint32 a = 0; a <= angle; ++a) {
 		const byte *r = pano + 8 + a * kPanoramaRecordStride;
 		if (r + kPanoramaRecordStride > _fileData.end())
 			return false;
-		if (!applyFrameResource(READ_LE_UINT32(r + 0x2c), seq))
+		if (!applyFrameResource(READ_LE_UINT32(r + kPanoramaFrameIdOffset), seq))
 			return false;
 	}
 
@@ -783,7 +738,7 @@ bool Set::applyPanoramaFrame(uint32 scene, uint32 table, uint32 angle, FrameSequ
 	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
 	if (r + kPanoramaRecordStride > _fileData.end())
 		return false;
-	return applyFrameResource(READ_LE_UINT32(r + 0x2c), seq);
+	return applyFrameResource(READ_LE_UINT32(r + kPanoramaFrameIdOffset), seq);
 }
 
 bool Set::applyPanoramaFrame(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq, FrameImage &out) {
@@ -807,7 +762,7 @@ bool Set::applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence 
 	const byte *r = transition + 0x0c + frame * kPanoramaRecordStride;
 	if (r + kPanoramaRecordStride > _fileData.end())
 		return false;
-	return applyFrameResource(READ_LE_UINT32(r + 0x2c), seq);
+	return applyFrameResource(READ_LE_UINT32(r + kPanoramaFrameIdOffset), seq);
 }
 
 bool Set::applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence &seq, FrameImage &out) {

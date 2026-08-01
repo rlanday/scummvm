@@ -410,14 +410,15 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 		return;
 	}
 
-	Palette rgb = {};
-	// As with stage nodes: while the screen palette is black the room is painted
-	// invisibly and revealed later by blacktoscreen('set', n).
-	if (set()->loadSetPalette(rgb) && !engine.paletteIsBlack())
-		engine.programPalette(rgb);
-
-	engine.propRuntime().advancePropPoses();
-	engine.actorRuntime().advanceActorPoses();
+	// The native compositor never writes the hardware palette: rooms are
+	// painted under whatever palette the scripts programmed (clut()/fades/
+	// mixclut()) and revealed by blacktoscreen('set', n). Re-asserting the
+	// set's embedded palette here would undo deliberate script palettes such
+	// as A14.SET's mixclut('set', 'black', 0, 127, 240) lights-out state.
+	//
+	// It does not advance animation either: poses step once per compositor
+	// service pass in PropRuntime::advanceAnimationFrame(). A repaint just
+	// draws the current pose.
 	const FrameImage *stageBg = engine.stageRuntime().stageShellFrame();
 	Graphics::Surface *screen = engine._system->lockScreen();
 	// Base layer: the stage's UI shell (MAIN.STG node 0 — art-deco frame +
@@ -469,13 +470,13 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 				Cast::ActorRenderResult rendered = actorCast[actorIndex]->renderWorldActor(*actorDraw[actorIndex],
 						camera, set()->setName());
 				if (rendered.valid)
-					drawScaledCel(screen, rendered.cel, rendered.rect, viewport, depthFrame, rendered.depthBucket);
+					drawScaledCel(*screen, rendered.cel, rendered.rect, viewport, depthFrame, rendered.depthBucket);
 				++actorIndex;
 			} else {
 				Shop::PropRenderResult rendered = worldShop[propIndex]->renderWorldProp(*worldDraw[propIndex],
 						camera, set()->setName());
 				if (rendered.valid)
-					drawScaledCel(screen, *rendered.cel, rendered.rect, viewport, depthFrame, rendered.depthBucket);
+					drawScaledCel(*screen, *rendered.cel, rendered.rect, viewport, depthFrame, rendered.depthBucket);
 				++propIndex;
 			}
 		}
@@ -494,7 +495,7 @@ void SetRuntime::displaySetFramePixels(CyberflixEngine &engine, const byte *pixe
 			Shop::PropRenderResult rendered = drawShop[i]->renderProp(*draw[i]);
 			if (!rendered.valid)
 				continue;
-			drawCel(screen, *rendered.cel, rendered.rect, Common::Rect(kScreenWidth, kScreenHeight));
+			drawCel(*screen, *rendered.cel, rendered.rect, Common::Rect(kScreenWidth, kScreenHeight));
 		}
 	}
 	engine.propRuntime().setDirty(false);

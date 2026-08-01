@@ -58,6 +58,35 @@ inline int resourceIndexById(const Archive &archive, uint32 id) {
 	return -1;
 }
 
+/**
+ * Index of the first non-empty master-header resource (info ==
+ * kMasterHeaderInfoTag), or -1. Every container's open() locates its
+ * top-level descriptor this way.
+ */
+inline int findMasterHeaderIndex(const Archive &archive) {
+	for (uint32 i = 0; i < archive.getResourceCount(); ++i)
+		if (!archive.getResource(i).empty && archive.getResource(i).info == kMasterHeaderInfoTag)
+			return static_cast<int>(i);
+	return -1;
+}
+
+/**
+ * Compare @p name against the Pascal string at @p p in place, case-insensitively,
+ * without constructing a temporary Common::String. These lookups sit on
+ * idle/mouse hit-test hot paths (scene/view/painting/button table records).
+ */
+inline bool pascalEqualsIgnoreCase(const byte *p, const byte *end, const Common::String &name) {
+	if (!p || p >= end)
+		return false;
+	const uint len = *p;
+	if (p + 1 + len > end || len != name.size())
+		return false;
+	for (uint i = 0; i < len; ++i)
+		if (tolower((unsigned char)p[1 + i]) != tolower((unsigned char)name[i]))
+			return false;
+	return true;
+}
+
 inline Common::String readPascalString(const byte *p,
 		const Common::Array<byte> &fileData, bool allowTruncated = false) {
 	if (!p || p < fileData.begin() || p >= fileData.end())

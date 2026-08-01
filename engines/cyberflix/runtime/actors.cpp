@@ -32,32 +32,6 @@
 
 namespace Cyberflix {
 
-struct CurrentWorldCameraResult {
-	bool valid = false;
-	Shop::WorldCamera camera;
-};
-
-static CurrentWorldCameraResult currentWorldCamera(CyberflixEngine &engine) {
-	CurrentWorldCameraResult result;
-	SetRuntime &setRuntime = engine.setRuntime();
-	if (!setRuntime.set() || !setRuntime.set()->isOpen())
-		return result;
-
-	Set::CameraData cameraData;
-	if (setRuntime.transitionType() == kSetTransitionForward) {
-		result.valid = setRuntime.set()->transitionCameraData(
-				setRuntime.transitionResource(), setRuntime.transitionFrame(), cameraData);
-	} else if (setRuntime.scene() >= 0) {
-		result.valid = setRuntime.set()->cameraData(
-				static_cast<uint32>(setRuntime.scene()),
-				static_cast<uint32>(setRuntime.table()),
-				static_cast<uint32>(setRuntime.angle()), cameraData);
-	}
-	if (result.valid)
-		result.camera = makeWorldCamera(cameraData);
-	return result;
-}
-
 static const char *const kExtraBaseActorNames[] = {
 	"bruce1",
 	"jim1",
@@ -316,7 +290,7 @@ void ActorRuntime::actorInstance(CyberflixEngine &engine, const Common::String &
 				source.c_str(), newName.c_str());
 		return;
 	}
-	if (newName.size() > 15) {
+	if (newName.size() > kMaxInstanceNameLength) {
 		warning("Cyberflix: actorinstance('%s', '%s'): name too long",
 				source.c_str(), newName.c_str());
 		return;
@@ -579,14 +553,14 @@ int ActorRuntime::getActorDist(CyberflixEngine &engine, const Common::String &na
 	if (ref.actor->mode == 0)
 		return ref.actor->depth;
 
-	CurrentWorldCameraResult camera = currentWorldCamera(engine);
+	CurrentWorldCameraResult camera = currentWorldCamera(engine.setRuntime());
 	if (!camera.valid)
-		return 32000;
+		return kOffCameraDepth;
 
 	Cast::ActorProjectionResult projected = ref.cast->projectWorldActor(*ref.actor,
 			camera.camera, engine._setRuntime.set()->setName());
 	if (!projected.valid)
-		return 32000;
+		return kOffCameraDepth;
 	return projected.depth;
 }
 
@@ -742,7 +716,7 @@ static int16 stepAngleToward(int16 current, int16 target, int step) {
 // speed. While the walk is live the actor leaves its star ("none") so the
 // per-frame star snap (resolveActorStar) does not fight the interpolation;
 // native does the same by parking a placeholder in the star field.
-bool ActorRuntime::queueAnimatedWalk(CyberflixEngine &engine, Cast::Actor &actor,
+void ActorRuntime::queueAnimatedWalk(CyberflixEngine &engine, Cast::Actor &actor,
 		const Common::String &name, const Common::String &dest,
 		int16 destX, int16 destY, int16 destZ) {
 	WalkRecord w;
@@ -761,7 +735,6 @@ bool ActorRuntime::queueAnimatedWalk(CyberflixEngine &engine, Cast::Actor &actor
 	actor.sceneName = "none";
 	actor.mode = 1;
 	_walks.push_back(w);
-	return true;
 }
 
 void ActorRuntime::walkToStar(CyberflixEngine &engine, const Common::String &name, const Common::String &star) {

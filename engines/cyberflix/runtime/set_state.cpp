@@ -322,8 +322,7 @@ static int selectXYZ(int selector, int x, int y, int z) {
 	case 3:
 		return z;
 	case 4:
-		return (static_cast<int32>(static_cast<int16>(x)) << 16) |
-				(static_cast<int32>(static_cast<int16>(y)) & 0xffff);
+		return packPoint(x, y);
 	default:
 		return 0;
 	}

@@ -406,12 +406,10 @@ void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool
 	}
 	const FrameImage &frame = _nodeFrame;
 
-	Palette rgb = {};
-	if (stage()->loadStagePalette(rgb) && !engine.paletteIsBlack())
-		engine.programPalette(rgb);
-
-	engine.propRuntime().advancePropPoses();
-	engine.actorRuntime().advanceActorPoses();
+	// As in displaySetFramePixels: the palette belongs to the scripts
+	// (blackscreen() before openstagefile, blacktoscreen('stage', n) after);
+	// the native compositor never programs it during a node repaint, and
+	// animation poses step in PropRuntime::advanceAnimationFrame(), not here.
 	Graphics::Surface *screen = engine._system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
 	copyFrameToScreen(*screen, frame, 0, 0);
@@ -423,7 +421,7 @@ void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool
 		Shop::PropRenderResult rendered = drawShop[i]->renderProp(*draw[i]);
 		if (!rendered.valid)
 			continue;
-		drawCel(screen, *rendered.cel, rendered.rect, Common::Rect(kScreenWidth, kScreenHeight));
+		drawCel(*screen, *rendered.cel, rendered.rect, Common::Rect(kScreenWidth, kScreenHeight));
 	}
 	engine._system->unlockScreen();
 
@@ -441,11 +439,9 @@ void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
 	if (!stage() || !stage()->isOpen())
 		return;
 
-	engine.propRuntime().advancePropPosesAndMarkDirtyRects();
 	if (engine.propRuntime().dirtyRects().empty())
 		return;
 
-	FrameImage frame;
 	if (!_nodeFrameValid) {
 		if (!stage()->renderNode(static_cast<uint32>(node()), _nodeFrame)) {
 			renderStageNode(engine, node(), false);
@@ -457,7 +453,9 @@ void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
 			shellFrameValid() = true;
 		}
 	}
-	frame = _nodeFrame;
+	// Reference, not copy: this runs every animated-prop tick and the retained
+	// frame is a full 512x384 buffer (~196 KB).
+	const FrameImage &frame = _nodeFrame;
 
 	Common::Array<const Shop::Prop *> draw;
 	Common::Array<const Shop *> drawShop;
@@ -485,7 +483,7 @@ void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
 				continue;
 			if (!dirty.intersects(rendered.rect))
 				continue;
-			drawCel(screen, *rendered.cel, rendered.rect, dirty);
+			drawCel(*screen, *rendered.cel, rendered.rect, dirty);
 		}
 	}
 	engine._system->unlockScreen();

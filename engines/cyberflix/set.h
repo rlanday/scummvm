@@ -62,8 +62,8 @@ namespace Cyberflix {
  *         indexes @c base+0xc+frame*0x3c), each a camera/transform matrix plus,
  *         at record +0x2c, a uint32 BACKGROUND FRAME resource id.
  * (Equivalently, from the raw payload pointer: count @ +0x00, first record @
- * +0x08, frame id @ record +0x30 -- the framing this class uses; both resolve
- * to the same absolute frame-id dword.)
+ * +0x08 -- the framing this class uses. Field offsets within a record are the
+ * same in both framings; the frame id is at record +0x2c.)
  *
  * The panorama is a CONTINUOUS CYCLIC DELTA-ANIMATION, not random-access
  * keyframes: FUN_00442970 advances/wraps a frame index and applies each frame
@@ -107,6 +107,11 @@ public:
 		kStarTableIdOffset = 0x058,
 		kSetScriptIdOffset = 0x05c,
 		kSceneTableIdOffset = 0x060,
+		// Projection fields in the master header (FUN_004307f0): the far plane
+		// and the divisor that derives the near plane from it.
+		kMasterNearDivisorOffset = 0x9fa,
+		kMasterFarPlaneOffset = 0xa08,
+		kMasterCameraFieldsEnd = 0xa0c,
 		kMasterDefaultSceneOffset = 0xa0e,
 		kMasterDefaultViewOffset = 0xa1e,
 
@@ -119,7 +124,13 @@ public:
 
 		kPanoramaCountOffset = 0x00,
 		kPanoramaRecordStride = 0x3c,
-		kPanoramaFrameIdOffset = 0x30,
+		kPanoramaFrameIdOffset = 0x2c,
+		// Camera/transform fields inside a panorama or transition record
+		// (consumed by fillCameraFromRecord).
+		kPanoramaCameraXOffset = 0x20,
+		kPanoramaCameraYOffset = 0x22,
+		kPanoramaCameraZOffset = 0x24,
+		kPanoramaHeadingOffset = 0x26,
 
 		// View directory (scene rec +0x06), offsets in our payload frame
 		// (TI reads count @base+0x30, records @base+0x34 with base=payload-4;
@@ -251,6 +262,11 @@ public:
 	/** Resolve a SET star by name to its native world coordinates. */
 	bool starXYZ(const Common::String &name, int16 &x, int16 &y, int16 &z) const;
 
+	/** Projection base height DAT_0046119a: zeroed at set open (TI.EXE
+	 *  FUN_004307f0), written by the camerahi builtin (0x3ea3, FUN_00446190). */
+	int16 baseZ() const { return _baseZ; }
+	void setBaseZ(int16 z) { _baseZ = z; }
+
 	/** The set-wide behavior script resource, or null if this set has none. */
 	const Script *setScript() const;
 	Common::SharedPtr<Script> setScriptShared() const;
@@ -330,6 +346,9 @@ private:
 	int resourceIndexById(uint32 id) const;
 	/** Scene record pointer for @p scene, or nullptr if out of range. */
 	const byte *sceneRecord(uint32 scene) const;
+	/** View-directory payload for @p scene with its record count validated
+	 *  against the resource length, or nullptr. */
+	const byte *viewDirectory(uint32 scene, uint32 &count) const;
 	/** View record pointer for @p view in @p scene, or nullptr. */
 	const byte *viewRecord(uint32 scene, const Common::String &view) const;
 	/** Painting table engine-base pointer for @p viewRec, or nullptr. */
@@ -338,6 +357,10 @@ private:
 	const byte *panoramaTable(uint32 scene, uint32 table, uint32 &count) const;
 	/** Forward-transition table engine-base for resource id @p transitionId. */
 	const byte *transitionTable(uint32 transitionId, uint32 &count) const;
+	/** Fill @p camera from the panorama/transition record @p record plus the
+	 *  master header's projection fields (shared by cameraData and
+	 *  transitionCameraData). */
+	bool fillCameraFromRecord(const byte *record, CameraData &camera) const;
 	/** Apply a frame resource to @p seq. */
 	bool applyFrameResource(uint32 frameId, FrameSequence &seq) const;
 	/** Apply a frame resource to @p seq and copy the retained buffer to @p out. */
@@ -361,6 +384,7 @@ private:
 	int _master = -1;       ///< Archive index of the master-header resource.
 	int _sceneTable = -1;   ///< Archive index of the scene-table resource.
 	int _starTable = -1;    ///< Archive index of the SET star-table resource.
+	int16 _baseZ = 0;       ///< camerahi projection base height (DAT_0046119a).
 	uint32 _setScriptId = 0;
 	Common::Array<Common::SharedPtr<Script> > _scripts;
 	// Single-entry cache for repeated idle/mouse messages to the same painting.

@@ -28,10 +28,6 @@
 
 namespace Cyberflix {
 
-static bool isReplacementStageForProps(const Common::SharedPtr<Stage> &stage) {
-	return stage && stage->isOpen() && !stage->name().equalsIgnoreCase("main.stg");
-}
-
 // ---- Shop/prop subsystem (TI.EXE FUN_00428450 and friends) ----------------
 // The original keeps
 // one global prop array across all open shops; here the by-name lookups and
@@ -127,16 +123,27 @@ void PropRuntime::advancePropPoses() {
 		_shops[i]->advancePropPoses();
 }
 
-void PropRuntime::advancePropPosesAndMarkDirtyRects() {
+void PropRuntime::advanceAnimationFrame(CyberflixEngine &engine) {
 	Common::Array<Common::Rect> oldRects;
 	Common::Array<bool> hadOldRects;
 	Common::Array<const Shop::Prop *> props;
 	Common::Array<const Shop *> shops;
+	// A prop whose pose changed has to reach the screen this pass. Screen props
+	// (mode 0) repaint through their dirty bounds; world props only exist while
+	// a set is up and ride along with the whole-frame set recomposite.
+	const bool setVisible = engine.setRuntime().visible() &&
+			engine.setRuntime().set() && engine.setRuntime().set()->isOpen();
+	bool animated = false;
 	for (uint32 s = 0; s < _shops.size(); ++s) {
 		for (uint32 i = 0; i < _shops[s]->propCount(); ++i) {
 			const Shop::Prop &prop = _shops[s]->prop(i);
-			if (!prop.visible || prop.mode != 0 || prop.poseCount <= 1)
+			if (!prop.visible || prop.poseCount <= 1)
 				continue;
+			if (prop.mode != 0) {
+				animated |= setVisible;
+				continue;
+			}
+			animated = true;
 			Common::Rect oldRect;
 			bool hadOldRect = screenPropRect(*_shops[s], prop, oldRect);
 			oldRects.push_back(oldRect);
@@ -147,6 +154,7 @@ void PropRuntime::advancePropPosesAndMarkDirtyRects() {
 	}
 
 	advancePropPoses();
+	engine.actorRuntime().advanceActorPoses();
 
 	for (uint32 i = 0; i < oldRects.size(); ++i) {
 		if (hadOldRects[i])
@@ -155,17 +163,8 @@ void PropRuntime::advancePropPosesAndMarkDirtyRects() {
 		if (screenPropRect(*shops[i], *props[i], newRect))
 			queueDirtyRect(newRect);
 	}
-}
-
-bool PropRuntime::hasAnimatedScreenProps() const {
-	for (uint32 s = 0; s < _shops.size(); ++s) {
-		for (uint32 i = 0; i < _shops[s]->propCount(); ++i) {
-			const Shop::Prop &p = _shops[s]->prop(i);
-			if (p.visible && p.mode == 0 && p.poseCount > 1)
-				return true;
-		}
-	}
-	return false;
+	if (animated)
+		_propsDirty = true;
 }
 
 void PropRuntime::collectWorldProps(CyberflixEngine &engine, Common::Array<const Shop::Prop *> &draw,
@@ -306,7 +305,7 @@ void PropRuntime::propInstance(const Common::String &source, const Common::Strin
 				source.c_str(), newName.c_str());
 		return;
 	}
-	if (newName.size() > 15) {
+	if (newName.size() > kMaxInstanceNameLength) {
 		warning("Cyberflix: propinstance('%s', '%s'): name too long",
 				source.c_str(), newName.c_str());
 		return;
@@ -410,7 +409,7 @@ bool PropRuntime::propVisible(const Common::String &name) {
 		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
 		return false;
 	}
-	if (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name))
+	if (gDebugLevel > 0 && (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name)))
 		debug(1, "Cyberflix: propvisible('%s') -> %s", name.c_str(),
 				prop->visible ? "true" : "false");
 	return prop->visible;
@@ -423,7 +422,7 @@ void PropRuntime::propVisible(const Common::String &name, bool visible) {
 		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
 		return;
 	}
-	if (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name))
+	if (gDebugLevel > 0 && (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name)))
 		debug(1, "Cyberflix: propvisible('%s', %s) old=%s", name.c_str(),
 				visible ? "true" : "false", prop->visible ? "true" : "false");
 	if (prop->visible != visible) {
@@ -440,7 +439,7 @@ Common::String PropRuntime::propView(const Common::String &name) {
 		warning("Cyberflix: propview('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
-	if (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name))
+	if (gDebugLevel > 0 && (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name)))
 		debug(1, "Cyberflix: propview('%s') -> '%s'", name.c_str(),
 				prop->shapeName.c_str());
 	return prop->shapeName;
@@ -468,7 +467,7 @@ void PropRuntime::propView(const Common::String &name, const Common::String &sha
 	}
 	Common::String key = shape;
 	key.toLowercase();
-	if (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name))
+	if (gDebugLevel > 0 && (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name)))
 		debug(1, "Cyberflix: propview('%s', '%s') old='%s'", name.c_str(),
 				key.c_str(), prop->shapeName.c_str());
 	const uint16 newPoseIndex = 0;
@@ -497,7 +496,9 @@ int PropRuntime::propXY(const Common::String &name, int selector) {
 	case 2:
 		return prop->y;
 	case 3:
-		return (static_cast<int32>(prop->x) << 16) | (static_cast<int32>(prop->y) & 0xffff);
+		// Native propxy has no z, so its packed point is selector 3 (propxyz
+		// uses selector 4 for the same packing).
+		return packPoint(prop->x, prop->y);
 	default:
 		warning("Cyberflix: propxy('%s', %d): bad selector", name.c_str(), selector);
 		return 0;
@@ -650,28 +651,14 @@ int PropRuntime::getPropDist(CyberflixEngine &engine, const Common::String &name
 		return prop->depth;
 
 	SetRuntime &setRuntime = engine.setRuntime();
-	if (!setRuntime.set() || !setRuntime.set()->isOpen())
-		return 32000;
+	CurrentWorldCameraResult camera = currentWorldCamera(setRuntime);
+	if (!camera.valid)
+		return kOffCameraDepth;
 
-	bool haveCamera = false;
-	Set::CameraData cameraData;
-	if (setRuntime.transitionType() == kSetTransitionForward) {
-		haveCamera = setRuntime.set()->transitionCameraData(
-				setRuntime.transitionResource(), setRuntime.transitionFrame(), cameraData);
-	} else if (setRuntime.scene() >= 0) {
-		haveCamera = setRuntime.set()->cameraData(static_cast<uint32>(setRuntime.scene()),
-				static_cast<uint32>(setRuntime.table()), static_cast<uint32>(setRuntime.angle()), cameraData);
-	}
-	if (!haveCamera)
-		return 32000;
-
-	Shop::WorldCamera camera;
-	camera = makeWorldCamera(cameraData);
-
-	Shop::PropRenderResult rendered = shop->renderWorldProp(*prop, camera,
+	Shop::PropRenderResult rendered = shop->renderWorldProp(*prop, camera.camera,
 			setRuntime.set()->setName());
 	if (!rendered.valid)
-		return 32000;
+		return kOffCameraDepth;
 	return rendered.depth;
 }
 
@@ -829,10 +816,10 @@ void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine, bool explicitForc
 		// SET prop dirtiness queued until the puppet is hidden or closed.
 		return;
 	}
-	const bool replacementStage = isReplacementStageForProps(engine._stageRuntime.stage());
+	const bool replacementStage = isReplacementStage(engine._stageRuntime.stage());
 	if (!engine._setRuntime.visible() || replacementStage) {
 		if (engine._stageRuntime.stage() && engine._stageRuntime.stage()->isOpen()) {
-			if (!_dirtyRects.empty() || (replacementStage && hasAnimatedScreenProps())) {
+			if (!_dirtyRects.empty()) {
 				engine.stageRuntime().repaintDirtyStageRects(engine);
 			} else {
 				// Prop refresh without dirty bounds is still a compositor repaint,

@@ -54,12 +54,7 @@ bool Shop::open(const Common::String &name) {
 
 	// Locate the master header by its info tag. NOT by id: HOUSE.SHP carries
 	// an empty placeholder slot with resource id 0 ahead of the real master.
-	for (uint32 i = 0; i < _archive.getResourceCount(); ++i) {
-		if (!_archive.getResource(i).empty && _archive.getResource(i).info == kMasterHeaderInfoTag) {
-			_master = static_cast<int>(i);
-			break;
-		}
-	}
+	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
 		warning("Cyberflix: shop '%s' has no master header", name.c_str());
 		return false;
@@ -73,19 +68,32 @@ bool Shop::open(const Common::String &name) {
 	}
 
 	// Parse and retain the shop's script (message handlers like initprops).
+	// Archive ids start at 0, so a zero id means "no script", not resource 0.
 	uint32 scriptRes = READ_LE_UINT32(hdr + kMasterScriptOffset);
-	int scriptIdx = resourceIndexById(scriptRes);
-	if (scriptIdx >= 0) {
-		Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource(static_cast<uint32>(scriptIdx)));
-		Common::ScopedPtr<Script> script(new Script());
-		if (s && script->parse(s.get()))
-			_script.reset(script.release());
+	if (scriptRes != 0) {
+		int scriptIdx = resourceIndexById(scriptRes);
+		if (scriptIdx >= 0) {
+			Common::ScopedPtr<Common::SeekableReadStream> s(_archive.createReadStreamForResource(static_cast<uint32>(scriptIdx)));
+			Common::ScopedPtr<Script> script(new Script());
+			if (s && script->parse(s.get()))
+				_script.reset(script.release());
+			if (!_script)
+				warning("Cyberflix: shop '%s' script res %u failed to parse", name.c_str(), scriptRes);
+		} else {
+			warning("Cyberflix: shop '%s' script res %u missing", name.c_str(), scriptRes);
+		}
 	}
-	if (!_script)
-		warning("Cyberflix: shop '%s' script res %u missing", name.c_str(), scriptRes);
 
-	// Build the prop list (TI.EXE FUN_00428750 per master id).
+	// Build the prop list (TI.EXE FUN_00428750 per master id). Clamp the
+	// file-supplied count to the master resource's length (engine-base frame is
+	// res.length + 4 bytes) so a corrupt count cannot parse neighbouring
+	// resources' bytes as prop entries.
+	const uint32 masterLen = _archive.getResource(static_cast<uint32>(_master)).length + 4;
 	uint32 propCount = READ_LE_UINT32(hdr + kMasterPropCountOffset);
+	if (masterLen >= kMasterPropTableOffset)
+		propCount = MIN<uint32>(propCount, (masterLen - kMasterPropTableOffset) / kMasterPropStride);
+	else
+		propCount = 0;
 	const byte *entry = hdr + kMasterPropTableOffset;
 	for (uint32 i = 0; i < propCount; ++i, entry += kMasterPropStride) {
 		if (entry + kMasterPropStride > _fileData.end())
@@ -93,7 +101,8 @@ bool Shop::open(const Common::String &name) {
 		uint32 masterId = READ_LE_UINT32(entry);
 		int mIdx = resourceIndexById(masterId);
 		const byte *pm = mIdx >= 0 ? engineBase(static_cast<uint32>(mIdx)) : nullptr;
-		if (!pm || pm + kPropShapeTableOffset > _fileData.end()) {
+		const uint32 pmLen = mIdx >= 0 ? _archive.getResource(static_cast<uint32>(mIdx)).length + 4 : 0;
+		if (!pm || pmLen < kPropShapeTableOffset || pm + kPropShapeTableOffset > _fileData.end()) {
 			warning("Cyberflix: shop '%s' prop master %u missing", name.c_str(), masterId);
 			continue;
 		}
@@ -106,7 +115,9 @@ bool Shop::open(const Common::String &name) {
 		prop.setName = pascalString(pm + kPropSetOffset);
 		prop.sceneName = pascalString(pm + kPropSceneOffset);
 
+		// Clamp the shape count to the prop-master resource, like propCount above.
 		uint32 shapeCount = READ_LE_UINT32(pm + kPropShapeCountOffset);
+		shapeCount = MIN<uint32>(shapeCount, (pmLen - kPropShapeTableOffset) / kPropShapeStride);
 		const byte *se = pm + kPropShapeTableOffset;
 		for (uint32 j = 0; j < shapeCount && se + kPropShapeStride <= _fileData.end(); ++j, se += kPropShapeStride) {
 			Shape shape;
