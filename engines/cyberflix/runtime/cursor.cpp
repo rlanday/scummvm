@@ -72,7 +72,10 @@ Common::PEResources *CursorRuntime::gameExe() {
 }
 
 bool CursorRuntime::setCursor(const Common::String &name) {
-	if (_activeCursor == name && _cursorCache.contains(name))
+	// Early-out on the APPLIED cursor, not _activeCursor: the load path
+	// records the restored name via setActiveCursorName() before calling
+	// here, and the bitmap must still be (re)applied in that case.
+	if (_appliedCursor == name && _cursorCache.contains(name))
 		return true;
 
 	Common::SharedPtr<Graphics::WinCursorGroup> group;
@@ -93,6 +96,7 @@ bool CursorRuntime::setCursor(const Common::String &name) {
 
 	CursorMan.replaceCursor(group->cursors[0].cursor);
 	_activeCursor = name;
+	_appliedCursor = name;
 	debug(1, "Cyberflix: cursor -> %s", name.c_str());
 	return true;
 }

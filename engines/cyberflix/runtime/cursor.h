@@ -42,6 +42,10 @@ public:
 	bool setCursor(const Common::String &name);
 
 	const Common::String &activeCursor() const { return _activeCursor; }
+
+	/** Record the cursor name without applying its bitmap. Used by the load
+	 *  path so the restored name is kept for future saves even when TI.EXE is
+	 *  missing; setCursor() still applies the bitmap on its next call. */
 	void setActiveCursorName(const Common::String &name) { _activeCursor = name; }
 
 private:
@@ -50,7 +54,8 @@ private:
 	Common::ScopedPtr<Common::PEResources> _exe;
 	bool _exeTried = false;
 	Common::HashMap<Common::String, Common::SharedPtr<Graphics::WinCursorGroup> > _cursorCache;
-	Common::String _activeCursor;
+	Common::String _activeCursor;  ///< Recorded name (may not be applied yet).
+	Common::String _appliedCursor; ///< Name last handed to CursorMan.
 };
 
 } // End of namespace Cyberflix
