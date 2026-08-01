@@ -20,6 +20,7 @@
  */
 
 #include "common/debug.h"
+#include "common/ptr.h"
 #include "common/stream.h"
 #include "common/substream.h"
 #include "common/textconsole.h"
@@ -40,14 +41,16 @@ Archive::~Archive() {
 bool Archive::open(Common::SeekableReadStream *stream, const Common::String &name) {
 	close();
 
-	if (!stream)
+	// Take ownership of the stream immediately so every failure path below
+	// frees it without a manual delete.
+	Common::ScopedPtr<Common::SeekableReadStream> owned(stream);
+	if (!owned)
 		return false;
 
 	_name = name;
 
 	if (stream->size() < 0x28) {
 		warning("Cyberflix::Archive: '%s' is too small to be a container", name.c_str());
-		delete stream;
 		return false;
 	}
 
@@ -66,7 +69,6 @@ bool Archive::open(Common::SeekableReadStream *stream, const Common::String &nam
 	if (_magic != 0x00010000 || sig1 != kSignature1 || sig2 != kSignature1) {
 		warning("Cyberflix::Archive: '%s' is not an LPPALPPA container "
 				"(magic=0x%08x sig=0x%08x%08x)", name.c_str(), _magic, sig1, sig2);
-		delete stream;
 		return false;
 	}
 
@@ -76,7 +78,7 @@ bool Archive::open(Common::SeekableReadStream *stream, const Common::String &nam
 				name.c_str(), _declaredSize, static_cast<int>(stream->size()));
 	}
 
-	_stream.reset(stream);
+	_stream.reset(owned.release());
 
 	if (!readDirectory()) {
 		warning("Cyberflix::Archive: '%s' has an invalid resource directory", name.c_str());
@@ -110,9 +112,12 @@ bool Archive::readDirectory() {
 		res.dataOffset = 0;
 		res.empty = true;
 
-		// Offsets of 0 (or any value pointing inside the header/directory) are
-		// empty placeholder slots: keep the index but mark it as having no data.
-		if (recOffset != 0 && recOffset >= kDirectoryOffset && recOffset + 12 <= fileSize) {
+		// Offsets of 0 (or any value pointing below the directory) are empty
+		// placeholder slots: keep the index but mark it as having no data. The
+		// record-header bound is computed in uint64 so an offset near
+		// 0xffffffff cannot wrap past the check.
+		if (recOffset != 0 && recOffset >= kDirectoryOffset &&
+				static_cast<uint64>(recOffset) + 12 <= fileSize) {
 			_stream->seek(recOffset);
 			res.id = _stream->readUint32LE();
 			res.length = _stream->readUint32LE();

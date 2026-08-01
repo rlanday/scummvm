@@ -30,13 +30,25 @@ namespace Cyberflix {
 
 bool openArchiveFile(const Common::String &name, const char *kind,
 		Common::Array<byte> &fileData, Archive &archive) {
+	// A previously open archive holds a MemoryReadStream into the current
+	// fileData buffer; close it before resize() frees that memory. Every
+	// failure path below leaves the pair in a consistent closed/empty state.
+	archive.close();
+
 	Common::File file;
 	if (!file.open(Common::Path(name))) {
 		warning("Cyberflix: could not open %s '%s'", kind, name.c_str());
+		fileData.clear();
 		return false;
 	}
 
-	uint32 size = static_cast<uint32>(file.size());
+	int64 fileSize = file.size();
+	if (fileSize <= 0) {
+		warning("Cyberflix: could not stat %s '%s'", kind, name.c_str());
+		fileData.clear();
+		return false;
+	}
+	uint32 size = static_cast<uint32>(fileSize);
 	fileData.resize(size);
 	if (file.read(fileData.begin(), size) != size) {
 		warning("Cyberflix: could not read %s '%s'", kind, name.c_str());
@@ -47,6 +59,7 @@ bool openArchiveFile(const Common::String &name, const char *kind,
 
 	if (!archive.open(new Common::MemoryReadStream(fileData.begin(), size, DisposeAfterUse::NO), name)) {
 		warning("Cyberflix: '%s' is not a valid %s container", name.c_str(), kind);
+		fileData.clear();
 		return false;
 	}
 	return true;
