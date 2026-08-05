@@ -1357,6 +1357,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 				painting->owner.equalsIgnoreCase("none"))
 			_frameCounter = paintFrame;
 	}
+	_cargoPaintingTimerStartFrame = 0;
 	_lastCargoPaintingTimerLogBucket = -1;
 	_cargoPaintingTimerExpiredLogged = false;
 

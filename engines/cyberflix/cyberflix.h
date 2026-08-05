@@ -623,6 +623,7 @@ private:
 	void processScheduledLoops();
 	FramePacingRuntime _framePacingRuntime;
 	int _frameCounter = 0;
+	int _cargoPaintingTimerStartFrame = 0;
 	int _lastCargoPaintingTimerLogBucket = -1;
 	bool _cargoPaintingTimerExpiredLogged = false;
 

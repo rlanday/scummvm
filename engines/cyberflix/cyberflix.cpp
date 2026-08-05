@@ -709,18 +709,39 @@ void CyberflixEngine::debugCargoPaintingTimer() {
 	const int phase = getGlobalIntValue(_vm, "phase");
 	const int paintFrame = getGlobalIntValue(_vm, "paintframe");
 	Shop::Prop *painting = _propRuntime.findProp("painting");
-	if (mission != 2 || phase != 0 || paintFrame <= 0 || !painting ||
-			!painting->owner.equalsIgnoreCase("none")) {
+	// INVEN.SHP normally keeps the painting prop available, but shop teardown
+	// during a transition or load must not make this diagnostic silently lose
+	// the global script timer. A loaded prop with a new owner still ends it.
+	const bool active = mission == 2 && phase == 0 && paintFrame > 0 &&
+			(!painting || painting->owner.equalsIgnoreCase("none"));
+	if (!active) {
+		if (_cargoPaintingTimerStartFrame > 0) {
+			debug(1, "Cyberflix: cargo painting timer stopped at script frame %d "
+					"(mission=%d phase=%d owner='%s')",
+					_frameCounter, mission, phase,
+					painting ? painting->owner.c_str() : "unloaded");
+		}
+		_cargoPaintingTimerStartFrame = 0;
 		_lastCargoPaintingTimerLogBucket = -1;
 		_cargoPaintingTimerExpiredLogged = false;
 		return;
+	}
+
+	if (_cargoPaintingTimerStartFrame != paintFrame) {
+		_cargoPaintingTimerStartFrame = paintFrame;
+		_lastCargoPaintingTimerLogBucket = -1;
+		_cargoPaintingTimerExpiredLogged = false;
+		debug(1, "Cyberflix: cargo painting timer started at script frame %d; "
+				"BINL.SET expires it when elapsed frames exceed %d",
+				paintFrame, kCargoPaintingTimerFrames);
 	}
 
 	int elapsedFrames = _frameCounter - paintFrame;
 	if (elapsedFrames < 0)
 		elapsedFrames = 0;
 	const int remainingFrames = kCargoPaintingTimerFrames - elapsedFrames;
-	if (remainingFrames <= 0) {
+	// BINL.SET res58 uses a strict `frame() - paintframe > 10000` test.
+	if (remainingFrames < 0) {
 		if (!_cargoPaintingTimerExpiredLogged) {
 			debug(1, "Cyberflix: cargo painting timer expired after %d frames; BINL.SET will give the painting to Hack on the cargo-bin click",
 					elapsedFrames);
