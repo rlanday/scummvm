@@ -388,6 +388,15 @@ static bool shouldLogInterfaceProp(const Common::String &name) {
 			name.equalsIgnoreCase("invenhelp");
 }
 
+// The four props NAREND.STG reads to pick an ending. Every hand-over is worth
+// logging: losing one is silent in-game and only shows up in the epilogue.
+static bool isEndingProp(const Common::String &name) {
+	return name.equalsIgnoreCase("rubaiyat") ||
+			name.equalsIgnoreCase("realneck") ||
+			name.equalsIgnoreCase("painting") ||
+			name.equalsIgnoreCase("notebook");
+}
+
 static bool shouldLogEnigmaProp(const Common::String &name) {
 	return name.equalsIgnoreCase("dial1") ||
 			name.equalsIgnoreCase("dial2") ||
@@ -725,6 +734,11 @@ Common::String PropRuntime::setPropOwner(const Common::String &name, const Commo
 		warning("Cyberflix: propowner('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
+	// Log ending-critical hand-overs before the write so the old owner is still
+	// available; NAREND.STG derives the whole epilogue from these four props.
+	if (isEndingProp(name) && !prop->owner.equalsIgnoreCase(newOwner))
+		debug(1, "Cyberflix: ENDING PROP '%s': '%s' -> '%s'",
+				name.c_str(), prop->owner.c_str(), newOwner.c_str());
 	prop->owner = newOwner; // FUN_00428d40: copy into record +0x8c
 	if (shouldLogInterfaceProp(name))
 		debug(1, "Cyberflix: propowner('%s'%s%s%s) -> '%s'", name.c_str(),

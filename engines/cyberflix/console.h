@@ -68,6 +68,13 @@ private:
 	// it as the active room.
 	bool cmdChangeSet(int argc, const char **argv);
 
+	// Reports the four ending-critical prop owners and the epilogue NAREND.STG
+	// would pick from them right now.
+	bool cmdEnding(int argc, const char **argv);
+
+	// Sets a prop's owner directly, to reach an ending state without replaying.
+	bool cmdSetOwner(int argc, const char **argv);
+
 	CyberflixEngine *_engine;
 };
 

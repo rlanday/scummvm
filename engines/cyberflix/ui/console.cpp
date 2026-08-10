@@ -51,6 +51,8 @@ Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
 	registerCmd("shownode", WRAP_METHOD(Console, cmdShowNode));
 	registerCmd("showset", WRAP_METHOD(Console, cmdShowSet));
 	registerCmd("changeset", WRAP_METHOD(Console, cmdChangeSet));
+	registerCmd("ending", WRAP_METHOD(Console, cmdEnding));
+	registerCmd("setowner", WRAP_METHOD(Console, cmdSetOwner));
 }
 
 // Opens an LPPALPPA container by path, reporting failures on the console.
@@ -584,6 +586,84 @@ bool Console::cmdChangeSet(int argc, const char **argv) {
 	_engine->fadePalette("set", 1, false);
 	debugPrintf("changeset('%s', '%s') issued. Close the console to view.\n",
 			argv[1], scene.c_str());
+	return true;
+}
+
+// The four props NAREND.STG reads, with the owner each check compares against.
+static const char *const kEndingProps[] = { "rubaiyat", "realneck", "painting", "notebook" };
+
+bool Console::cmdEnding(int argc, const char **argv) {
+	// Mirrors NAREND.STG resource 1: worldwar1()/worldwar2()/rushrev() set the
+	// three globals from prop ownership, then futures() maps them to an epilogue.
+	// The player is "frank".
+	const Common::String rubaiyat = _engine->getPropOwner("rubaiyat");
+	const Common::String realneck = _engine->getPropOwner("realneck");
+	const Common::String painting = _engine->getPropOwner("painting");
+	const Common::String notebook = _engine->getPropOwner("notebook");
+
+	const bool one = rubaiyat.equalsIgnoreCase("vlad") || realneck.equalsIgnoreCase("vlad");
+	const bool two = !painting.equalsIgnoreCase("frank");
+	const bool rev = !notebook.equalsIgnoreCase("frank");
+
+	debugPrintf("Ending-critical prop owners (player = 'frank'):\n");
+	for (uint i = 0; i < ARRAYSIZE(kEndingProps); ++i)
+		debugPrintf("  %-9s %s\n", kEndingProps[i],
+				_engine->getPropOwner(kEndingProps[i]).c_str());
+
+	debugPrintf("\nDerived NAREND globals:\n");
+	debugPrintf("  onehappens (WWI)   %s   (rubaiyat or realneck held by vlad)\n", one ? "yes" : "no");
+	debugPrintf("  twohappens (WWII)  %s   (painting not held by you)\n", two ? "yes" : "no");
+	debugPrintf("  revhappens (Rev)   %s   (notebook not held by you)\n", rev ? "yes" : "no");
+
+	const char *future = "(no futures() branch matches - this is a bug)";
+	if (!one && !two && !rev)      future = "7,50,51,51b,52,53,54,proz      -> PROZAC.MOV (best)";
+	else if (!one && !two && rev)  future = "7,39,39b,40,41,41b,42,soviet.01 -> RUSHEND.MOV";
+	else if (!one && two && !rev)  future = "6,31,32,33,33b,34,nazi.01      -> GERMEND.MOV";
+	else if (one && two && !rev)   future = "6,31,32,33,33b,34,nazi.01      -> GERMEND.MOV";
+	else if (!one && two && rev)   future = "5,35,36,37,38,nuke.01          -> NUKE.MOV";
+	else if (one && !two && !rev)  future = "6,28,29,29b,30,30b,germsov.01";
+	else if (one && !two && rev)   future = "8,44,45,46,46b,46c,47,48,soviet.01 -> RUSHEND.MOV";
+	else                           future = "8,55,55b,56,57,58,59,60,nochange.01 -> BOOM.MOV (no change)";
+	debugPrintf("\nfutures() -> %s\n", future);
+
+	// worldwar1()/worldwar2() also pick which narration slides play.
+	if (one) {
+		if (rubaiyat.equalsIgnoreCase("vlad") && realneck.equalsIgnoreCase("vlad"))
+			debugPrintf("worldwar1() slides -> 3,03,04,05  (both to vlad)\n");
+		else if (rubaiyat.equalsIgnoreCase("vlad"))
+			debugPrintf("worldwar1() slides -> 3,01,04,05  (rubaiyat to vlad)\n");
+		else
+			debugPrintf("worldwar1() slides -> 3,02,04,05  (realneck to vlad)\n");
+	} else {
+		debugPrintf("worldwar1() slides -> 4,07,11,11b,12  (WWI averted)\n");
+	}
+	if (two)
+		debugPrintf("worldwar2() slides -> %s\n", painting.equalsIgnoreCase("hack")
+				? "2,15,16  (Hack took the painting)" : "3,13,14,14b  (painting lost, not to Hack)");
+	else
+		debugPrintf("worldwar2() slides -> 6,17,17b,18,18b,19,20  (WWII averted)\n");
+	debugPrintf("rushrev() slides   -> %s\n", rev ? "1,21" : "5,22,23,24,25,26  (revolution averted)");
+
+	// openstage() picks the narration theme from the same four props.
+	const bool goodTheme = painting.equalsIgnoreCase("frank") && !rubaiyat.equalsIgnoreCase("vlad") &&
+			notebook.equalsIgnoreCase("frank") && !realneck.equalsIgnoreCase("vlad");
+	debugPrintf("narration theme    -> %s\n", goodTheme ? "pnarend.trk (good)" : "bnarend.trk (bad)");
+	return true;
+}
+
+bool Console::cmdSetOwner(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Sets a prop's owner, to reach an ending state without replaying.\n");
+		debugPrintf("Usage: %s <prop> <owner>\n", argv[0]);
+		debugPrintf("  ending props: rubaiyat, realneck, painting, notebook\n");
+		debugPrintf("  owners: frank (you), vlad, zeit, hack, none\n");
+		debugPrintf("  e.g. %s painting hack\n", argv[0]);
+		return true;
+	}
+	const Common::String before = _engine->getPropOwner(argv[1]);
+	_engine->setPropOwner(argv[1], argv[2]);
+	debugPrintf("propowner('%s'): '%s' -> '%s'\n", argv[1], before.c_str(),
+			_engine->getPropOwner(argv[1]).c_str());
 	return true;
 }
 
