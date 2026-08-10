@@ -307,6 +307,88 @@ void CyberflixEngine::fadePaletteSteps(const Palette &from, const Palette &to, i
 	}
 }
 
+// The four directional wipes are the only members of the 0x5dc1..0x5dd5 effect
+// family that are implemented; the rest still present the image directly.
+static bool isWipeEffect(uint16 effect) {
+	return effect == Script::kEffectWipeDown || effect == Script::kEffectWipeUp ||
+			effect == Script::kEffectWipeRight || effect == Script::kEffectWipeLeft;
+}
+
+// Copy the visible screen into @p out, which the caller must free().
+bool CyberflixEngine::captureScreen(Graphics::Surface &out) {
+	Graphics::Surface *screen = _system->lockScreen();
+	if (!screen) {
+		_system->unlockScreen();
+		return false;
+	}
+	out.copyFrom(*screen);
+	_system->unlockScreen();
+	return true;
+}
+
+// Blit one band of @p image to the screen surface without presenting it.
+void CyberflixEngine::blitScreenBand(const Graphics::Surface &image, const Common::Rect &band) {
+	Graphics::Surface *screen = _system->lockScreen();
+	if (screen)
+		screen->copyRectToSurface(image, band.left, band.top, band);
+	_system->unlockScreen();
+}
+
+// Reveal @p incoming, which the compositor has already finished, by copying it
+// to the visible screen one band at a time (wipedown FUN_00444270, wipeup
+// FUN_00444300, wiperight FUN_00444390, wipeleft FUN_00444430). The screen must
+// still be showing the outgoing image: the native wipes never touch it, they
+// just march bands of the new image over it from the backing buffer via
+// FUN_00444b60, then blit the whole rect once at the end.
+//
+// Each wipe carries a rect whose two packed dwords are (y, x) pairs — y in the
+// low half, x in the high half, the same order the save format uses for props.
+// wipedown/wipeup step the y halves, wiperight/wipeleft the x halves; left and
+// up start at the far edge and count down, right and down start at the near
+// edge and count up.
+void CyberflixEngine::runWipe(const Graphics::Surface &incoming, uint16 effect, int steps) {
+	if (steps < 1)
+		steps = 1;
+	const bool horizontal = (effect == Script::kEffectWipeLeft || effect == Script::kEffectWipeRight);
+	const bool descending = (effect == Script::kEffectWipeLeft || effect == Script::kEffectWipeUp);
+	const int extent = horizontal ? kScreenWidth : kScreenHeight;
+	// FUN_00444430: band = (x1 - x0) / steps + 1. The +1 makes the bands overrun
+	// the rect slightly, which the final full blit tidies up.
+	const int band = extent / steps + 1;
+	int pos = descending ? extent - band : 0;
+
+	const uint32 startMs = _system->getMillis();
+	for (int s = 0; s < steps && !shouldQuit(); ++s) {
+		const int lo = CLIP(pos, 0, extent);
+		const int hi = CLIP(pos + band, 0, extent);
+		if (hi > lo) {
+			blitScreenBand(incoming, horizontal ? Common::Rect(lo, 0, hi, kScreenHeight)
+					: Common::Rect(0, lo, kScreenWidth, hi));
+			_system->updateScreen();
+		}
+		pos += descending ? -band : band;
+
+		// FUN_00444b40(start, i) busy-waits until FUN_00405130() >= start + i, and
+		// that clock is timeGetTime() scaled by the 0.06 double at .rdata
+		// 0x00456038 — i.e. 1/60 s ticks, not milliseconds. So it is one band per
+		// tick, and visualeffect(wipeleft, 30) runs for 30/60 s.
+		const uint32 deadline = startMs + static_cast<uint32>(static_cast<uint64>(s) * 1000 / 60);
+		const uint32 now = _system->getMillis();
+		if (now < deadline)
+			_system->delayMillis(deadline - now);
+		Common::Event event;
+		while (_eventMan->pollEvent(event)) {
+			if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER)
+				requestQuit();
+		}
+	}
+
+	// Trailing FUN_00444b60(param_1, param_1): the complete rect, so any band
+	// rounding or an early exit still lands on the finished image.
+	blitScreenBand(incoming, Common::Rect(kScreenWidth, kScreenHeight));
+	_system->updateScreen();
+}
+
 // visualeffect(effect, dur) (FUN_00446400): mark a full-screen dirty rect
 // (FUN_00441ce0(2)), run the compositor (FUN_00423a60), then apply the chosen
 // visual transition to the full-screen backing buffer (FUN_004439c0). The boot
@@ -318,7 +400,15 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 	else if (duration > 1000)
 		duration = 1000;
 
-	propRuntime().refreshPropsIfDirty(*this);
+	// gotoflat() only queues a full-screen dirty rect (queueStageNodeRedraw), so
+	// the incoming flat is still uncomposited here and the screen holds the
+	// outgoing one. It has to be captured before refreshPropsIfDirty() below,
+	// which repaints that queued rect with the new flat and presents it — after
+	// that point there is no outgoing image left for a wipe to reveal over.
+	Graphics::Surface outgoing;
+	const bool wiping = isWipeEffect(effect) && captureScreen(outgoing);
+
+	propRuntime().refreshPropsIfDirty(*this, false, !wiping);
 	if (_puppetRuntime.isVisible()) {
 		puppetRuntime().renderCurrentFrame(*this, false);
 	} else if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0) {
@@ -361,13 +451,37 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 	} else if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen()) {
 		// visualeffect() reaches the same update/compositor path as forceupdate();
 		// it repaints pixels but native cursor state remains script-controlled.
-		stageRuntime().renderStageNode(*this, _stageRuntime.node(), false);
+		// A wipe reveals the freshly composited node over the outgoing image, so
+		// the outgoing pixels have to be captured before the node is rendered.
+		// NAREND.STG's epilogue slides use wipeleft between narration stills.
+		// Native composites into a backing buffer and only the wipe copies it
+		// forward, so the finished image must not be presented up front or it
+		// would flash whole for a frame before the wipe ran.
+		stageRuntime().renderStageNode(*this, _stageRuntime.node(), false, !wiping);
+		if (wiping) {
+			Graphics::Surface incoming;
+			if (captureScreen(incoming)) {
+				// Put the outgoing image back in the screen surface. The backend
+				// is still showing it, so this is invisible; it just gives the
+				// wipe the same starting state the native one relies on.
+				blitScreenBand(outgoing, Common::Rect(kScreenWidth, kScreenHeight));
+				runWipe(incoming, effect, duration);
+				incoming.free();
+			} else {
+				_system->updateScreen(); // capture failed: present what we have
+			}
+		}
 		_propRuntime.setDirty(false);
 	} else {
 		_system->updateScreen();
 	}
 
-	debug(1, "Cyberflix: visualeffect(%#x, %d)", effect, duration);
+	if (wiping)
+		outgoing.free();
+
+	const char *effectName = Script::methodName(effect);
+	debug(1, "Cyberflix: visualeffect(%s, %d)%s", effectName ? effectName : "?", duration,
+			(effect != Script::kEffectPlain && !isWipeEffect(effect)) ? " [not implemented, presented plain]" : "");
 }
 
 } // End of namespace Cyberflix

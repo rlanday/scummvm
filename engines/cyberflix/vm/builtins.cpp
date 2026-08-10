@@ -683,13 +683,18 @@ bool ScriptVM::callRuntimeMethod(uint16 opcode, const Common::Array<Value> &args
 			_host->mixClut(args[0].strValue, args[1].strValue, args[2].intValue,
 					args[3].intValue, args[4].intValue);
 		return true;
-	case Script::kMethodVisualEffect: // visualeffect(effect, dur): set default transition (FUN_00446400)
-		// The effect names ('plain', ...) are bare method opcodes 0x5dc1..
-		// 0x5dd5 used as atoms; decodeAtom yields Value() for them, so the
-		// effect code is not currently propagated. Only 'plain' is used by
-		// the boot scripts; forward the duration.
-		_host->setVisualEffect(0x5dce, args.size() > 1 ? args[1].intValue : 0);
+	case Script::kMethodVisualEffect: { // visualeffect(effect, dur): set default transition (FUN_00446400)
+		// The effect names ('plain', 'wipeleft', ...) are bare method opcodes
+		// 0x5dc1..0x5dd5 used as atoms, which decodeAtom pushes as integers.
+		// Anything outside that range (or a missing argument) means the script
+		// asked for no transition, which is what the boot scripts do.
+		uint16 effect = Script::kEffectPlain;
+		if (!args.empty() && args[0].intValue >= Script::kVisualEffectFirst &&
+				args[0].intValue <= Script::kVisualEffectLast)
+			effect = static_cast<uint16>(args[0].intValue);
+		_host->setVisualEffect(effect, args.size() > 1 ? args[1].intValue : 0);
 		return true;
+	}
 	case Script::kMethodMakeLoop: // makeloop(kind, target, message, delay) -> FUN_00423e60
 		if (args.size() >= 4)
 			_host->makeLoop(args[0].strValue, args[1].strValue,

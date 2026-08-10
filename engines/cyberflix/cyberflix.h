@@ -147,6 +147,15 @@ public:
 	void mixClut(const Common::String &nameA, const Common::String &nameB,
 			int first, int last, int weight);
 	void setVisualEffect(uint16 effect, int duration);
+
+	/** Copy the visible screen into @p out; the caller must free() it. */
+	bool captureScreen(Graphics::Surface &out);
+
+	/** Blit one band of @p image into the screen surface without presenting. */
+	void blitScreenBand(const Graphics::Surface &image, const Common::Rect &band);
+
+	/** Reveal the already-composited @p incoming with a directional wipe. */
+	void runWipe(const Graphics::Surface &incoming, uint16 effect, int steps);
 	void makeLoop(const Common::String &kind, const Common::String &target,
 			const Common::String &message, int delay);
 	void stopLoop(const Common::String &kind, const Common::String &target);

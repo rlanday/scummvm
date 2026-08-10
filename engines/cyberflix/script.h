@@ -305,6 +305,21 @@ public:
 		kMethodStringWidth      = 0x4E95
 	};
 
+	/**
+	 * Visual-effect selectors for visualeffect(effect, dur). These are method
+	 * opcodes used as bare atoms rather than a separate constant space, so the
+	 * atom decoder pushes the opcode itself and visualeffect() selects on it.
+	 */
+	enum VisualEffect {
+		kVisualEffectFirst  = 0x5DC1, ///< barndoorclose; start of the contiguous range.
+		kEffectWipeDown     = 0x5DCA,
+		kEffectWipeUp       = 0x5DCB,
+		kEffectWipeRight    = 0x5DCC,
+		kEffectWipeLeft     = 0x5DCD,
+		kEffectPlain        = 0x5DCE, ///< No transition: present the new image directly.
+		kVisualEffectLast   = 0x5DD5  ///< turnhalfright; end of the contiguous range.
+	};
+
 	/** Resource @c info tag identifying a script resource (BOOTFILE, .SET, ...). */
 	static const uint32 kScriptInfoTag = 0x0FA1;
 

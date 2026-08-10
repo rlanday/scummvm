@@ -375,6 +375,15 @@ Value ScriptVM::decodeAtomInner(const Script &script, uint32 &pc) {
 	const Script::Instruction &inst = script.getInstruction(pc);
 	const uint32 count = script.getInstructionCount();
 
+	// 0x5dc1..0x5dd5: the visual-effect names ('plain', 'wipeleft', ...) appear
+	// as bare method opcodes used as atoms. TI.EXE's atom decoder yields the
+	// opcode itself, which visualeffect(effect, dur) then selects on. Handled
+	// ahead of the switch because it is a contiguous opcode range.
+	if (inst.opcode >= Script::kVisualEffectFirst && inst.opcode <= Script::kVisualEffectLast) {
+		pc++;
+		return Value::makeInt(static_cast<int32>(inst.opcode));
+	}
+
 	switch (inst.opcode) {
 	case Script::kOpPushInt:
 		pc++;

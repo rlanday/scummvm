@@ -99,7 +99,8 @@ public:
 	int countProps() const;
 	Common::String indexToProp(int index) const;
 	bool pointInProp(const Common::String &name, int32 packedPoint);
-	void refreshPropsIfDirty(CyberflixEngine &engine, bool explicitForceUpdate = false);
+	void refreshPropsIfDirty(CyberflixEngine &engine, bool explicitForceUpdate = false,
+			bool present = true);
 
 	Common::Array<Common::SharedPtr<Shop> > &shops() { return _shops; }
 	const Common::Array<Common::SharedPtr<Shop> > &shops() const { return _shops; }

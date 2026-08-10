@@ -384,7 +384,8 @@ Value StageRuntime::sendToButtonFx(CyberflixEngine &engine, const Common::String
 			button, button, message, args, "buttonfx");
 }
 
-void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool resetCursor) {
+void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool resetCursor,
+		bool present) {
 	if (!stage() || !stage()->isOpen()) {
 		warning("Cyberflix: sendtostage(%d) with no stage open", targetNode);
 		return;
@@ -429,13 +430,14 @@ void StageRuntime::renderStageNode(CyberflixEngine &engine, int targetNode, bool
 		CursorMan.showMouse(true);
 	engine.propRuntime().clearDirtyRects();
 	engine.propRuntime().setDirty(false);
-	engine._system->updateScreen();
+	if (present)
+		engine._system->updateScreen();
 
 	debug(1, "Cyberflix: rendered stage '%s' node %d (%ux%u)",
 			stage()->name().c_str(), targetNode, frame.width, frame.height);
 }
 
-void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
+void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine, bool present) {
 	if (!stage() || !stage()->isOpen())
 		return;
 
@@ -490,7 +492,8 @@ void StageRuntime::repaintDirtyStageRects(CyberflixEngine &engine) {
 
 	engine.propRuntime().clearDirtyRects();
 	engine.propRuntime().setDirty(false);
-	engine._system->updateScreen();
+	if (present)
+		engine._system->updateScreen();
 }
 
 bool StageRuntime::pointInButton(const Common::String &flat,

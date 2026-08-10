@@ -81,8 +81,15 @@ public:
 	Value sendToButtonFx(CyberflixEngine &engine, const Common::String &flat, const Common::String &button,
 			const Common::String &message, const Common::Array<Value> &args);
 
-	void renderStageNode(CyberflixEngine &engine, int node, bool resetCursor = true);
-	void repaintDirtyStageRects(CyberflixEngine &engine);
+	/**
+	 * Composite @p node into the screen surface. With @p present false the
+	 * finished image is left unpresented, so a caller such as a visualeffect()
+	 * wipe can reveal it itself (native composites into a backing buffer and
+	 * only the transition copies it forward).
+	 */
+	void renderStageNode(CyberflixEngine &engine, int node, bool resetCursor = true,
+			bool present = true);
+	void repaintDirtyStageRects(CyberflixEngine &engine, bool present = true);
 	bool pointInButton(const Common::String &flat, const Common::String &button, int32 packedPoint) const;
 	Snapshot snapshot() const;
 	bool restoreSnapshot(const Snapshot &snapshot);

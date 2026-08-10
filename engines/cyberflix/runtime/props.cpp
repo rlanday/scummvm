@@ -812,7 +812,8 @@ bool PropRuntime::pointInProp(const Common::String &name, int32 packedPoint) {
 	return rendered.cel->isOpaque(celX, celY);
 }
 
-void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine, bool explicitForceUpdate) {
+void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine, bool explicitForceUpdate,
+		bool present) {
 	// The original recomposites the display list every tick; this engine
 	// renders on demand, so repaint the current room after a dispatch that
 	// changed prop state. While no scene is up yet (boot-time initprops) the
@@ -834,11 +835,11 @@ void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine, bool explicitForc
 	if (!engine._setRuntime.visible() || replacementStage) {
 		if (engine._stageRuntime.stage() && engine._stageRuntime.stage()->isOpen()) {
 			if (!_dirtyRects.empty()) {
-				engine.stageRuntime().repaintDirtyStageRects(engine);
+				engine.stageRuntime().repaintDirtyStageRects(engine, present);
 			} else {
 				// Prop refresh without dirty bounds is still a compositor repaint,
 				// not navigation to a new flat, so keep the current script cursor.
-				engine.stageRuntime().renderStageNode(engine, engine.stageRuntime().node(), false);
+				engine.stageRuntime().renderStageNode(engine, engine.stageRuntime().node(), false, present);
 			}
 		}
 		_dirtyRects.clear();
