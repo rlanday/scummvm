@@ -434,6 +434,12 @@ bool CyberflixEngine::optionKey() {
 	return (_eventMan->getModifierState() & Common::KBD_SHIFT) != 0;
 }
 
+bool CyberflixEngine::shiftKey() {
+	// Native shiftkey (FUN_00437710) and optionkey (FUN_004376e0) both read
+	// GetAsyncKeyState(VK_SHIFT).
+	return optionKey();
+}
+
 // Deferred input queue:
 // ScummVM has several nested Cyberflix loops that pump backend events for a
 // narrower purpose than the main room loop. delayMillisWithCursorUpdates() and
@@ -620,6 +626,8 @@ void CyberflixEngine::forceUpdate() {
 	// FUN_004420b0, composite, and present.
 	const bool cursorMoved = pumpCursorMotionEvents();
 	bool presented = false;
+	// Native FUN_00423a60 services walk records before scheduled loops.
+	_actorRuntime.advanceWalks(*this);
 	processScheduledLoops();
 	// FUN_004420b0 is the native writer for DAT_00461122, read by frame()
 	// (FUN_00435a30). The main interactive loop's idle timeout calls

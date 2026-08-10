@@ -553,6 +553,29 @@ void PropRuntime::propXYZ(const Common::String &name, int x, int y, int z) {
 	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
+// propxyz(name, selector) getter -> FUN_0042a250: world position from the prop
+// record; 1=x, 2=y, 3=z, 4=packed x/y point (CONCAT22(x, y) natively).
+int PropRuntime::propXYZ(CyberflixEngine &engine, const Common::String &name, int selector) {
+	Shop::Prop *prop = findProp(name);
+	if (!prop) {
+		warning("Cyberflix: propxyz('%s', %d): no such prop", name.c_str(), selector);
+		return 0;
+	}
+	switch (selector) {
+	case 1:
+		return prop->x;
+	case 2:
+		return prop->y;
+	case 3:
+		return prop->z;
+	case 4:
+		return engine.makePoint(prop->x, prop->y);
+	default:
+		warning("Cyberflix: propxyz('%s', %d): bad selector", name.c_str(), selector);
+		return 0;
+	}
+}
+
 Common::String PropRuntime::getPropStar(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {

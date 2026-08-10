@@ -212,6 +212,8 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 		warning("Cyberflix: puppetevent(%d): no visible puppet", timeout);
 		return -1;
 	}
+	if (engine.shouldQuit())
+		return -1;
 	renderCurrentFrame(engine, true);
 	if (_bevels.empty())
 		return -1;
@@ -535,6 +537,12 @@ void PuppetRuntime::renderBevels(CyberflixEngine &engine, bool present) {
 }
 
 void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntry &action) {
+	// Never start a new dialogue clip (audio + frames) once a quit is
+	// requested. ScriptVM::callMethod also makes builtins inert while
+	// quitting, but keep this direct guard on the playback entry point for
+	// callers that do not come through the VM.
+	if (engine.shouldQuit())
+		return;
 	_currentAction = action.name;
 	_currentFrame = 0;
 	_bevels.clear();

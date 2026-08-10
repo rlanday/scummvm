@@ -55,6 +55,14 @@ Value CyberflixPropVMHost::sendToPropFx(const Common::String &propName, const Co
 	return engine().propRuntime().sendToPropFx(engine(), propName, message, args);
 }
 
+bool CyberflixPropVMHost::propExists(const Common::String &name) {
+	return engine().propRuntime().findProp(name) != nullptr;
+}
+
+int CyberflixPropVMHost::propXYZ(const Common::String &name, int selector) {
+	return engine().propRuntime().propXYZ(engine(), name, selector);
+}
+
 bool CyberflixPropVMHost::propVisible(const Common::String &name) {
 	return engine().propRuntime().propVisible(name);
 }

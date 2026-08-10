@@ -144,6 +144,13 @@ public:
 	Actor &actor(uint32 i) { return *_actors[i]; }
 	const Actor &actor(uint32 i) const { return *_actors[i]; }
 
+	/**
+	 * Advance every actor's pose frame one step (wrapping), like
+	 * Shop::advancePropPoses does for props; run once per compositor pass.
+	 * This is what animates multi-frame actor poses such as walk cycles.
+	 */
+	void advanceActorPoses();
+
 	/** Find an actor by case-insensitive runtime name, or null. */
 	Common::SharedPtr<Actor> findActor(const Common::String &name);
 	Common::SharedPtr<Actor> findActorByMasterResId(uint32 masterResId);
@@ -159,6 +166,7 @@ private:
 	int resourceIndexById(uint32 id) const;
 	Common::String pascalString(const byte *p) const;
 	ActorCellResult resolveActorCell(const Actor &actor, int angle) const;
+	uint16 shapePoseCountFor(const Actor &actor) const;
 
 	Common::String _name;
 	Common::Array<byte> _fileData;

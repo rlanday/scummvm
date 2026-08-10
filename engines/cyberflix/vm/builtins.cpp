@@ -122,6 +122,13 @@ bool ScriptVM::callActorMethod(uint16 opcode, const Common::Array<Value> &args, 
 	case Script::kMethodStopWalk: // stopwalk(actor|'all') -> FUN_00423b50
 		_actorHost->stopWalk(args.empty() ? Common::String() : args[0].strValue);
 		return true;
+	case Script::kMethodPauseWalk: // pausewalk(actor, flag) -> FUN_00446ea0/FUN_00425590
+		if (args.size() >= 2)
+			_actorHost->pauseWalk(args[0].strValue, args[1].intValue);
+		return true;
+	case Script::kMethodActorExists: // actorexists(name) -> FUN_0041fb20/FUN_004225b0
+		result = Value::makeBool(!args.empty() && _actorHost->actorExists(args[0].strValue));
+		return true;
 	case Script::kMethodIsWalk: // iswalk(actor) -> FUN_00423cf0
 		result = Value::makeBool(!args.empty() && _actorHost->isWalk(args[0].strValue));
 		return true;
@@ -252,6 +259,9 @@ bool ScriptVM::callPropMethod(uint16 opcode, const Common::Array<Value> &args, V
 		if (args.size() >= 2)
 			_interactionHost->propInstance(args[0].strValue, args[1].strValue);
 		return true;
+	case Script::kMethodPropExists: // propexists(name) -> FUN_00428fc0/FUN_0042b700
+		result = Value::makeBool(!args.empty() && _interactionHost->propExists(args[0].strValue));
+		return true;
 	case Script::kMethodPropVisible: // propvisible(name, flag) -> FUN_00429d00
 		if (args.size() >= 2)
 			_interactionHost->propVisible(args[0].strValue, args[1].intValue != 0);
@@ -268,10 +278,14 @@ bool ScriptVM::callPropMethod(uint16 opcode, const Common::Array<Value> &args, V
 		if (args.size() >= 2)
 			_interactionHost->propSet(args[0].strValue, args[1].strValue);
 		return true;
-	case Script::kMethodPropXYZ: // propxyz(name, x, y, z) -> FUN_0042a140 (mode=1)
+	case Script::kMethodPropXYZ: // propxyz(name, x, y, z) -> FUN_0042a140 (mode=1);
+	             // propxyz(name, selector) -> FUN_0042a250: world-space getter
+	             // (1=x, 2=y, 3=z, 4=packed x/y point), like actorxyz.
 		if (args.size() >= 4)
 			_interactionHost->propXYZ(args[0].strValue, args[1].intValue,
 					args[2].intValue, args[3].intValue);
+		else if (args.size() == 2)
+			result = Value::makeInt(_interactionHost->propXYZ(args[0].strValue, args[1].intValue));
 		return true;
 	case Script::kMethodPropStar: // propstar(name[, star]) -> FUN_00429320/FUN_004291f0
 		if (args.size() >= 2)
@@ -528,6 +542,9 @@ bool ScriptVM::callInputMethod(uint16 opcode, const Common::Array<Value> &args, 
 	case Script::kMethodOptionKey: // optionkey() -> FUN_004376e0/GetAsyncKeyState(VK_SHIFT)
 		result = Value::makeBool(_inputHost->optionKey());
 		return true;
+	case Script::kMethodShiftKey: // shiftkey() -> FUN_00437710/GetAsyncKeyState(VK_SHIFT)
+		result = Value::makeBool(_inputHost->shiftKey());
+		return true;
 	case Script::kMethodPointInButton: // pointinbutton(flat, button, point) -> FUN_0040a0d0
 		result = args.size() >= 3 ?
 				Value::makeBool(_interactionHost->pointInButton(args[0].strValue,
@@ -728,6 +745,14 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 	// stubbed as logged no-ops until their subsystems (renderer/video/audio/
 	// navigation) are implemented. Arguments are fully evaluated so trace output
 	// reflects real call sites.
+	//
+	// Builtins go inert once the host is quitting: the statement loop only
+	// unwinds a running script at its periodic quit check, and the statements
+	// executed before that boundary must not keep rendering, playing audio, or
+	// mutating game state (e.g. a puppet dialogue advancing its options while
+	// the application exits).
+	if (_systemHost && _systemHost->hostQuitRequested())
+		return Value();
 	if (_trace) {
 		Common::String a;
 		for (uint32 i = 0; i < args.size(); ++i) {
