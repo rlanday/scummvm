@@ -19,6 +19,7 @@
  *
  */
 
+#include "common/archive.h"
 #include "common/debug.h"
 
 #include "cyberflix/cyberflix.h"
@@ -438,6 +439,13 @@ bool ScriptVM::callStageSetMethod(uint16 opcode, const Common::Array<Value> &arg
 	// parenthesised message and routes through dispatchMessageBuiltin.)
 	case Script::kMethodCurrentSet: // currentset() -> open set name or 'none'
 		result = Value::makeString(_host->currentSet());
+		return true;
+	case Script::kMethodFileExists: // fileexists('name') -> is that asset on the search path
+		// The tour gates every one of its narration clips on this
+		// ("if fileexists('tour9.mov') or debugging"), so leaving it stubbed
+		// silently disables tour mode entirely.
+		result = Value::makeBool(!args.empty() &&
+				SearchMan.hasFile(Common::Path(args[0].strValue)));
 		return true;
 	case Script::kMethodCurrentStage: // currentstage() -> open stage name or native 'None'
 		result = Value::makeString(_host->currentStage());
