@@ -22,6 +22,7 @@
 #ifndef CYBERFLIX_RUNTIME_CURSOR_H
 #define CYBERFLIX_RUNTIME_CURSOR_H
 
+#include "common/fs.h"
 #include "common/hashmap.h"
 #include "common/hash-str.h"
 #include "common/ptr.h"
@@ -48,8 +49,27 @@ public:
 	 *  missing; setCursor() still applies the bitmap on its next call. */
 	void setActiveCursorName(const Common::String &name) { _activeCursor = name; }
 
+	/** True once an executable holding cursor resources has been located, so
+	 *  callers can tell a missing resource from a missing executable. */
+	bool haveCursorExe() { return gameExe() != nullptr; }
+
 private:
 	Common::PEResources *gameExe();
+
+	/** Parse @p node as a PE and adopt it as the cursor source. With
+	 *  @p requireCursors it is only adopted when it actually holds CURS.ARROW,
+	 *  so a scan skips launchers and installers. */
+	bool tryLoadExe(const Common::FSNode &node, bool requireCursors = false);
+
+	/** Search @p dir (and @p depth levels below it) for the runtime. With
+	 *  @p byNameOnly only files called TI.EXE are considered and no PE is
+	 *  opened until one matches, which is why that pass can search deeper. */
+	bool scanForExe(const Common::FSNode &dir, int depth, bool byNameOnly);
+
+	enum {
+		kNameSearchDepth = 4,  ///< Cheap: one string compare per directory entry.
+		kProbeSearchDepth = 1  ///< Expensive: opens and parses every executable.
+	};
 
 	Common::ScopedPtr<Common::PEResources> _exe;
 	bool _exeTried = false;
