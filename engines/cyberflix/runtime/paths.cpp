@@ -102,10 +102,59 @@ static bool isTitanicCDLabel(const Common::String &label) {
 	return label.equalsIgnoreCase("Titanic1") || label.equalsIgnoreCase("Titanic2");
 }
 
+// A merged tree holds both discs' assets side by side, so requiring one file
+// per disc distinguishes it from a plain TITANIC1/DATA: the retail DATA folder
+// has BOOTFILE but never SMETH1.PUP, which ships on CD 2.
+static bool isRepackagedDataDir(const Common::FSNode &dir) {
+	if (!dir.exists() || !dir.isDirectory())
+		return false;
+	Common::FSNode file;
+	return findCaselessChildFile(dir, "BOOTFILE", file) &&
+			findCaselessChildFile(dir, "SMETH1.PUP", file);
+}
+
+// Re-releases (the Steam build, for one) ship an already-installed tree with
+// every asset flattened into a single LOCAL directory instead of the two-CD
+// TITANIC1/TITANIC2 layout the retail installer produces. Resolve that root
+// once per game path; the result feeds the search path, the layout check and
+// every script-visible path lookup.
+bool findRepackagedDataRoot(Common::FSNode &out) {
+	static Common::String cachedFor;
+	static Common::FSNode cachedRoot;
+	static bool cachedValid = false;
+
+	const Common::Path gamePath = ConfMan.getPath("path");
+	const Common::String key = gamePath.toString();
+	if (key != cachedFor) {
+		cachedFor = key;
+		cachedValid = false;
+
+		const Common::FSNode gameDir(gamePath);
+		Common::FSNode local;
+		if (isRepackagedDataDir(gameDir)) {
+			cachedRoot = gameDir;
+			cachedValid = true;
+		} else if (findCaselessChildDir(gameDir, "LOCAL", local) && isRepackagedDataDir(local)) {
+			cachedRoot = local;
+			cachedValid = true;
+		}
+	}
+
+	if (cachedValid)
+		out = cachedRoot;
+	return cachedValid;
+}
+
 static bool resolveCyberflixPathDir(const Common::String &path, Common::FSNode &out) {
 	Common::Array<Common::String> components = splitCyberflixPath(path);
 	if (components.empty())
 		return false;
+
+	// In a repackaged tree there is only one asset directory, so every path the
+	// scripts ask for ("Titanic1:Data", "Titanic2:Puppets1", "Blkjack", ...)
+	// resolves to it.
+	if (findRepackagedDataRoot(out))
+		return true;
 
 	Common::Array<Common::Array<Common::String> > patterns;
 	patterns.push_back(components);
@@ -201,9 +250,39 @@ static void addMissingTitanicFile(Common::String &missing, const char *path) {
 	missing += path;
 }
 
+static bool hasFlatFile(const Common::FSNode &root, const char *fileName) {
+	Common::FSNode file;
+	return findCaselessChildFile(root, fileName, file);
+}
+
 bool validateTitanicDiscLayout() {
 	Common::String missing;
 	Common::FSNode cd1Root, cd2Root;
+
+	// A repackaged tree carries both discs in one directory; check the same
+	// per-disc landmarks there rather than demanding the two-CD layout.
+	Common::FSNode flatRoot;
+	if (findRepackagedDataRoot(flatRoot)) {
+		static const char *const required[] = {
+			"BOOTFILE", "PLAYMODE.MOV", "DECKC.TRK", "DATECAB.MOV", "SMETH1.PUP"
+		};
+		for (uint i = 0; i < ARRAYSIZE(required); ++i) {
+			if (!hasFlatFile(flatRoot, required[i]))
+				addMissingTitanicFile(missing, required[i]);
+		}
+		if (missing.empty())
+			return true;
+
+		Common::String message =
+				"This looks like a repackaged (single-folder) Titanic install, but some "
+				"data files are missing.\n\nMissing from '";
+		message += flatRoot.getPath().toString(Common::Path::kNativeSeparator);
+		message += "':";
+		message += missing;
+		GUIErrorMessage(message);
+		warning("Cyberflix: incomplete repackaged Titanic data:%s", missing.c_str());
+		return false;
+	}
 
 	if (!findExtractedCDRoot("Titanic1", cd1Root)) {
 		addMissingTitanicFile(missing, "TITANIC1/");
@@ -271,7 +350,11 @@ Common::String PathRuntime::setCurrentCD(const Common::String &requested) {
 		warning("Cyberflix: currentcd('%s'): invalid CD label", requested.c_str());
 	} else {
 		Common::FSNode cdRoot;
-		if (findExtractedCDRoot(requested, cdRoot)) {
+		// Both discs are present at once in a repackaged tree, so any disc the
+		// scripts switch to is always "mounted".
+		if (isTitanicCDLabel(requested) && findRepackagedDataRoot(cdRoot)) {
+			_currentCD = canonicalCDLabel(requested);
+		} else if (findExtractedCDRoot(requested, cdRoot)) {
 			_currentCD = canonicalCDLabel(cdRoot.getName());
 		} else {
 			_currentCD.clear();

@@ -386,10 +386,19 @@ int CyberflixEngine::calcMod(int a, int b) {
 // cursor(...) -> TI.EXE FUN_00446920, with the script name already resolved
 // to a PE resource name by the VM (see CyberflixEngine::setCursorResource).
 void CyberflixEngine::setCursorResource(const Common::String &resourceName) {
-	if (setGameCursor(resourceName))
+	if (setGameCursor(resourceName)) {
 		CursorMan.showMouse(true);
-	else
-		warning("Cyberflix: cursor resource '%s' not found in TI.EXE", resourceName.c_str());
+	} else if (_cursorRuntime.haveCursorExe()) {
+		// The runtime was located but does not carry this resource: a genuinely
+		// missing cursor, not a layout problem.
+		warning("Cyberflix: cursor resource '%s' not found in the game executable",
+				resourceName.c_str());
+	} else {
+		// No executable at all; gameExe() already reported where it searched, so
+		// keep this to one line per cursor rather than repeating the paths.
+		warning("Cyberflix: cursor '%s' unavailable: no game executable with cursor "
+				"resources was found", resourceName.c_str());
+	}
 }
 
 bool CyberflixEngine::actionFrame(int n) {
@@ -780,8 +789,14 @@ Common::Error CyberflixEngine::run() {
 	// other full-screen movies live alongside it in MOVIES.
 	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
 	if (getGameType() == GType_Titanic) {
-		Common::FSNode cd1Root;
-		if (findExtractedCDRoot("Titanic1", cd1Root)) {
+		Common::FSNode cd1Root, flatRoot;
+		// A repackaged install (the Steam build) merges both CDs into one
+		// directory, so that directory alone is the whole search path. The
+		// game still believes it is running from CD 1.
+		if (findRepackagedDataRoot(flatRoot)) {
+			SearchMan.addDirectory("cyberflix-data", flatRoot, 0, 1, false);
+			_pathRuntime.setCurrentDiscRootName("Titanic1");
+		} else if (findExtractedCDRoot("Titanic1", cd1Root)) {
 			SearchMan.addSubDirectoryMatching(cd1Root, "data");
 			SearchMan.addSubDirectoryMatching(cd1Root, "movies");
 			_pathRuntime.setCurrentDiscRootName(cd1Root.getName());

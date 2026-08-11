@@ -29,6 +29,7 @@ namespace Cyberflix {
 
 Common::String canonicalCDLabel(const Common::String &label);
 bool findExtractedCDRoot(const Common::String &label, Common::FSNode &out);
+bool findRepackagedDataRoot(Common::FSNode &out);
 bool validateTitanicDiscLayout();
 
 class PathRuntime {
