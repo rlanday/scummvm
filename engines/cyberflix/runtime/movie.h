@@ -31,6 +31,32 @@ class CyberflixEngine;
 class MovieRuntime {
 public:
 	void playMovie(CyberflixEngine &engine, const Common::String &name);
+
+	/**
+	 * Diagnostic: decode @p name's frames and write each to a PPM in @p dir.
+	 *
+	 * Frames are emitted in coded order (the order their video resources
+	 * appear in the container), which for a single-segment movie is the order
+	 * the player displays them. Delta frames only decode correctly as a
+	 * sequence, so the whole chain is applied even though every frame is
+	 * written out. Driven by --dump-movie; not part of normal playback.
+	 */
+	bool dumpMovieFrames(CyberflixEngine &engine, const Common::String &name,
+			const Common::String &dir);
+
+private:
+	/** Blit one clipped band of a decoded frame (TI.EXE FUN_00410660). */
+	static void blitMovieBand(CyberflixEngine &engine, const byte *pixels, int w, int h,
+			int x0, int y0, int left, int top, int right, int bottom);
+
+	/**
+	 * Reveal a decoded frame with one of the geometric draw-op transitions
+	 * (TI.EXE FUN_0040eef0's non-blit cases), one band per 60 Hz tick.
+	 * Members rather than free functions so they inherit the engine friendship
+	 * that reaching _system/_eventMan requires.
+	 */
+	static void runMovieTransition(CyberflixEngine &engine, uint16 op, const byte *pixels,
+			int w, int h, int x0, int y0, int steps);
 };
 
 } // End of namespace Cyberflix

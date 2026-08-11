@@ -813,6 +813,16 @@ Common::Error CyberflixEngine::run() {
 	if (getGameType() == GType_Titanic && !validateTitanicDiscLayout())
 		return Common::kNoGameDataFoundError;
 
+	// --dump-movie=NAME: decode that movie's frames to disk and exit without
+	// booting the game, so frame content can be inspected headlessly.
+	if (ConfMan.hasKey("dump_movie")) {
+		const Common::String movieName = ConfMan.get("dump_movie");
+		const Common::String dumpDir =
+				ConfMan.hasKey("dump_movie_dir") ? ConfMan.get("dump_movie_dir") : Common::String(".");
+		_movieRuntime.dumpMovieFrames(*this, movieName, dumpDir);
+		return Common::kNoError;
+	}
+
 	// Clear to black before the boot script paints anything.
 	Palette palette = {};
 	_system->getPaletteManager()->setPalette(palette.data(), 0, kPaletteColorCount);

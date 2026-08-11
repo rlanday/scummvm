@@ -163,6 +163,9 @@ static const char HELP_STRING4[] =
 	"  --debug-channels-only    Show only the specified debug channels\n"
 	"  -u, --dump-scripts       Enable script dumping if a directory called 'dumps'\n"
 	"                           exists in the current directory\n"
+	"  --dump-movie=NAME        Decode NAME's frames to PPM files and exit\n"
+	"                           (CyberFlix engine only)\n"
+	"  --dump-movie-dir=PATH    Directory for --dump-movie output (default: .)\n"
 	"\n"
 	"  --cdrom=DRIVE            CD drive to play CD audio from; can either be a\n"
 	"                           drive, path, or numeric index (default: 0 = best\n"
@@ -882,6 +885,12 @@ Common::String parseCommandLine(Common::StringMap &settings, int argc, const cha
 			END_OPTION
 
 			DO_OPTION_BOOL('u', "dump-scripts")
+			END_OPTION
+
+			DO_LONG_OPTION_ALIASED("dump-movie", "dump_movie")
+			END_OPTION
+
+			DO_LONG_OPTION_ALIASED("dump-movie-dir", "dump_movie_dir")
 			END_OPTION
 
 			DO_OPTION_OPT('x', "save-slot", "0")

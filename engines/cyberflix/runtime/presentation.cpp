@@ -226,8 +226,13 @@ int CyberflixEngine::stringWidth(const Common::String &text, int fontId, int siz
 // does NOT re-render props. Scripts redraw first via visualeffect(plain, 0).
 void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool toBlack) {
 	Palette to = {};
-	if (!resolveClut(target, to))
+	if (!resolveClut(target, to)) {
+		// A 'set'/'stage'/'puppet' clut that is not loaded resolves to nothing,
+		// and the fade is skipped: the transition simply does not happen.
+		debug(1, "Cyberflix: %s('%s', %d) skipped: clut unavailable",
+				toBlack ? "screentoblack" : "blacktoscreen", target.c_str(), steps);
 		return;
+	}
 	if (steps < 1)
 		steps = 1;
 

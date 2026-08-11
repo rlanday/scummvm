@@ -107,11 +107,31 @@ enum class MovieCommand : uint16 {
 };
 
 // Per-frame draw command (event chunk +0xc; TI.EXE FUN_0040eef0 switch).
+//
+// The switch has 23 cases. 0x10/0x11/0x12 take the frame pointer and are the
+// plain blit and the two palette fades; every other case takes the movie rect
+// and is a geometric transition that reveals the new frame a band at a time
+// (handlers at 0x0040f250..0x00410520). Those transition ops correspond to the
+// script-side visualeffect selectors as op N == 0x5dc1 + N, but they are a
+// separate implementation from the script effect family at 0x00443bb0+.
+//
+// Only these four transition ops appear anywhere in the shipped data: op 0 in
+// RUBAIYAT, op 1 in CONKDEAD/RUBAIYAT, op 3 in BEDMEM (the fireplace scrapbook)
+// and op 0x0b in the TOUR movies. The other sixteen handlers are dead content.
 enum MovieDrawOp {
-	kMovieDrawBlit = 0x10,    ///< plain blit
-	kMovieDrawFadeOut = 0x11, ///< blit + palette fade to black across the hold
-	kMovieDrawFadeIn = 0x12   ///< blit (palette black) + palette fade in
+	kMovieDrawBarnClose = 0x00, ///< two bands from the edges, meeting at the centre
+	kMovieDrawBarnOpen = 0x01,  ///< two bands from the centre, moving apart
+	kMovieDrawIrisOpen = 0x03,  ///< box growing from the centre on all four sides
+	kMovieDrawWipe = 0x0b,      ///< one band sweeping from the right edge leftwards
+	kMovieDrawBlit = 0x10,      ///< plain blit
+	kMovieDrawFadeOut = 0x11,   ///< blit + palette fade to black across the hold
+	kMovieDrawFadeIn = 0x12     ///< blit (palette black) + palette fade in
 };
+
+static bool isMovieTransitionOp(uint16 op) {
+	return op == kMovieDrawBarnClose || op == kMovieDrawBarnOpen ||
+			op == kMovieDrawIrisOpen || op == kMovieDrawWipe;
+}
 
 // Cap on nested GOSUB movies. The native player has no explicit stack limit;
 // this is a ScummVM guard against a malformed MARKER/RETURN loop.
@@ -145,6 +165,126 @@ struct MovieReturnFrame {
 	Common::String name;
 	int frame;
 };
+
+// Blit one clipped band of the decoded frame (TI.EXE FUN_00410660: intersect
+// the band with the movie rect, offset by the movie origin, then copy).
+void MovieRuntime::blitMovieBand(CyberflixEngine &engine, const byte *pixels, int w, int h,
+		int x0, int y0, int left, int top, int right, int bottom) {
+	left = MAX(left, 0);
+	top = MAX(top, 0);
+	right = MIN(right, w);
+	bottom = MIN(bottom, h);
+	if (right <= left || bottom <= top)
+		return;
+
+	Graphics::Surface *screen = engine._system->lockScreen();
+	for (int y = top; y < bottom; ++y) {
+		const int dstY = y0 + y;
+		if (dstY < 0 || dstY >= screen->h)
+			continue;
+		int dstX = x0 + left;
+		int count = right - left;
+		int srcX = left;
+		if (dstX < 0) {
+			srcX -= dstX;
+			count += dstX;
+			dstX = 0;
+		}
+		if (dstX + count > screen->w)
+			count = screen->w - dstX;
+		if (count > 0)
+			memcpy(screen->getBasePtr(dstX, dstY), pixels + y * w + srcX, count);
+	}
+	engine._system->unlockScreen();
+}
+
+// Geometric frame transitions (TI.EXE FUN_0040eef0 cases other than
+// 0x10..0x12). Each reveals the newly decoded frame a band at a time over
+// @p steps ticks of the 60 Hz scaled timer, then blits the whole rect. The
+// per-band geometry below is a direct port of FUN_0040f250 (barn close),
+// FUN_0040f330 (barn open), FUN_0040f570 (iris open) and FUN_0040fb40 (wipe);
+// the pacing mirrors FUN_00410620, which waits until tick (start + i).
+void MovieRuntime::runMovieTransition(CyberflixEngine &engine, uint16 op, const byte *pixels,
+		int w, int h, int x0, int y0, int steps) {
+	if (steps < 1)
+		steps = 1;
+
+	// Halved increments: the two-sided effects each cover half the extent.
+	const int stepX = (w / (steps * 2)) + 1;
+	const int stepY = (h / (steps * 2)) + 1;
+	const int cx = w / 2, cy = h / 2;
+	// The single-band wipe divides by steps rather than steps*2.
+	const int wipeStep = (w / steps) + 1;
+
+	// Starting geometry per op, matching each handler's pre-loop setup.
+	int aL = 0, aT = 0, aR = 0, aB = 0; // primary band/box
+	int bL = 0, bT = 0, bR = 0, bB = 0; // second band (barn-door ops only)
+	const bool twoBands = (op == kMovieDrawBarnClose || op == kMovieDrawBarnOpen);
+	switch (op) {
+	case kMovieDrawBarnClose: // bands at the left and right edges, closing inwards
+		aL = 0;         aT = 0; aR = stepX;  aB = h;
+		bL = w - stepX; bT = 0; bR = w;      bB = h;
+		break;
+	case kMovieDrawBarnOpen: // bands at the centre, opening outwards
+		aL = cx - stepX; aT = 0; aR = cx;         aB = h;
+		bL = cx;         bT = 0; bR = cx + stepX; bB = h;
+		break;
+	case kMovieDrawIrisOpen: // box at the centre, growing on all four sides
+		aL = cx - stepX; aT = cy - stepY; aR = cx + stepX; aB = cy + stepY;
+		break;
+	case kMovieDrawWipe: // band at the right edge, sweeping left
+		aL = w - wipeStep; aT = 0; aR = w; aB = h;
+		break;
+	default:
+		return;
+	}
+
+	const uint32 startMs = engine._system->getMillis();
+	for (int i = 0; i < steps && !engine.shouldQuit(); ++i) {
+		blitMovieBand(engine, pixels, w, h, x0, y0, aL, aT, aR, aB);
+		if (twoBands)
+			blitMovieBand(engine, pixels, w, h, x0, y0, bL, bT, bR, bB);
+		engine._system->updateScreen();
+
+		switch (op) {
+		case kMovieDrawBarnClose: // both bands march towards the centre
+			aL += stepX; aR += stepX;
+			bL -= stepX; bR -= stepX;
+			break;
+		case kMovieDrawBarnOpen: // both bands march towards the edges
+			aL -= stepX; aR -= stepX;
+			bL += stepX; bR += stepX;
+			break;
+		case kMovieDrawIrisOpen: // grow on every side
+			aL -= stepX; aR += stepX;
+			aT -= stepY; aB += stepY;
+			break;
+		case kMovieDrawWipe: // band marches left
+			aL -= wipeStep; aR -= wipeStep;
+			break;
+		default:
+			break;
+		}
+
+		// One step per 60 Hz tick, and let the user abort (FUN_00410620 polls
+		// the event pump and returns non-zero on quit/skip).
+		const uint32 deadline = startMs + static_cast<uint32>((static_cast<uint64>(i + 1) * 1000 / 60));
+		const uint32 now = engine._system->getMillis();
+		if (now < deadline)
+			engine._system->delayMillis(deadline - now);
+		Common::Event event;
+		while (engine._eventMan->pollEvent(event)) {
+			if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER)
+				engine.requestQuit();
+		}
+	}
+
+	// Trailing full-rect blit (every handler ends with FUN_00410660(rect, rect)).
+	Graphics::Surface *screen = engine._system->lockScreen();
+	copyFramePixelsToScreen(*screen, pixels, w, h, x0, y0);
+	engine._system->unlockScreen();
+	engine._system->updateScreen();
+}
 
 // Resolve a frame name (as used by GOTO buttons) to its index in the per-frame
 // table, mirroring FUN_0040e050. Returns -1 if not found.
@@ -223,6 +363,93 @@ static bool runMovieCommand(MovieCommand command, const Common::String &currentM
 				currentMovieName.c_str(), source, static_cast<uint>(command), currentFrame);
 		return true;
 	}
+}
+
+// Diagnostic frame dump (--dump-movie). Writes one binary PPM per frame so the
+// decoded pixels can be inspected outside the game; PPM keeps this free of any
+// optional image-encoder dependency.
+bool MovieRuntime::dumpMovieFrames(CyberflixEngine &engine, const Common::String &name,
+		const Common::String &dir) {
+	Common::File file;
+	if (!file.open(Common::Path(name))) {
+		warning("Cyberflix: dump-movie: could not open '%s'", name.c_str());
+		return false;
+	}
+	int64 fileSize = file.size();
+	if (fileSize <= 0)
+		return false;
+	uint32 size = static_cast<uint32>(fileSize);
+	Common::Array<byte> fileData(size);
+	if (file.read(fileData.begin(), size) != size)
+		return false;
+	file.close();
+
+	Archive archive;
+	if (!archive.open(new Common::MemoryReadStream(fileData.begin(), size, DisposeAfterUse::NO), name)) {
+		warning("Cyberflix: dump-movie: '%s' is not a valid movie container", name.c_str());
+		return false;
+	}
+
+	// Palette from the master header (+0x6c: 256 ColorSpec entries of 8 bytes,
+	// each channel's high byte at odd offsets), matching the playback path.
+	Palette pal = {};
+	const int masterIdx = findMasterHeaderIndex(archive);
+	if (masterIdx >= 0) {
+		const byte *hdr = resourceEngineBase(fileData, archive.getResource(masterIdx));
+		if (hdr && hdr + 0x86c <= fileData.end()) {
+			const byte *clut = hdr + 0x6c;
+			for (uint32 k = 0; k < kPaletteColorCount; ++k) {
+				const byte *ent = clut + k * 8;
+				const uint32 color = Palette::colorOffset(k);
+				pal[color + 0] = ent[3];
+				pal[color + 1] = ent[5];
+				pal[color + 2] = ent[7];
+			}
+		}
+	}
+
+	FrameSequence seq;
+	uint frameNo = 0;
+	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
+		const Archive::Resource &res = archive.getResource(i);
+		if (res.empty || (res.info >> 16) != kFrameInfoHigh || res.dataOffset < 4)
+			continue;
+		if (seq.applyFrame(fileData.begin() + res.dataOffset - 4, res.length + 4) == 0) {
+			warning("Cyberflix: dump-movie: frame %u (resource %u) failed to decode", frameNo, i);
+			break;
+		}
+
+		const int w = seq.width(), h = seq.height();
+		const byte *pixels = seq.pixels();
+		if (!pixels || w <= 0 || h <= 0)
+			break;
+
+		Common::String path = Common::String::format("%s/%s.%03u.ppm",
+				dir.c_str(), name.c_str(), frameNo);
+		Common::DumpFile out;
+		if (!out.open(Common::Path(path, '/'), true)) {
+			warning("Cyberflix: dump-movie: could not write '%s'", path.c_str());
+			return false;
+		}
+		Common::String header = Common::String::format("P6\n%d %d\n255\n", w, h);
+		out.writeString(header);
+		for (int y = 0; y < h; ++y) {
+			for (int x = 0; x < w; ++x) {
+				const uint32 c = Palette::colorOffset(pixels[y * w + x]);
+				out.writeByte(pal[c + 0]);
+				out.writeByte(pal[c + 1]);
+				out.writeByte(pal[c + 2]);
+			}
+		}
+		out.close();
+		debug(0, "Cyberflix: dump-movie: frame %u (resource %u) %dx%d -> %s",
+				frameNo, i, w, h, path.c_str());
+		frameNo++;
+	}
+
+	debug(0, "Cyberflix: dump-movie: wrote %u frame(s) from '%s'", frameNo, name.c_str());
+	(void)engine;
+	return frameNo > 0;
 }
 
 void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name) {
@@ -779,12 +1006,25 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				engine.programPalette(moviePal);
 				moviePalApplied = true;
 			}
-			Graphics::Surface *screen = engine._system->lockScreen();
-			// Movie frames are opaque. Clip once and copy full rows instead of
-			// doing a per-pixel getBasePtr() loop for every presented frame.
-			copyFramePixelsToScreen(*screen, pixels, w, h, x0, y0);
-			engine._system->unlockScreen();
-			engine._system->updateScreen();
+			if (isMovieTransitionOp(drawOp)) {
+				// This frame is revealed by a geometric transition rather than a
+				// straight blit. It runs over the frame's authored hold, one band
+				// per 60 Hz tick, so the frame loop's own wait afterwards is
+				// already (or nearly) satisfied.
+				uint32 holdMs = (usePF && frameIndex < pfHoldMs.size()) ? pfHoldMs[frameIndex]
+						: kFallbackFrameDelayMs;
+				int steps = static_cast<int>(holdMs * 60 / 1000);
+				debug(1, "Cyberflix: movie '%s' frame %d transition op %#04x over %d step(s)",
+						currentMovieName.c_str(), fi, drawOp, steps);
+				runMovieTransition(engine, drawOp, pixels, w, h, x0, y0, steps);
+			} else {
+				Graphics::Surface *screen = engine._system->lockScreen();
+				// Movie frames are opaque. Clip once and copy full rows instead of
+				// doing a per-pixel getBasePtr() loop for every presented frame.
+				copyFramePixelsToScreen(*screen, pixels, w, h, x0, y0);
+				engine._system->unlockScreen();
+				engine._system->updateScreen();
+			}
 
 			// Palette fade across this frame's authored hold time, one step per
 			// 60 Hz tick (FUN_00410120 / FUN_004101a0): 0x12 = reveal the frame
