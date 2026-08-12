@@ -22,7 +22,10 @@
 #ifndef CYBERFLIX_RUNTIME_MOVIE_H
 #define CYBERFLIX_RUNTIME_MOVIE_H
 
+#include "common/array.h"
 #include "common/str.h"
+
+#include "audio/mixer.h"
 
 namespace Cyberflix {
 
@@ -57,6 +60,10 @@ private:
 	 */
 	static void runMovieTransition(CyberflixEngine &engine, uint16 op, const byte *pixels,
 			int w, int h, int x0, int y0, int steps);
+
+	/** True while any frame cue is still sounding (TI.EXE FUN_0042fcc0). */
+	static bool cueStillPlaying(CyberflixEngine &engine,
+			const Common::Array<Audio::SoundHandle> &handles);
 };
 
 } // End of namespace Cyberflix

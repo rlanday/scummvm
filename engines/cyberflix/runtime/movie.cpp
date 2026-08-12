@@ -375,6 +375,18 @@ static bool runMovieCommand(MovieCommand command, const Common::String &currentM
 	}
 }
 
+// TI.EXE FUN_0042fcc0 ("DAT_00460aac == 0") reports whether the single cue
+// channel is still sounding; FUN_0040e0b0 spins on it for frames flagged at
+// event chunk +6 bit 0.
+bool MovieRuntime::cueStillPlaying(CyberflixEngine &engine,
+		const Common::Array<Audio::SoundHandle> &handles) {
+	for (uint i = 0; i < handles.size(); ++i) {
+		if (engine._mixer->isSoundHandleActive(handles[i]))
+			return true;
+	}
+	return false;
+}
+
 // Diagnostic frame dump (--dump-movie). Writes one binary PPM per frame so the
 // decoded pixels can be inspected outside the game; PPM keeps this free of any
 // optional image-encoder dependency.
@@ -914,6 +926,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			currentMovieName.c_str(), pfVideoRes.empty() ? frames.size() : pfVideoRes.size(), pcmBuf.size(), frameSfxBytes,
 			static_cast<uint32>((static_cast<uint64>(pcmBuf.size()) * 1000 / kAudioSampleRate)));
 
+
 	// Composite frames in order into a persistent surface (frames are
 	// inter-coded) and present them. Esc skips a skippable movie; quit stops.
 	//
@@ -1172,6 +1185,14 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			uint32 holdMs = fadedThisFrame ? 0
 					: ((frameIndex < pfHoldMs.size()) ? pfHoldMs[frameIndex] : kFallbackFrameDelayMs);
 			uint32 holdStart = engine._system->getMillis();
+			// FUN_0040e0b0: a frame flagged at event chunk +6 bit 0 holds past
+			// its authored time until the cue channel goes idle. This path is
+			// taken by every frame of a movie that has any interactive frame at
+			// all, which includes the narration-paced tour movies.
+			const bool waitForCue = usePF && frameIndex < pfWaitForCue.size() && pfWaitForCue[frameIndex];
+			if (waitForCue)
+				debug(1, "Cyberflix: movie '%s' frame %d holds for its cue",
+						currentMovieName.c_str(), fi);
 			while (!engine.shouldQuit() && !skip) {
 				bool cursorDirty = false;
 				const Common::Point oldMouse = engine._eventMan->getMousePos();
@@ -1180,7 +1201,8 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 						cursorDirty = true;
 					holdStart += engine.handleMovieHotkeys(event, movieSkippable, audioHandle, skip);
 				}
-				if (engine._system->getMillis() - holdStart >= holdMs)
+				if (engine._system->getMillis() - holdStart >= holdMs &&
+						!(waitForCue && cueStillPlaying(engine, frameSfxHandles)))
 					break;
 				const Common::Point newMouse = engine._eventMan->getMousePos();
 				if (cursorDirty || oldMouse.x != newMouse.x || oldMouse.y != newMouse.y)
@@ -1239,18 +1261,9 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 					? engine._mixer->getSoundElapsedTime(audioHandle)
 					: (engine._system->getMillis() - wallStartMs);
 			if (t >= frameEndMs) {
-				// FUN_0040e0b0: frames flagged at event chunk +6 bit 0 hold past
-				// their authored time until the cue channel is idle.
-				bool cueBusy = false;
-				if (usePF && frameIndex < pfWaitForCue.size() && pfWaitForCue[frameIndex]) {
-					for (uint h = 0; h < frameSfxHandles.size(); ++h) {
-						if (engine._mixer->isSoundHandleActive(frameSfxHandles[h])) {
-							cueBusy = true;
-							break;
-						}
-					}
-				}
-				if (!cueBusy)
+				// Same cue gate as the interactive path above.
+				const bool waitForCue = usePF && frameIndex < pfWaitForCue.size() && pfWaitForCue[frameIndex];
+				if (!waitForCue || !cueStillPlaying(engine, frameSfxHandles))
 					break;
 				// The original rebases the next deadline off "now" once the wait
 				// ends (FUN_0040e8b0), so park our cumulative clock to match and
