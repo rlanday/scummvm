@@ -866,6 +866,19 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// timeline we fall back to a fixed cadence.
 	FrameSequence seq;
 	const uint32 kFallbackFrameDelayMs = 66; // ~15 fps when there is no frame timeline
+	// Absolute deadline (getMillis) of the frame cue currently playing, if any.
+	//
+	// UNVERIFIED against TI.EXE. The player's frame loop (FUN_0040ca80 ->
+	// FUN_0040e8b0 -> FUN_0040d710) advances purely on the frame's authored
+	// hold, and none of the three gates that could wait on audio engage for the
+	// tour movies: the cue-schedule table at master header +0x68 is empty, the
+	// SFX records' target-frame field is blank, and DAT_0045ee78 stays 0. Read
+	// literally the original would cut every narration line off after its
+	// frame's 50-333 ms, which the shipped content plainly is not doing --
+	// TOUR9.MOV pairs 16 lines (~90 s) with 3.1 s of authored frame time. Some
+	// gate outside the frame loop is still unaccounted for, so hold the frame
+	// until its own cue finishes; revisit if that gate turns up.
+	uint32 cueHoldUntilMs = 0;
 	bool skip = false;
 	Common::Event event;
 
@@ -979,8 +992,12 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			engine._actionFrameMask |= 1;
 		if (fi == actionCue2)
 			engine._actionFrameMask |= 2;
-		if (playFrameSfxLive && frameIndex < pfFrameSfx.size() && pfFrameSfx[frameIndex])
+		if (playFrameSfxLive && frameIndex < pfFrameSfx.size() && pfFrameSfx[frameIndex]) {
 			playMovieFrameSfx(engine._mixer, frameSfxHandles, *pfFrameSfx[frameIndex], engine.audioRuntime().effectiveAudioVolume(255));
+			const uint32 cueMs = static_cast<uint32>(
+					static_cast<uint64>(pfFrameSfx[frameIndex]->size()) * 1000 / kAudioSampleRate);
+			cueHoldUntilMs = engine._system->getMillis() + cueMs;
+		}
 
 		// Current playback clock: real audio position while the track plays,
 		// else elapsed wall time (covers the post-music fade and silent movies).
@@ -1230,8 +1247,14 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			uint32 t = (hasMovieAudio && engine._mixer->isSoundHandleActive(audioHandle))
 					? engine._mixer->getSoundElapsedTime(audioHandle)
 					: (engine._system->getMillis() - wallStartMs);
-			if (t >= frameEndMs)
-				break;
+			if (t >= frameEndMs) {
+				if (engine._system->getMillis() >= cueHoldUntilMs)
+					break;
+				// Park the movie clock at this frame's end while its cue plays
+				// out, so the frames after it keep their authored spacing
+				// instead of all coming due at once.
+				wallStartMs = engine._system->getMillis() - static_cast<uint32>(frameEndMs);
+			}
 			if (movieShowsCursor)
 				CursorMan.showMouse(true);
 			const Common::Point newMouse = engine._eventMan->getMousePos();
