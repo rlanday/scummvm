@@ -66,10 +66,20 @@ static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, u
 	}
 }
 
+// Frame cues play into ONE slot. TI.EXE FUN_0040ebf0 stops the cue channel
+// (FUN_0042f690(0,0,0,1)) and frees the loaded sound (FUN_00430430) before
+// loading and starting the next one, so a frame's cue always cuts off whatever
+// the previous frame started. Letting them overlap instead stacks every cue in
+// the movie on top of itself -- TOUR9.MOV alone would play sixteen narration
+// lines at once.
 static void playMovieFrameSfx(Audio::Mixer *mixer, Common::Array<Audio::SoundHandle> &handles,
 		const Common::Array<byte> &pcm, byte volume) {
 	if (!mixer || pcm.empty())
 		return;
+
+	for (uint i = 0; i < handles.size(); ++i)
+		mixer->stopHandle(handles[i]);
+	handles.clear();
 
 	Audio::SoundHandle handle;
 	Audio::SeekableAudioStream *stream = makeOwnedRawPcmStream(pcm);
