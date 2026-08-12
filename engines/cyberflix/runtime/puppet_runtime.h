@@ -93,6 +93,8 @@ private:
 			uint32 frameIndex, bool present,
 			const Common::Array<byte> *cachedBackdrop = nullptr);
 	void renderBevels(CyberflixEngine &engine, bool present);
+	void drawBevelHighlight(CyberflixEngine &engine, const Common::Rect &rect);
+	void strokeBevelHighlight(Graphics::Surface &screen, const Common::Rect &rect) const;
 	void playAction(CyberflixEngine &engine, const Puppet::ActionEntry &action);
 
 	/**
@@ -114,7 +116,8 @@ private:
 	 *  Named for the slots the engine itself consumes; the rest are stored and
 	 *  read back by scripts only. */
 	enum PuppetParamIndex {
-		kPuppetParamTextColor = 2, ///< Speech text palette index.
+		kPuppetParamTextColor = 2,   ///< Speech text palette index.
+		kPuppetParamBevelColor = 3,  ///< Frame drawn around a clicked bevel option.
 		kPuppetParamTextSize = 5,  ///< Speech text point size.
 		kPuppetParamTextIndent = 9 ///< Speech text x-offset inside the bevel.
 	};
@@ -122,6 +125,11 @@ private:
 	int16 _params[10] = { 0, 0x80, 0xfa, 0xfb, 0x378, 0x0c, 0, 0, 2, 8 };
 	Audio::SoundHandle _speechHandle;
 	Common::Array<BevelOption> _bevels;
+	/** Index of the option the player clicked, or -1. The original strokes the
+	 *  frame once straight to the screen and never repaints that panel while
+	 *  the reply plays; we redraw the panel every puppet frame, so the
+	 *  selection has to be part of its state to survive. */
+	int _highlightBevel = -1;
 	/**
 	 * Ring of recently spoken action names (native DAT_00486790, count
 	 * DAT_00486cb4, capped at 3). puppetspeak pushes the action name (skipping a

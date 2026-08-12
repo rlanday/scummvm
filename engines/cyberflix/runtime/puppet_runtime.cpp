@@ -67,6 +67,7 @@ void PuppetRuntime::open(const Common::SharedPtr<Puppet> &puppet) {
 	_currentAction.clear();
 	_currentFrame = 0;
 	_bevels.clear();
+	_highlightBevel = -1;
 	_spokenActions.clear();
 }
 
@@ -79,6 +80,7 @@ void PuppetRuntime::close(Audio::Mixer *mixer) {
 	_currentAction.clear();
 	_currentFrame = 0;
 	_bevels.clear();
+	_highlightBevel = -1;
 	_spokenActions.clear();
 }
 
@@ -175,6 +177,7 @@ void PuppetRuntime::puppetClear(CyberflixEngine &engine) {
 		return;
 	}
 	_bevels.clear();
+	_highlightBevel = -1;
 	renderCurrentFrame(engine, true);
 	debug(1, "Cyberflix: puppetclear()");
 }
@@ -211,6 +214,7 @@ void PuppetRuntime::puppetBevel(CyberflixEngine &engine, const Common::String &n
 	option.id = mode;
 	const int top = kScreenHeight + (static_cast<int>(_bevels.size()) - 5) * 24;
 	option.rect = Common::Rect(0, top, kScreenWidth, top + 24);
+	_highlightBevel = -1;
 	_bevels.push_back(option);
 	renderBevels(engine, true);
 	debug(1, "Cyberflix: puppetbevel('%s', %d)", name.c_str(), mode);
@@ -290,8 +294,15 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 				const int id = _bevels[i].id;
 				debug(1, "Cyberflix: puppetevent(%d) click (%d,%d) -> %d",
 						timeout, mouse.x, mouse.y, id);
-				_bevels.clear();
-				renderCurrentFrame(engine, true);
+				// Frame the chosen option and leave it up: the original draws
+				// the highlight and then starts the response over it, rather
+				// than clearing the panel first.
+				// Frame the chosen option and leave the panel standing. Only
+				// puppetclear() empties the option list (FUN_00447e00 is the
+				// sole writer of DAT_00486798 besides puppet open), so the
+				// highlighted choice stays visible while the reply plays.
+				_highlightBevel = static_cast<int>(i);
+				drawBevelHighlight(engine, _bevels[i].rect);
 				return id;
 			}
 			// Click-on-character to repeat the last spoken line (native
@@ -594,9 +605,47 @@ void PuppetRuntime::renderBevels(CyberflixEngine &engine, bool present) {
 					kScreenWidth - x, static_cast<uint32>(CLIP<int>(_params[kPuppetParamTextColor], 0, 255)));
 		}
 	}
+	// The original strokes the selection once straight to the screen and never
+	// repaints this panel while the reply plays (FUN_00449370 draws only the
+	// backdrop and the option strings). We repaint it every puppet frame, so
+	// the selection has to be redrawn here or it survives a single frame.
+	if (_highlightBevel >= 0 && _highlightBevel < static_cast<int>(_bevels.size()))
+		strokeBevelHighlight(*screen, _bevels[_highlightBevel].rect);
 	engine._system->unlockScreen();
 	if (present)
 		engine._system->updateScreen();
+}
+
+// Frame a clicked dialogue option (TI.EXE FUN_00449e40): once a click hits a
+// bevel rect the player sets pen width 3 (FUN_00407300) and the colour in
+// puppet parameter 4 (FUN_004072d0(DAT_0046123a)), then strokes the option's
+// rect with GDI Rectangle() (FUN_00407e00). That call insets the path by
+// penWidth/2, and a centred 3-pixel pen spans one pixel either side of it, so
+// the stroke covers the outermost three pixels of the rect -- three nested
+// frames. The original leaves the frame on screen and starts the response over
+// it; it is not erased on a timer.
+void PuppetRuntime::strokeBevelHighlight(Graphics::Surface &screen, const Common::Rect &rect) const {
+	const uint32 color = static_cast<uint32>(CLIP<int>(_params[kPuppetParamBevelColor], 0, 255));
+	for (int i = 0; i < 3; ++i) {
+		Common::Rect edge(rect.left + i, rect.top + i, rect.right - i, rect.bottom - i);
+		edge.clip(Common::Rect(kScreenWidth, kScreenHeight));
+		if (!edge.isEmpty())
+			screen.frameRect(edge, color);
+	}
+}
+
+void PuppetRuntime::drawBevelHighlight(CyberflixEngine &engine, const Common::Rect &rect) {
+	Common::Rect clipped = rect;
+	clipped.clip(Common::Rect(kScreenWidth, kScreenHeight));
+	if (clipped.isEmpty())
+		return;
+
+	Graphics::Surface *screen = engine._system->lockScreen();
+	strokeBevelHighlight(*screen, rect);
+	engine._system->unlockScreen();
+	engine._system->updateScreen();
+	debug(1, "Cyberflix: bevel highlight (%d,%d)-(%d,%d) color %d",
+			rect.left, rect.top, rect.right, rect.bottom, _params[kPuppetParamBevelColor]);
 }
 
 void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntry &action) {
@@ -608,7 +657,8 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 		return;
 	_currentAction = action.name;
 	_currentFrame = 0;
-	_bevels.clear();
+	// Speaking does not discard queued bevel options: DAT_00486798 is only
+	// reset by puppetclear() (FUN_00447e00) and by opening a puppet.
 	engine._mixer->stopHandle(_speechHandle);
 
 	Common::Array<byte> pcm;
