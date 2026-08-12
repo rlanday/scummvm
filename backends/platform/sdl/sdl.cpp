@@ -618,6 +618,22 @@ void OSystem_SDL::initSDL() {
 		// or otherwise the application won't start.
 		uint32 sdlFlags = SDL_INIT_VIDEO;
 
+#ifdef MACOSX
+		// Hold a key to repeat it, rather than opening the accents menu.
+		//
+		// SDL2 always registered ApplePressAndHoldEnabled=NO for the process
+		// (SDL_cocoaevents.m, +registerUserDefaults), so a held key repeated.
+		// SDL3 made that a hint and defaults it the other way, and macOS
+		// withholds key repeat for as long as the accents menu is displayed --
+		// which breaks any engine that steers the player with held keys.
+		//
+		// The hint must be set before SDL_Init(). It is named by string rather
+		// than SDL_HINT_MAC_PRESS_AND_HOLD so this also reaches SDL3 through
+		// sdl2-compat, whose SDL2 headers do not define the macro. SDL2 ignores
+		// unknown hints, and it already behaves this way.
+		SDL_SetHint("SDL_MAC_PRESS_AND_HOLD", "0");
+#endif
+
 #if !SDL_VERSION_ATLEAST(3, 0, 0)
 		if (ConfMan.hasKey("disable_sdl_parachute"))
 			sdlFlags |= SDL_INIT_NOPARACHUTE;
