@@ -563,6 +563,13 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// Per-frame draw command (MovieDrawOp). These author the menu fade-out
 	// (PLAYMODE 'GAME 2' 0x11) and the movie fade-ins (frame 0 0x12).
 	Common::Array<uint16> pfDrawOp;
+	// Event chunk byte +6 bit 0: after this frame's authored hold, block until
+	// the cue channel goes idle (TI.EXE FUN_0040e0b0 spins on FUN_0042fcc0,
+	// which is "DAT_00460aac == 0", the cue channel's active flag). This is how
+	// narration-driven movies pace themselves: TOUR9.MOV sets it on frames 1-15,
+	// the ones carrying Smethells' lines, so each line finishes before the
+	// picture moves on. BEDMEM.MOV leaves it clear on all 39 frames.
+	Common::Array<bool> pfWaitForCue;
 
 	// Whether the movie may be skipped by the user. The original input handler
 	// (TI.EXE FUN_0040e430) only honours the '.'/'Q'/'q' skip keys when the
@@ -719,6 +726,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				pfVideoRes.push_back(segBase + READ_LE_UINT32(rec + 0xc));
 				pfNavCmd.push_back(static_cast<MovieCommand>((eb && eb + 2 <= fileData.end())
 						? READ_LE_UINT16(eb) : static_cast<uint16>(MovieCommand::kNext)));
+				pfWaitForCue.push_back(eb && eb + 7 <= fileData.end() && (eb[6] & 1) != 0);
 				pfDrawOp.push_back((eb && eb + 0xe <= fileData.end())
 						? READ_LE_UINT16(eb + 0xc) : static_cast<uint16>(kMovieDrawBlit));
 				pfName.push_back(readPascalString(rec + 0x1a, fileData, true));
@@ -866,19 +874,6 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// timeline we fall back to a fixed cadence.
 	FrameSequence seq;
 	const uint32 kFallbackFrameDelayMs = 66; // ~15 fps when there is no frame timeline
-	// Absolute deadline (getMillis) of the frame cue currently playing, if any.
-	//
-	// UNVERIFIED against TI.EXE. The player's frame loop (FUN_0040ca80 ->
-	// FUN_0040e8b0 -> FUN_0040d710) advances purely on the frame's authored
-	// hold, and none of the three gates that could wait on audio engage for the
-	// tour movies: the cue-schedule table at master header +0x68 is empty, the
-	// SFX records' target-frame field is blank, and DAT_0045ee78 stays 0. Read
-	// literally the original would cut every narration line off after its
-	// frame's 50-333 ms, which the shipped content plainly is not doing --
-	// TOUR9.MOV pairs 16 lines (~90 s) with 3.1 s of authored frame time. Some
-	// gate outside the frame loop is still unaccounted for, so hold the frame
-	// until its own cue finishes; revisit if that gate turns up.
-	uint32 cueHoldUntilMs = 0;
 	bool skip = false;
 	Common::Event event;
 
@@ -992,12 +987,8 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			engine._actionFrameMask |= 1;
 		if (fi == actionCue2)
 			engine._actionFrameMask |= 2;
-		if (playFrameSfxLive && frameIndex < pfFrameSfx.size() && pfFrameSfx[frameIndex]) {
+		if (playFrameSfxLive && frameIndex < pfFrameSfx.size() && pfFrameSfx[frameIndex])
 			playMovieFrameSfx(engine._mixer, frameSfxHandles, *pfFrameSfx[frameIndex], engine.audioRuntime().effectiveAudioVolume(255));
-			const uint32 cueMs = static_cast<uint32>(
-					static_cast<uint64>(pfFrameSfx[frameIndex]->size()) * 1000 / kAudioSampleRate);
-			cueHoldUntilMs = engine._system->getMillis() + cueMs;
-		}
 
 		// Current playback clock: real audio position while the track plays,
 		// else elapsed wall time (covers the post-music fade and silent movies).
@@ -1248,11 +1239,22 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 					? engine._mixer->getSoundElapsedTime(audioHandle)
 					: (engine._system->getMillis() - wallStartMs);
 			if (t >= frameEndMs) {
-				if (engine._system->getMillis() >= cueHoldUntilMs)
+				// FUN_0040e0b0: frames flagged at event chunk +6 bit 0 hold past
+				// their authored time until the cue channel is idle.
+				bool cueBusy = false;
+				if (usePF && frameIndex < pfWaitForCue.size() && pfWaitForCue[frameIndex]) {
+					for (uint h = 0; h < frameSfxHandles.size(); ++h) {
+						if (engine._mixer->isSoundHandleActive(frameSfxHandles[h])) {
+							cueBusy = true;
+							break;
+						}
+					}
+				}
+				if (!cueBusy)
 					break;
-				// Park the movie clock at this frame's end while its cue plays
-				// out, so the frames after it keep their authored spacing
-				// instead of all coming due at once.
+				// The original rebases the next deadline off "now" once the wait
+				// ends (FUN_0040e8b0), so park our cumulative clock to match and
+				// keep the following frames' spacing.
 				wallStartMs = engine._system->getMillis() - static_cast<uint32>(frameEndMs);
 			}
 			if (movieShowsCursor)
