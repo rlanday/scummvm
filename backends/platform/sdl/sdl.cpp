@@ -258,7 +258,18 @@ void OSystem_SDL::setFeatureState(Feature f, bool enable) {
 	case kFeatureStaleMousePositionWorkaround:
 		_eventSource->setStaleMousePositionWorkaround(enable);
 		break;
-#if SDL_VERSION_ATLEAST(2, 0, 0)
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+	case kFeatureTextInput:
+		// SDL3 scopes text input to a window and no longer enables it by
+		// default; SDL2 has it on globally from the start.
+		if (_window && _window->getSDLWindow()) {
+			if (enable)
+				SDL_StartTextInput(_window->getSDLWindow());
+			else
+				SDL_StopTextInput(_window->getSDLWindow());
+		}
+		break;
+#elif SDL_VERSION_ATLEAST(2, 0, 0)
 	case kFeatureTextInput:
 		if (enable)
 			SDL_StartTextInput();
@@ -280,7 +291,12 @@ bool OSystem_SDL::getFeatureState(Feature f) {
 	case kFeatureStaleMousePositionWorkaround:
 		return _eventSource->getStaleMousePositionWorkaround();
 		break;
-#if SDL_VERSION_ATLEAST(2, 0, 0)
+#if SDL_VERSION_ATLEAST(3, 0, 0)
+	case kFeatureTextInput:
+		return _window && _window->getSDLWindow() &&
+				SDL_TextInputActive(_window->getSDLWindow());
+		break;
+#elif SDL_VERSION_ATLEAST(2, 0, 0)
 	case kFeatureTextInput:
 		return SDL_IsTextInputActive();
 		break;
