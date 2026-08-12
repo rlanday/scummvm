@@ -232,6 +232,9 @@ bool OSystem_SDL::hasFeature(Feature f) {
 #if defined(USE_SCUMMVMDLC)
 	if (f == kFeatureDLC) return true;
 #endif
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	if (f == kFeatureTextInput) return true;
+#endif
 #if SDL_VERSION_ATLEAST(3, 0, 0)
 	if (f == kFeatureTouchpadMode) {
 		int count = 0;
@@ -255,6 +258,14 @@ void OSystem_SDL::setFeatureState(Feature f, bool enable) {
 	case kFeatureStaleMousePositionWorkaround:
 		_eventSource->setStaleMousePositionWorkaround(enable);
 		break;
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	case kFeatureTextInput:
+		if (enable)
+			SDL_StartTextInput();
+		else
+			SDL_StopTextInput();
+		break;
+#endif
 	default:
 		ModularGraphicsBackend::setFeatureState(f, enable);
 		break;
@@ -269,6 +280,11 @@ bool OSystem_SDL::getFeatureState(Feature f) {
 	case kFeatureStaleMousePositionWorkaround:
 		return _eventSource->getStaleMousePositionWorkaround();
 		break;
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	case kFeatureTextInput:
+		return SDL_IsTextInputActive();
+		break;
+#endif
 	default:
 		return ModularGraphicsBackend::getFeatureState(f);
 		break;

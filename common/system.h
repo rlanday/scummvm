@@ -644,6 +644,18 @@ public:
 		* EventTests::staleMousePosition()).
 		*/
 		kFeatureStaleMousePositionWorkaround,
+
+		/**
+		* Text input (dead keys, IME composition) is delivered to the engine.
+		*
+		* Enabled by default. Engines steered with held keys should disable it
+		* while they run: on macOS an active text input context makes the OS
+		* show its press-and-hold accent palette for a held key and withhold
+		* key repeat for as long as it is displayed. Ordinary ASCII key events
+		* are unaffected either way; what is suppressed is composition, so
+		* non-ASCII characters cannot be typed while it is off.
+		*/
+		kFeatureTextInput,
 	};
 
 	/**
