@@ -33,7 +33,7 @@ static const CyberflixGameDescription gameDescriptions[] = {
 			"titanicaoot",
 			"",
 			{
-				{"BOOTFILE", GAME_BOOTFILE, "9a3eb0be9eb91d5c03d8c6a793808b9e", 95488},
+				{"BOOTFILE", 0, "9a3eb0be9eb91d5c03d8c6a793808b9e", 95488},
 				AD_LISTEND
 			},
 			Common::EN_ANY,
@@ -50,7 +50,7 @@ static const CyberflixGameDescription gameDescriptions[] = {
 			"titanicaoot",
 			"",
 			{
-				{"BOOTFILE", GAME_BOOTFILE, "1d59e1f2109bcbceb7f09767fa3538fb", 95488},
+				{"BOOTFILE", 0, "1d59e1f2109bcbceb7f09767fa3538fb", 95488},
 				AD_LISTEND
 			},
 			Common::EN_ANY,

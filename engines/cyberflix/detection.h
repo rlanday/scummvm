@@ -33,10 +33,6 @@ enum CyberflixGameType {
 	GType_Titanic = 0
 };
 
-enum CyberflixGameFileTypes {
-	GAME_BOOTFILE = 1 << 0    // DATA/BOOTFILE: boot script + globals
-};
-
 struct CyberflixGameDescription {
 	AD_GAME_DESCRIPTION_HELPERS(desc);
 
