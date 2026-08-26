@@ -40,13 +40,13 @@ namespace Cyberflix {
 
 class CursorRuntime {
 public:
+	void setExecutableName(const Common::String &name) { _executableName = name; }
 	bool setCursor(const Common::String &name);
 
 	const Common::String &activeCursor() const { return _activeCursor; }
 
-	/** Record the cursor name without applying its bitmap. Used by the load
-	 *  path so the restored name is kept for future saves even when TI.EXE is
-	 *  missing; setCursor() still applies the bitmap on its next call. */
+	/** Record the cursor name without applying its bitmap. Used by the load path
+	 *  to retain the name when the runtime executable is missing. */
 	void setActiveCursorName(const Common::String &name) { _activeCursor = name; }
 
 	/** True once an executable holding cursor resources has been located, so
@@ -62,8 +62,8 @@ private:
 	bool tryLoadExe(const Common::FSNode &node, bool requireCursors = false);
 
 	/** Search @p dir (and @p depth levels below it) for the runtime. With
-	 *  @p byNameOnly only files called TI.EXE are considered and no PE is
-	 *  opened until one matches, which is why that pass can search deeper. */
+	 *  @p byNameOnly only files matching the configured executable are considered;
+	 *  no PE is opened until one matches, so that pass can search deeper. */
 	bool scanForExe(const Common::FSNode &dir, int depth, bool byNameOnly);
 
 	enum {
@@ -73,6 +73,7 @@ private:
 
 	Common::ScopedPtr<Common::PEResources> _exe;
 	bool _exeTried = false;
+	Common::String _executableName;
 	Common::HashMap<Common::String, Common::SharedPtr<Graphics::WinCursorGroup> > _cursorCache;
 	Common::String _activeCursor;  ///< Recorded name (may not be applied yet).
 	Common::String _appliedCursor; ///< Name last handed to CursorMan.

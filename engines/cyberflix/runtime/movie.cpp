@@ -146,6 +146,16 @@ static bool isMovieTransitionOp(uint16 op) {
 // Cap on nested GOSUB movies. The native player has no explicit stack limit;
 // this is a ScummVM guard against a malformed MARKER/RETURN loop.
 static const uint kMovieReturnStackLimit = 5;
+static const uint32 kMusicCueCountOffset = 0x10a;
+static const uint32 kMusicCueTableOffset = 0x10e;
+static const uint32 kMusicCueRecordSize = 0x1a;
+static const uint32 kMovieFrameTableOffset = 0x87c;
+static const uint32 kMovieFrameRecordSize = 0x2a;
+static const uint32 kMovieSfxTableOffset = 8;
+static const uint32 kMovieSfxRecordSize = 0x2a;
+static const uint32 kMovieButtonCountOffset = 0x442;
+static const uint32 kMovieButtonTableOffset = 0x446;
+static const uint32 kMovieButtonRecordSize = 0x40;
 
 // A clickable region on an interactive movie frame. The original player reads
 // the count at event chunk +0x442 and 0x40-byte records at +0x446;
@@ -398,7 +408,7 @@ bool MovieRuntime::dumpMovieFrames(CyberflixEngine &engine, const Common::String
 		return false;
 	}
 	int64 fileSize = file.size();
-	if (fileSize <= 0)
+	if (fileSize <= 0 || fileSize > 0xffffffffLL)
 		return false;
 	uint32 size = static_cast<uint32>(fileSize);
 	Common::Array<byte> fileData(size);
@@ -417,8 +427,9 @@ bool MovieRuntime::dumpMovieFrames(CyberflixEngine &engine, const Common::String
 	Palette pal = {};
 	const int masterIdx = findMasterHeaderIndex(archive);
 	if (masterIdx >= 0) {
-		const byte *hdr = resourceEngineBase(fileData, archive.getResource(masterIdx));
-		if (hdr && hdr + 0x86c <= fileData.end()) {
+		const Archive::Resource &master = archive.getResource(masterIdx);
+		const byte *hdr = resourceEngineBase(fileData, master);
+		if (hdr && static_cast<uint64>(master.length) + 4 >= 0x86c) {
 			const byte *clut = hdr + 0x6c;
 			for (uint32 k = 0; k < kPaletteColorCount; ++k) {
 				const byte *ent = clut + k * 8;
@@ -487,7 +498,6 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		const Common::String currentMovieName = pendingMovieName;
 		const int initialFrame = pendingStartFrame;
 		pendingMovieName.clear();
-		pendingStartFrame = 0;
 
 	Common::File file;
 	if (!file.open(Common::Path(currentMovieName))) {
@@ -496,7 +506,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	}
 
 	int64 fileSize = file.size();
-	if (fileSize <= 0) {
+	if (fileSize <= 0 || fileSize > 0xffffffffLL) {
 		warning("Cyberflix: could not stat movie '%s'", currentMovieName.c_str());
 		return;
 	}
@@ -631,8 +641,10 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		uint64 cumMs = 0; // accumulates frame hold times across all segments
 		while (segBase < archive.getResourceCount() && !visited.contains(segBase)) {
 			visited.setVal(segBase, true);
-			const byte *hdr = resourceEngineBase(fileData, archive.getResource(segBase));
-			if (!hdr || hdr + 0x87c > fileData.end())
+			const Archive::Resource &segmentResource = archive.getResource(segBase);
+			const byte *hdr = resourceEngineBase(fileData, segmentResource);
+			const uint64 segmentSize = static_cast<uint64>(segmentResource.length) + 4;
+			if (!hdr || segmentSize < kMovieFrameTableOffset)
 				break;
 			// Display/cursor properties come from the first segment only.
 			if (segBase == static_cast<uint32>(masterIdx)) {
@@ -647,8 +659,9 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			// DAT_0045ef70 added to every id offset).
 			uint32 musicTableIdx = segBase + READ_LE_UINT32(hdr + 0x64);
 			uint32 sfxTableIdx   = segBase + READ_LE_UINT32(hdr + 0x60);
-			uint32 pfCount       = READ_LE_UINT32(hdr + 0x878);
-			const byte *pfTable  = hdr + 0x87c;
+			uint32 pfCount = boundedRecordCount(READ_LE_UINT32(hdr + 0x878),
+					segmentSize, kMovieFrameTableOffset, kMovieFrameRecordSize);
+			const byte *pfTable = hdr + kMovieFrameTableOffset;
 
 			segmentStartFrame.push_back(pfVideoRes.size());
 
@@ -658,7 +671,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			// segment load. Multi-segment movies (SINK1-6, LEAVE) have different
 			// palettes per segment; using segment 0's palette for all segments
 			// corrupts the colours of every subsequent segment.
-			if (hdr + 0x86c <= fileData.end()) {
+			if (hasBytes(hdr, fileData.end(), 0x86c)) {
 				Palette segPal = {};
 				const byte *clut = hdr + 0x6c;
 				for (uint32 k = 0; k < kPaletteColorCount; ++k) {
@@ -685,13 +698,14 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			// 1. MUSIC track: decode each music-table cue's 22050 Hz resource in
 			//    order. (Skip non-22050 cues such as the silent 11025 Hz pad.)
 			if (musicTableIdx < archive.getResourceCount()) {
-				const byte *mt = resourceEngineBase(fileData, archive.getResource(musicTableIdx));
-				if (mt && mt + 0x10e <= fileData.end()) {
-					uint32 mc = READ_LE_UINT32(mt + 0x10a);
+				const Archive::Resource &musicTableResource = archive.getResource(musicTableIdx);
+				const byte *mt = resourceEngineBase(fileData, musicTableResource);
+				const uint64 musicTableSize = static_cast<uint64>(musicTableResource.length) + 4;
+				if (mt && musicTableSize >= kMusicCueTableOffset) {
+					uint32 mc = boundedRecordCount(READ_LE_UINT32(mt + kMusicCueCountOffset),
+							musicTableSize, kMusicCueTableOffset, kMusicCueRecordSize);
 					for (uint32 e = 0; e < mc; ++e) {
-						const byte *ent = mt + 0x10e + e * 0x1a;
-						if (ent + 0x1a > fileData.end())
-							break;
+						const byte *ent = mt + kMusicCueTableOffset + e * kMusicCueRecordSize;
 						uint32 rid = segBase + READ_LE_UINT32(ent + 4);
 						if (rid >= archive.getResourceCount())
 							continue;
@@ -719,36 +733,42 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			//    the video timeline (~16.6 s) slightly longer than the music
 			//    (~15.9 s); the trailing fade plays over silence, as in the
 			//    original.
-			const byte *st = (sfxTableIdx < archive.getResourceCount())
-					? resourceEngineBase(fileData, archive.getResource(sfxTableIdx)) : nullptr;
-			uint32 sfxCount = (st && st + 8 <= fileData.end()) ? READ_LE_UINT32(st + 4) : 0;
+			const Archive::Resource *sfxTableResource = sfxTableIdx < archive.getResourceCount()
+					? &archive.getResource(sfxTableIdx) : nullptr;
+			const byte *st = sfxTableResource
+					? resourceEngineBase(fileData, *sfxTableResource) : nullptr;
+			const uint64 sfxTableSize = sfxTableResource
+					? static_cast<uint64>(sfxTableResource->length) + 4 : 0;
+			uint32 sfxCount = st && sfxTableSize >= kMovieSfxTableOffset
+					? boundedRecordCount(READ_LE_UINT32(st + 4), sfxTableSize,
+							kMovieSfxTableOffset, kMovieSfxRecordSize)
+					: 0;
 			for (uint32 f = 0; f < pfCount; ++f) {
-				const byte *rec = pfTable + f * 0x2a;
-				if (rec + 0x2a > fileData.end())
-					break;
+				const byte *rec = pfTable + f * kMovieFrameRecordSize;
 				const byte *eb = nullptr;
 				uint32 eventId = segBase + READ_LE_UINT32(rec + 0x10);
-				uint32 ebLen = 0;
+				uint64 eventSize = 0;
 				if (eventId < archive.getResourceCount()) {
-					eb = resourceEngineBase(fileData, archive.getResource(eventId));
-					ebLen = archive.getResource(eventId).length;
+					const Archive::Resource &eventResource = archive.getResource(eventId);
+					eb = resourceEngineBase(fileData, eventResource);
+					eventSize = static_cast<uint64>(eventResource.length) + 4;
 				}
 
 				frameStartMs.push_back(cumMs);
 				pfVideoRes.push_back(segBase + READ_LE_UINT32(rec + 0xc));
-				pfNavCmd.push_back(static_cast<MovieCommand>((eb && eb + 2 <= fileData.end())
+				pfNavCmd.push_back(static_cast<MovieCommand>((eb && eventSize >= 2)
 						? READ_LE_UINT16(eb) : static_cast<uint16>(MovieCommand::kNext)));
-				pfWaitForCue.push_back(eb && eb + 7 <= fileData.end() && (eb[6] & 1) != 0);
-				pfDrawOp.push_back((eb && eb + 0xe <= fileData.end())
+				pfWaitForCue.push_back(eb && eventSize >= 7 && (eb[6] & 1) != 0);
+				pfDrawOp.push_back((eb && eventSize >= 0xe)
 						? READ_LE_UINT16(eb + 0xc) : static_cast<uint16>(kMovieDrawBlit));
 				pfName.push_back(readPascalString(rec + 0x1a, fileData, true));
 				// FUN_0040d710 commands 3/4 use a Pascal movie name at event
 				// chunk +0x22; commands 2/4 use a Pascal frame target at +0x32.
 				// The decompile's +0x19 target is word-indexed; in the raw
 				// record+8 event frame used here it is byte offset +0x32.
-				pfNavMovie.push_back((eb && eb + 0x23 <= fileData.end())
+				pfNavMovie.push_back((eb && eventSize >= 0x23)
 						? readPascalString(eb + 0x22, fileData, true) : Common::String());
-				pfNavTarget.push_back((eb && eb + 0x33 <= fileData.end())
+				pfNavTarget.push_back((eb && eventSize >= 0x33)
 						? readPascalString(eb + 0x32, fileData, true) : Common::String());
 
 				// Interactive buttons: raw event chunks store a u32 count at
@@ -757,13 +777,12 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				// pointer type; FUN_0040e5b0 and HELP*.MOV raw dumps verify the
 				// byte offsets.
 				Common::Array<MovieButton> buttons;
-				uint32 btnCount = (eb && ebLen >= 0x446) ? READ_LE_UINT32(eb + 0x442) : 0;
-				if (eb && ebLen >= 0x446) // clamp the file-supplied count to the chunk
-					btnCount = MIN<uint32>(btnCount, (ebLen - 0x446) / 0x40);
+				uint32 btnCount = eb && eventSize >= kMovieButtonTableOffset
+						? boundedRecordCount(READ_LE_UINT32(eb + kMovieButtonCountOffset),
+								eventSize, kMovieButtonTableOffset, kMovieButtonRecordSize)
+						: 0;
 				for (uint32 b = 0; b < btnCount; ++b) {
-					const byte *br = eb + 0x446 + b * 0x40;
-					if (br + 0x40 > fileData.end())
-						break;
+					const byte *br = eb + kMovieButtonTableOffset + b * kMovieButtonRecordSize;
 					MovieButton mb;
 					mb.action = static_cast<MovieCommand>(READ_LE_UINT16(br));
 					mb.flags  = br[2];
@@ -784,9 +803,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 					if (!cue.empty()) {
 						uint32 sfxResId = static_cast<uint32>(-1);
 						for (uint32 e = 0; e < sfxCount; ++e) {
-							const byte *ent = st + 8 + e * 0x2a;
-							if (ent + 0x2a > fileData.end())
-								break;
+							const byte *ent = st + kMovieSfxTableOffset + e * kMovieSfxRecordSize;
 							if (readPascalString(ent + 0xa, fileData, true) == cue) {
 								sfxResId = segBase + READ_LE_UINT32(ent + 4);
 								break;
@@ -817,7 +834,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 
 				// Advance the timeline by this frame's hold (scaled units -> ms).
 				uint32 units = frameFloorUnits;
-				if (eb && eb + 6 <= fileData.end()) {
+				if (eb && eventSize >= 6) {
 					uint32 d = READ_LE_UINT32(eb + 2);
 					if (d > units)
 						units = d;

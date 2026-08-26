@@ -54,6 +54,7 @@
 #include "cyberflix/cast.h"
 #include "cyberflix/audio_helpers.h"
 #include "cyberflix/cyberflix.h"
+#include "cyberflix/game_support.h"
 #include "cyberflix/archive.h"
 #include "cyberflix/console.h"
 #include "cyberflix/image.h"
@@ -73,19 +74,15 @@ namespace Cyberflix {
 
 static const uint32 kCursorPollIntervalMs = 2;
 static const int kNativeIdleDisplayTicks = 30;
-static const int kCargoPaintingTimerFrames = 10000;
-static const int kCargoPaintingTimerLogSeconds = 10;
-
-static int getGlobalIntValue(const ScriptVM &vm, const char *name) {
-	Common::String key(name);
-	key.toLowercase();
-	const Common::HashMap<Common::String, Value> &vars = vm.globalVars();
-	Common::HashMap<Common::String, Value>::const_iterator it = vars.find(key);
-	return it == vars.end() ? 0 : it->_value.intValue;
-}
 
 CyberflixEngine::CyberflixEngine(OSystem *syst, const CyberflixGameDescription *gameDesc) :
-		Engine(syst), _gameDescription(gameDesc), _rnd("cyberflix"), _console(nullptr) {
+		Engine(syst), _gameDescription(gameDesc),
+		_gameSupport(createGameSupport(gameDesc->gameType)),
+		_rnd("cyberflix"), _console(nullptr) {
+	if (_gameSupport) {
+		_pathRuntime.setGameSupport(_gameSupport.get());
+		_cursorRuntime.setExecutableName(_gameSupport->profile().runtimeExecutable);
+	}
 }
 
 CyberflixEngine::~CyberflixEngine() {
@@ -495,10 +492,6 @@ bool CyberflixEngine::pollInputStateEvents() {
 		case Common::EVENT_LBUTTONUP:
 		case Common::EVENT_RBUTTONDOWN:
 		case Common::EVENT_RBUTTONUP:
-			if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen() &&
-					_stageRuntime.stage()->name().equalsIgnoreCase("enigma.stg"))
-				debug(1, "Cyberflix: Enigma input poll mouse event %d at (%d,%d), buttons=0x%x",
-						event.type, event.mouse.x, event.mouse.y, _eventMan->getButtonState());
 			// Polling has already folded this event into getButtonState(),
 			// which is all button()/stilldown() need. Native (FUN_00436880/
 			// FUN_00436920) reads the live button state without consuming the
@@ -573,17 +566,7 @@ void CyberflixEngine::reassertCursorVisibility() {
 	// gameplay presents cursor motion without changing the CyberFlix cursor
 	// resource, so explicitly reapply ScummVM's current software-cursor state.
 	const bool visible = CursorMan.isVisible();
-	const bool previousVisible = CursorMan.showMouse(visible);
-	const uint32 now = _system->getMillis();
-	if (getGameType() == GType_Titanic && now - _lastCursorDebugLogMillis >= 1000) {
-		_lastCursorDebugLogMillis = now;
-		const Common::Point mouse = _eventMan->getMousePos();
-		debug(2, "Cyberflix: cursor reassert visible=%d previous=%d active='%s' mouse=(%d,%d) stage='%s' flat='%s' set='%s'",
-				visible ? 1 : 0, previousVisible ? 1 : 0,
-				_cursorRuntime.activeCursor().c_str(), mouse.x, mouse.y,
-				_stageRuntime.currentStage().c_str(), _stageRuntime.currentFlat().c_str(),
-				_setRuntime.set() && _setRuntime.set()->isOpen() ? _setRuntime.set()->setName().c_str() : "None");
-	}
+	CursorMan.showMouse(visible);
 }
 
 bool CyberflixEngine::delayMillisWithCursorUpdates(uint32 delayMillis) {
@@ -666,7 +649,7 @@ void CyberflixEngine::forceUpdate() {
 	// FUN_00442100 instead, so script-frame timers advance only on this
 	// forceupdate() compositor path, not on every quiet idle poll.
 	++_frameCounter;
-	debugCargoPaintingTimer();
+	_gameSupport->onForceUpdate(*this);
 	propRuntime().refreshPropsIfDirty(*this, true);
 	if (_puppetRuntime.isVisible()) {
 		puppetRuntime().renderCurrentFrame(*this, true);
@@ -710,74 +693,10 @@ void CyberflixEngine::forceUpdate() {
 	debug(2, "Cyberflix: forceupdate()");
 }
 
-void CyberflixEngine::debugCargoPaintingTimer() {
-	if (getGameType() != GType_Titanic)
-		return;
-
-	const int mission = getGlobalIntValue(_vm, "mission");
-	const int phase = getGlobalIntValue(_vm, "phase");
-	const int paintFrame = getGlobalIntValue(_vm, "paintframe");
-	Shop::Prop *painting = _propRuntime.findProp("painting");
-	// INVEN.SHP normally keeps the painting prop available, but shop teardown
-	// during a transition or load must not make this diagnostic silently lose
-	// the global script timer. A loaded prop with a new owner still ends it.
-	const bool active = mission == 2 && phase == 0 && paintFrame > 0 &&
-			(!painting || painting->owner.equalsIgnoreCase("none"));
-	if (!active) {
-		if (_cargoPaintingTimerStartFrame > 0) {
-			debug(1, "Cyberflix: cargo painting timer stopped at script frame %d "
-					"(mission=%d phase=%d owner='%s')",
-					_frameCounter, mission, phase,
-					painting ? painting->owner.c_str() : "unloaded");
-		}
-		_cargoPaintingTimerStartFrame = 0;
-		_lastCargoPaintingTimerLogBucket = -1;
-		_cargoPaintingTimerExpiredLogged = false;
-		return;
-	}
-
-	if (_cargoPaintingTimerStartFrame != paintFrame) {
-		_cargoPaintingTimerStartFrame = paintFrame;
-		_lastCargoPaintingTimerLogBucket = -1;
-		_cargoPaintingTimerExpiredLogged = false;
-		debug(1, "Cyberflix: cargo painting timer started at script frame %d; "
-				"BINL.SET expires it when elapsed frames exceed %d",
-				paintFrame, kCargoPaintingTimerFrames);
-	}
-
-	int elapsedFrames = _frameCounter - paintFrame;
-	if (elapsedFrames < 0)
-		elapsedFrames = 0;
-	const int remainingFrames = kCargoPaintingTimerFrames - elapsedFrames;
-	// BINL.SET res58 uses a strict `frame() - paintframe > 10000` test.
-	if (remainingFrames < 0) {
-		if (!_cargoPaintingTimerExpiredLogged) {
-			debug(1, "Cyberflix: cargo painting timer expired after %d frames; BINL.SET will give the painting to Hack on the cargo-bin click",
-					elapsedFrames);
-			_cargoPaintingTimerExpiredLogged = true;
-		}
-		return;
-	}
-
-	_cargoPaintingTimerExpiredLogged = false;
-	const int frameRate = MAX(1, _framePacingRuntime.getFrameRate());
-	const int remainingSeconds = (remainingFrames * frameRate + 59) / 60;
-	const int logBucket = (remainingSeconds + kCargoPaintingTimerLogSeconds - 1) / kCargoPaintingTimerLogSeconds;
-	if (logBucket == _lastCargoPaintingTimerLogBucket)
-		return;
-
-	_lastCargoPaintingTimerLogBucket = logBucket;
-	// PENNY1.PUP res6 starts this by advancing mission 1 phase 4: BOOTFILE
-	// records paintframe = frame(). BINL.SET res58 later expires the cargo
-	// painting if frame() - paintframe > 10000 before the player opens the bin.
-	// This is a script-frame timer, not a wall-clock timer: native frame() only
-	// advances when forceupdate() reaches FUN_004420b0, so quiet rooms may not
-	// produce a log line every real-time bucket.
-	debug(1, "Cyberflix: cargo painting timer remaining about %d:%02d (%d/%d script frames)",
-			remainingSeconds / 60, remainingSeconds % 60, remainingFrames, kCargoPaintingTimerFrames);
-}
-
 Common::Error CyberflixEngine::run() {
+	if (!_gameSupport)
+		return Common::kUnsupportedGameidError;
+
 	// The original is a 512x384 8-bit palettised WinG title (see the
 	// kScreenWidth/kScreenHeight comment in cyberflix.h).
 	initGraphics(kScreenWidth, kScreenHeight);
@@ -785,33 +704,9 @@ Common::Error CyberflixEngine::run() {
 	_console = new Console(this);
 	setDebugger(_console);
 
-	// Assets live in the DATA subdirectory of the installed game; the intro and
-	// other full-screen movies live alongside it in MOVIES.
-	const Common::FSNode gameDataDir(ConfMan.getPath("path"));
-	if (getGameType() == GType_Titanic) {
-		Common::FSNode cd1Root, flatRoot;
-		// A repackaged install (the Steam build) merges both CDs into one
-		// directory, so that directory alone is the whole search path. The
-		// game still believes it is running from CD 1.
-		if (findRepackagedDataRoot(flatRoot)) {
-			SearchMan.addDirectory("cyberflix-data", flatRoot, 0, 1, false);
-			_pathRuntime.setCurrentDiscRootName("Titanic1");
-		} else if (findExtractedCDRoot("Titanic1", cd1Root)) {
-			SearchMan.addSubDirectoryMatching(cd1Root, "data");
-			SearchMan.addSubDirectoryMatching(cd1Root, "movies");
-			_pathRuntime.setCurrentDiscRootName(cd1Root.getName());
-		}
-	} else {
-		SearchMan.addSubDirectoryMatching(gameDataDir, "data");
-		SearchMan.addSubDirectoryMatching(gameDataDir, "movies");
-		if (gameDataDir.getName().equalsIgnoreCase("titanic1") ||
-				gameDataDir.getName().equalsIgnoreCase("titanic2")) {
-			_pathRuntime.setCurrentDiscRootName(gameDataDir.getName());
-		}
-	}
-
-	if (getGameType() == GType_Titanic && !validateTitanicDiscLayout())
-		return Common::kNoGameDataFoundError;
+	const Common::Error pathError = _gameSupport->initializePaths(_pathRuntime);
+	if (pathError.getCode() != Common::kNoError)
+		return pathError;
 
 	// --dump-movie=NAME: decode that movie's frames to disk and exit without
 	// booting the game, so frame content can be inspected headlessly.
@@ -874,7 +769,7 @@ Common::Error CyberflixEngine::run() {
 		return Common::kUnknownError;
 	}
 
-	if (!exciseBootCdCheck(*_bootScript))
+	if (!_gameSupport->patchBootScript(*_bootScript))
 		warning("Cyberflix: boot script CD check not found; running unmodified");
 
 	_vm.setHost(this);
@@ -951,19 +846,10 @@ Common::Error CyberflixEngine::run() {
 					break;
 				}
 				if (!key.empty()) {
-					if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen() &&
-							_stageRuntime.stage()->name().equalsIgnoreCase("enigma.stg"))
-						debug(1, "Cyberflix: Enigma key event %s key='%s' ascii=%d keycode=%d flags=0x%x",
-								event.kbdRepeat ? "keyrepeat" : "keydown", key.c_str(),
-								event.kbd.ascii, event.kbd.keycode, event.kbd.flags);
 					Common::Array<Value> args;
 					args.push_back(Value::makeString(key));
 					bool handled = false;
 					_vm.callFunction(event.kbdRepeat ? "keyrepeat" : "keydown", args, &handled);
-					if (_stageRuntime.stage() && _stageRuntime.stage()->isOpen() &&
-							_stageRuntime.stage()->name().equalsIgnoreCase("enigma.stg"))
-						debug(1, "Cyberflix: Enigma key event handled=%s",
-								handled ? "true" : "false");
 					scriptEventHandled = true;
 					if (!handled)
 						warning("Cyberflix: boot script has no %s handler",

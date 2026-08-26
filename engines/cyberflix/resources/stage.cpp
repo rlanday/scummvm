@@ -93,7 +93,7 @@ const byte *Stage::nodeRecord(uint32 node) const {
 	if (!hdr)
 		return nullptr;
 	const byte *rec = hdr + kNodeTableOffset + node * kNodeRecordStride;
-	if (rec + kNodeRecordStride > _fileData.end())
+	if (!hasBytes(rec, _fileData.end(), kNodeRecordStride))
 		return nullptr;
 	return rec;
 }
@@ -197,12 +197,20 @@ bool Stage::hasButton(uint32 node, const Common::String &button) const {
 	return buttonRecord(node, button) != nullptr;
 }
 
-bool Stage::open(const Common::String &name) {
+void Stage::reset() {
+	_scripts.clear();
+	_archive.close();
+	_fileData.clear();
+
 	_master = -1;
 	_nodeCount = 0;
 	_stageScriptId = 0;
-	_scripts.clear();
 	_width = _height = 0;
+	_name.clear();
+}
+
+bool Stage::open(const Common::String &name) {
+	reset();
 	_name = name;
 
 	if (!openArchiveFile(name, "stage", _fileData, _archive))
@@ -211,13 +219,15 @@ bool Stage::open(const Common::String &name) {
 	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
 		warning("Cyberflix: stage '%s' has no master header", name.c_str());
+		reset();
 		return false;
 	}
 
 	const byte *hdr = engineBase(static_cast<uint32>(_master));
-	if (!hdr || hdr + kNodeTableOffset > _fileData.end()) {
+	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
+	if (!hdr || masterLen < kNodeTableOffset) {
 		warning("Cyberflix: stage '%s' master header truncated", name.c_str());
-		_master = -1;
+		reset();
 		return false;
 	}
 	_width = READ_LE_UINT16(hdr + kMasterWidthOffset);

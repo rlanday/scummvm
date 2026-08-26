@@ -35,27 +35,28 @@
 namespace Cyberflix {
 
 // The cursor bitmaps are copyrighted game art, so they are loaded at runtime
-// from the player's own TI.EXE rather than shipped with ScummVM. TI.EXE is the
-// CyberFlix "Bicycle" runtime; in an installed game it lives under INSTALL/BINX
-// (or INSTALL/BIN). It is a Win32 PE whose RT_GROUP_CURSOR resources are named
-// CURS.ARROW, CURS.HAND, CURS.GOUP, ...
+// from the player's Bicycle executable rather than shipped with ScummVM. The
+// per-game profile supplies its filename; installed Windows versions commonly
+// place it under INSTALL/BINX or INSTALL/BIN.
 Common::PEResources *CursorRuntime::gameExe() {
 	if (_exeTried)
 		return _exe.get();
 	_exeTried = true;
+	if (_executableName.empty())
+		return nullptr;
 
 	const Common::FSNode gameDir(ConfMan.getPath("path"));
 
 	// The 2-CD retail installer puts the runtime under INSTALL/BINX (older
 	// builds: INSTALL/BIN). Re-releases repackage an already-installed tree, so
-	// also accept the same subdirectories at the top level and TI.EXE beside the
-	// data files.
-	static const char *const candidates[][3] = {
-		{ "INSTALL", "BINX", "TI.EXE" },
-		{ "INSTALL", "BIN",  "TI.EXE" },
-		{ "BINX",    nullptr, "TI.EXE" },
-		{ "BIN",     nullptr, "TI.EXE" },
-		{ nullptr,   nullptr, "TI.EXE" }
+	// also accept the same subdirectories at the top level and the profiled
+	// executable beside the data files.
+	static const char *const candidates[][2] = {
+		{ "INSTALL", "BINX" },
+		{ "INSTALL", "BIN" },
+		{ "BINX",    nullptr },
+		{ "BIN",     nullptr },
+		{ nullptr,     nullptr }
 	};
 	for (uint c = 0; c < ARRAYSIZE(candidates); ++c) {
 		Common::FSNode node = gameDir;
@@ -63,27 +64,25 @@ Common::PEResources *CursorRuntime::gameExe() {
 			if (candidates[c][part])
 				node = node.getChild(candidates[c][part]);
 		}
-		node = node.getChild(candidates[c][2]);
+		node = node.getChild(_executableName);
 		if (tryLoadExe(node))
 			return _exe.get();
 	}
 
 	// Fall back to searching for the runtime, so a repackaged layout still
-	// yields the bitmaps rather than leaving the game cursorless. Matching
-	// TI.EXE by name only costs a string compare per entry, so that pass can go
-	// deeper; the pass that opens every executable to probe for the cursor group
-	// is the expensive one and stays shallow.
+	// yields the bitmaps rather than leaving the game cursorless. The name-only
+	// pass can go deeper; opening each executable to probe for cursors cannot.
 	if (scanForExe(gameDir, kNameSearchDepth, true))
 		return _exe.get();
 	if (scanForExe(gameDir, kProbeSearchDepth, false))
 		return _exe.get();
 
-	warning("Cyberflix: could not locate TI.EXE (or any executable holding the "
-			"CURS.* cursor resources) under '%s'", gameDir.getPath().toString().c_str());
+	warning("Cyberflix: could not locate %s (or any executable holding the "
+			"CURS.* cursor resources) under '%s'", _executableName.c_str(),
+			gameDir.getPath().toString().c_str());
 	return nullptr;
 }
 
-// Parse @p node as a PE and keep it if it holds the cursor resources.
 bool CursorRuntime::tryLoadExe(const Common::FSNode &node, bool requireCursors) {
 	if (!node.exists() || node.isDirectory())
 		return false;
@@ -108,10 +107,9 @@ bool CursorRuntime::tryLoadExe(const Common::FSNode &node, bool requireCursors) 
 	return true;
 }
 
-// With @p byNameOnly, accept only files literally called TI.EXE and skip the
-// cursor-group probe; otherwise open every executable and keep the first that
-// actually carries CURS.ARROW.
 bool CursorRuntime::scanForExe(const Common::FSNode &dir, int depth, bool byNameOnly) {
+	Common::String executableName = _executableName;
+	executableName.toUppercase();
 	Common::FSList entries;
 	if (!dir.getChildren(entries, Common::FSNode::kListAll))
 		return false;
@@ -120,7 +118,7 @@ bool CursorRuntime::scanForExe(const Common::FSNode &dir, int depth, bool byName
 			continue;
 		Common::String name = it->getName();
 		name.toUppercase();
-		if (byNameOnly ? (name != "TI.EXE") : !name.hasSuffix(".EXE"))
+		if (byNameOnly ? (name != executableName) : !name.hasSuffix(".EXE"))
 			continue;
 		if (tryLoadExe(*it, !byNameOnly))
 			return true;
@@ -153,7 +151,8 @@ bool CursorRuntime::setCursor(const Common::String &name) {
 		_cursorCache[name] = group; // cache even null to avoid re-parsing
 	}
 	if (!group || group->cursors.empty()) {
-		debug(1, "Cyberflix: cursor '%s' missing/empty in TI.EXE", name.c_str());
+		debug(1, "Cyberflix: cursor '%s' missing/empty in %s", name.c_str(),
+				_executableName.c_str());
 		return false;
 	}
 

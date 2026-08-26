@@ -55,6 +55,7 @@
 namespace Cyberflix {
 
 class Console;
+class GameSupport;
 class Script;
 class Stage;
 class Set;
@@ -105,6 +106,10 @@ public:
 	const SetRuntime &setRuntime() const { return _setRuntime; }
 	StageRuntime &stageRuntime() { return _stageRuntime; }
 	const StageRuntime &stageRuntime() const { return _stageRuntime; }
+	GameSupport &gameSupport() { return *_gameSupport; }
+	const GameSupport &gameSupport() const { return *_gameSupport; }
+	ScriptVM &scriptVM() { return _vm; }
+	const ScriptVM &scriptVM() const { return _vm; }
 
 	bool hasFeature(EngineFeature f) const override;
 	Common::Error loadGameState(int slot) override;
@@ -502,16 +507,8 @@ private:
 	friend class StageRuntime;
 
 	/**
-	 * Special-case the boot script: excise its CD presence check so the game
-	 * can be run from an installed directory. The check is the if-block guarded
-	 * by the "titanic1:" path literal; replacing it with no-op padding removes
-	 * the notedialog/quit it would otherwise reach. Returns true if patched.
-	 */
-	static bool exciseBootCdCheck(Script &script);
-
-	/**
 	 * Install the named mouse cursor, decoding it on demand from the user's
-	 * copy of TI.EXE. The cursor bitmaps are copyrighted game assets, so they
+	 * game executable. The cursor bitmaps are copyrighted game assets, so they
 	 * are never embedded in ScummVM: they are read at runtime from the game's
 	 * PE executable (RT_GROUP_CURSOR resources named CURS.ARROW, CURS.HAND, ...).
 	 * The PEResources handle and
@@ -524,7 +521,6 @@ private:
 	void reassertCursorVisibility();
 	void presentCursorIfDirty();
 	bool delayMillisWithCursorUpdates(uint32 delayMillis);
-	void debugCargoPaintingTimer();
 
 	/**
 	 * Process the global/movie keyboard shortcuts that the original handles
@@ -545,12 +541,12 @@ private:
 	bool handleGlobalKey(const Common::Event &event);
 
 	const CyberflixGameDescription *_gameDescription;
+	Common::ScopedPtr<GameSupport> _gameSupport;
 	Common::RandomSource _rnd;
 	Console *_console; ///< Owned by the engine framework's debugger, not by us.
 
 	CursorRuntime _cursorRuntime;
 	bool _cursorPresentationDirty = false;
-	uint32 _lastCursorDebugLogMillis = 0;
 	Common::Queue<Common::Event> _deferredInputEvents;
 	/** True when the last pollScriptEvent() came from _deferredInputEvents
 	 *  rather than fresh from the backend. Diagnostic only: dispatch time and
@@ -632,9 +628,6 @@ private:
 	void processScheduledLoops();
 	FramePacingRuntime _framePacingRuntime;
 	int _frameCounter = 0;
-	int _cargoPaintingTimerStartFrame = 0;
-	int _lastCargoPaintingTimerLogBucket = -1;
-	bool _cargoPaintingTimerExpiredLogged = false;
 
 	int16 _cameraHiValue = 0; ///< camerahi (0x3ea3) script value, mirrors DAT_0046119a.
 

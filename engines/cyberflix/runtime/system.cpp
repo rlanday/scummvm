@@ -28,7 +28,6 @@
 
 #include "cyberflix/console.h"
 #include "cyberflix/cyberflix.h"
-#include "cyberflix/script.h"
 
 namespace Cyberflix {
 
@@ -36,53 +35,6 @@ static const double kPaletteGammaUp = 1.05;
 static const double kPaletteGammaDown = 0.9523809523809523;
 static const double kPaletteGammaMin = 0.15;
 static const double kPaletteGammaMax = 2.5;
-
-bool CyberflixEngine::exciseBootCdCheck(Script &script) {
-	const uint32 n = script.getInstructionCount();
-
-	// The CD presence check compares a path against the "titanic1:" CD volume
-	// literal. Locate that literal, then the if-block that encloses it.
-	int literal = -1;
-	for (uint32 i = 0; i < n; ++i) {
-		uint16 op = script.getInstruction(i).opcode;
-		if (op == Script::kOpPush3 || op == Script::kOpPush4 || op == Script::kOpPushSym) {
-			if (script.getSelfRelString(i).equalsIgnoreCase("titanic1:")) {
-				literal = static_cast<int>(i);
-				break;
-			}
-		}
-	}
-	if (literal < 0)
-		return false;
-
-	// Walk back to the nearest enclosing kOpIf (the literal sits in its
-	// condition), balancing any nested if/endif pairs in between.
-	int ifIndex = -1;
-	int depth = 0;
-	for (int i = literal - 1; i >= 0; --i) {
-		uint16 op = script.getInstruction(static_cast<uint32>(i)).opcode;
-		if (op == Script::kOpEndIf) {
-			++depth;
-		} else if (op == Script::kOpIf) {
-			if (depth == 0) {
-				ifIndex = i;
-				break;
-			}
-			--depth;
-		}
-	}
-	if (ifIndex < 0)
-		return false;
-
-	int endIfIndex = script.findMatchingEndIf(static_cast<uint32>(ifIndex));
-	if (endIfIndex < 0)
-		return false;
-
-	script.neutralizeRange(static_cast<uint32>(ifIndex), static_cast<uint32>(endIfIndex));
-	debug(0, "Cyberflix: excised boot CD check (instructions %d..%d)",
-			ifIndex, endIfIndex);
-	return true;
-}
 
 uint32 CyberflixEngine::handleMovieHotkeys(const Common::Event &event, bool skippable,
 		const Audio::SoundHandle &audioHandle, bool &skip) {

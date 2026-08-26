@@ -65,7 +65,7 @@ const byte *Set::sceneRecord(uint32 scene) const {
 	if (!table)
 		return nullptr;
 	const byte *rec = table + scene * kSceneRecordStride;
-	if (rec + kSceneRecordStride > _fileData.end())
+	if (!hasBytes(rec, _fileData.end(), kSceneRecordStride))
 		return nullptr;
 	return rec;
 }
@@ -79,7 +79,7 @@ const byte *Set::viewDirectory(uint32 scene, uint32 &count) const {
 	if (idx < 0)
 		return nullptr;
 	const byte *dir = payload(static_cast<uint32>(idx));
-	if (!dir || dir + kViewDirRecordsOffset > _fileData.end())
+	if (!hasBytes(dir, _fileData.end(), kViewDirRecordsOffset))
 		return nullptr;
 	// Validate the file-supplied record count against the directory resource's
 	// length (as the panorama/painting/star tables do), so a corrupt count
@@ -101,7 +101,7 @@ const byte *Set::viewRecord(uint32 scene, const Common::String &view) const {
 	if (!dir || static_cast<uint32>(viewIdx) >= count)
 		return nullptr;
 	const byte *v = dir + kViewDirRecordsOffset + static_cast<uint32>(viewIdx) * kViewRecordStride;
-	if (v + kViewRecordStride > _fileData.end())
+	if (!hasBytes(v, _fileData.end(), kViewRecordStride))
 		return nullptr;
 	return v;
 }
@@ -109,7 +109,7 @@ const byte *Set::viewRecord(uint32 scene, const Common::String &view) const {
 const byte *Set::paintingTable(const byte *viewRec, uint32 &count, uint32 &length) const {
 	count = 0;
 	length = 0;
-	if (!viewRec || viewRec + kViewPaintingTableOffset + 4 > _fileData.end())
+	if (!hasBytes(viewRec, _fileData.end(), kViewPaintingTableOffset + 4))
 		return nullptr;
 	uint32 tableId = READ_LE_UINT32(viewRec + kViewPaintingTableOffset);
 	if (tableId == 0)
@@ -118,7 +118,7 @@ const byte *Set::paintingTable(const byte *viewRec, uint32 &count, uint32 &lengt
 	if (idx < 0)
 		return nullptr;
 	const byte *table = engineBase(static_cast<uint32>(idx));
-	if (!table || table + 8 > _fileData.end())
+	if (!hasBytes(table, _fileData.end(), 8))
 		return nullptr;
 	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(idx));
 	length = res.length + 4; // engine-base frame includes the info dword
@@ -139,7 +139,7 @@ const byte *Set::panoramaTable(uint32 scene, uint32 table, uint32 &count) const 
 	if (idx < 0)
 		return nullptr;
 	const byte *pano = payload(static_cast<uint32>(idx));
-	if (!pano || pano + kPanoramaCountOffset + 4 > _fileData.end())
+	if (!hasBytes(pano, _fileData.end(), kPanoramaCountOffset + 4))
 		return nullptr;
 	uint32 c = READ_LE_UINT32(pano + kPanoramaCountOffset);
 	// Bound the record array against the resource payload.
@@ -156,7 +156,7 @@ const byte *Set::transitionTable(uint32 transitionId, uint32 &count) const {
 	if (idx < 0)
 		return nullptr;
 	const byte *transition = engineBase(static_cast<uint32>(idx));
-	if (!transition || transition + 0x0c > _fileData.end())
+	if (!hasBytes(transition, _fileData.end(), 0x0c))
 		return nullptr;
 	uint32 c = READ_LE_UINT32(transition + 0x04);
 	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(idx));
@@ -214,7 +214,7 @@ int Set::nearestViewForHeading(uint32 scene, int heading) const {
 	int bestDist = 1000;
 	for (uint32 i = 0; i < count; ++i) {
 		const byte *v = dir + kViewDirRecordsOffset + i * kViewRecordStride;
-		if (v + kViewRecordStride > _fileData.end())
+		if (!hasBytes(v, _fileData.end(), kViewRecordStride))
 			break;
 		// Circular distance on the 256-unit compass. nativeAngleDistance()
 		// masks both operands, so an out-of-range stored heading cannot
@@ -232,7 +232,7 @@ bool Set::starXYZ(const Common::String &name, int16 &x, int16 &y, int16 &z) cons
 	if (_starTable < 0)
 		return false;
 	const byte *table = engineBase(static_cast<uint32>(_starTable));
-	if (!table || table + kStarTableRecordsOffset > _fileData.end())
+	if (!hasBytes(table, _fileData.end(), kStarTableRecordsOffset))
 		return false;
 	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(_starTable));
 	const uint32 length = res.length + 4;
@@ -242,7 +242,7 @@ bool Set::starXYZ(const Common::String &name, int16 &x, int16 &y, int16 &z) cons
 
 	const byte *record = table + kStarTableRecordsOffset;
 	for (uint32 i = 0; i < count; ++i, record += kStarRecordStride) {
-		if (record + kStarRecordStride > _fileData.end())
+		if (!hasBytes(record, _fileData.end(), kStarRecordStride))
 			break;
 		if (pascalEqualsIgnoreCase(record + kStarPrimaryNameOffset, _fileData.end(), name)) {
 			x = READ_LE_INT16(record + kStarPrimaryXOffset);
@@ -261,18 +261,32 @@ bool Set::starXYZ(const Common::String &name, int16 &x, int16 &y, int16 &z) cons
 	return false;
 }
 
-bool Set::open(const Common::String &name) {
+void Set::reset() {
+	_scripts.clear();
+	_paintingScriptCacheScript.reset();
+	_archive.close();
+	_fileData.clear();
+
 	_master = -1;
 	_sceneTable = -1;
 	_starTable = -1;
 	_baseZ = 0; // FUN_004307f0 zeroes DAT_0046119a for the incoming set.
 	_sceneCount = 0;
 	_setScriptId = 0;
-	_scripts.clear();
 	_paintingScriptCacheValid = false;
-	_paintingScriptCacheScript.reset();
+	_paintingScriptCacheScene = 0;
+	_paintingScriptCacheView.clear();
+	_paintingScriptCacheName.clear();
 	_width = _height = 0;
 	_viewLeft = _viewTop = 0;
+	_name.clear();
+	_setName.clear();
+	_defaultScene.clear();
+	_defaultView.clear();
+}
+
+bool Set::open(const Common::String &name) {
+	reset();
 	_name = name;
 
 	if (!openArchiveFile(name, "set", _fileData, _archive))
@@ -281,6 +295,7 @@ bool Set::open(const Common::String &name) {
 	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
 		warning("Cyberflix: set '%s' has no master header", name.c_str());
+		reset();
 		return false;
 	}
 
@@ -288,7 +303,7 @@ bool Set::open(const Common::String &name) {
 	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
 	if (!hdr || masterLen < kMasterDefaultViewOffset + 1) {
 		warning("Cyberflix: set '%s' master header truncated", name.c_str());
-		_master = -1;
+		reset();
 		return false;
 	}
 	_width = READ_LE_UINT16(hdr + kMasterWidthOffset);
@@ -309,7 +324,7 @@ bool Set::open(const Common::String &name) {
 	_sceneTable = resourceIndexById(sceneTableId);
 	if (_sceneTable < 0) {
 		warning("Cyberflix: set '%s' references missing scene table %u", name.c_str(), sceneTableId);
-		_master = -1;
+		reset();
 		return false;
 	}
 	// The scene table is a tight array of fixed-size records, no count header.
@@ -338,7 +353,7 @@ Common::String Set::sceneName(uint32 index) const {
 	if (!rec)
 		return Common::String();
 	byte len = rec[kSceneNameOffset];
-	if (len == 0 || len >= 16 || rec + kSceneNameOffset + 1 + len > _fileData.end())
+	if (len == 0 || len >= 16 || !hasBytes(rec, _fileData.end(), kSceneNameOffset + 1 + len))
 		return Common::String();
 	return Common::String(reinterpret_cast<const char *>(rec ) + kSceneNameOffset + 1, len);
 }
@@ -367,7 +382,7 @@ int Set::findView(uint32 scene, const Common::String &name) const {
 		return -1;
 	for (uint32 i = 0; i < count; ++i) {
 		const byte *v = dir + kViewDirRecordsOffset + i * kViewRecordStride;
-		if (v + kViewRecordStride > _fileData.end())
+		if (!hasBytes(v, _fileData.end(), kViewRecordStride))
 			break;
 		byte len = v[kViewNameOffset];
 		if (len && len < 16 &&
@@ -383,10 +398,10 @@ Common::String Set::viewName(uint32 scene, uint32 index) const {
 	if (!dir || index >= count)
 		return Common::String();
 	const byte *v = dir + kViewDirRecordsOffset + index * kViewRecordStride;
-	if (v + kViewRecordStride > _fileData.end())
+	if (!hasBytes(v, _fileData.end(), kViewRecordStride))
 		return Common::String();
 	byte len = v[kViewNameOffset];
-	if (len == 0 || len >= 16 || v + kViewNameOffset + 1 + len > _fileData.end())
+	if (len == 0 || len >= 16 || !hasBytes(v, _fileData.end(), kViewNameOffset + 1 + len))
 		return Common::String();
 	return Common::String(reinterpret_cast<const char *>(v ) + kViewNameOffset + 1, len);
 }
@@ -403,7 +418,7 @@ int Set::angleForView(uint32 scene, uint32 table, int viewIdx) const {
 	// piVar5[0xe]). Records not facing a view directly are tagged -1.
 	for (uint32 i = 0; i < count; ++i) {
 		const byte *r = pano + 8 + i * kPanoramaRecordStride;
-		if (r + kPanoramaRecordStride > _fileData.end())
+		if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
 			break;
 		if (static_cast<int32>(READ_LE_UINT32(r + 0x38)) == viewIdx)
 			return static_cast<int>(i);
@@ -417,7 +432,7 @@ int Set::viewTagAtAngle(uint32 scene, uint32 table, uint32 angle) const {
 	if (!pano || angle >= count)
 		return -1;
 	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
-	if (r + kPanoramaRecordStride > _fileData.end())
+	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
 		return -1;
 	int32 tag = static_cast<int32>(READ_LE_UINT32(r + 0x38));
 	return tag >= 0 ? static_cast<int>(tag): -1;
@@ -425,7 +440,7 @@ int Set::viewTagAtAngle(uint32 scene, uint32 table, uint32 angle) const {
 
 bool Set::fillCameraFromRecord(const byte *record, CameraData &camera) const {
 	const byte *hdr = _master >= 0 ? engineBase(static_cast<uint32>(_master)) : nullptr;
-	if (!hdr || hdr + kMasterCameraFieldsEnd > _fileData.end())
+	if (!hasBytes(hdr, _fileData.end(), kMasterCameraFieldsEnd))
 		return false;
 
 	camera.heading = READ_LE_INT16(record + kPanoramaHeadingOffset);
@@ -462,7 +477,7 @@ bool Set::cameraData(uint32 scene, uint32 table, uint32 angle, CameraData &camer
 	if (!pano || angle >= count)
 		return false;
 	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
-	if (r + kPanoramaRecordStride > _fileData.end())
+	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
 		return false;
 	return fillCameraFromRecord(r, camera);
 }
@@ -473,7 +488,7 @@ bool Set::transitionCameraData(uint32 transitionId, uint32 frame, CameraData &ca
 	if (!transition || frame >= count)
 		return false;
 	const byte *r = transition + 0x0c + frame * kPanoramaRecordStride;
-	if (r + kPanoramaRecordStride > _fileData.end())
+	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
 		return false;
 	return fillCameraFromRecord(r, camera);
 }
@@ -501,7 +516,7 @@ uint32 Set::forwardTransitionForView(uint32 scene, int viewIdx) const {
 	if (!pano || static_cast<uint32>(angle) >= count)
 		return 0;
 	const byte *r = pano + 8 + static_cast<uint32>(angle) * kPanoramaRecordStride;
-	if (r + kPanoramaRecordStride > _fileData.end())
+	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
 		return 0;
 	return READ_LE_UINT32(r + 0x34);
 }
@@ -666,7 +681,7 @@ bool Set::transitionDestination(uint32 transitionId, uint32 &scene,
 	if (sceneIdx < 0)
 		return false;
 	const byte *last = transition + 0x0c + (count - 1) * kPanoramaRecordStride;
-	if (last + kPanoramaRecordStride > _fileData.end())
+	if (!hasBytes(last, _fileData.end(), kPanoramaRecordStride))
 		return false;
 	int viewIdx = nearestViewForHeading(static_cast<uint32>(sceneIdx), READ_LE_INT16(last + 0x26));
 	if (viewIdx < 0)
@@ -703,13 +718,13 @@ bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &s
 	// resource id of 0, which native FUN_00442e90 handles as "keep the retained
 	// framebuffer". Only clear for a normal non-zero starting frame.
 	const byte *first = pano + 8;
-	if (first + kPanoramaRecordStride > _fileData.end())
+	if (!hasBytes(first, _fileData.end(), kPanoramaRecordStride))
 		return false;
 	if (READ_LE_UINT32(first + kPanoramaFrameIdOffset) != 0)
 		seq.clear();
 	for (uint32 a = 0; a <= angle; ++a) {
 		const byte *r = pano + 8 + a * kPanoramaRecordStride;
-		if (r + kPanoramaRecordStride > _fileData.end())
+		if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
 			return false;
 		if (!applyFrameResource(READ_LE_UINT32(r + kPanoramaFrameIdOffset), seq))
 			return false;
@@ -736,7 +751,7 @@ bool Set::applyPanoramaFrame(uint32 scene, uint32 table, uint32 angle, FrameSequ
 	if (!pano || angle >= count)
 		return false;
 	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
-	if (r + kPanoramaRecordStride > _fileData.end())
+	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
 		return false;
 	return applyFrameResource(READ_LE_UINT32(r + kPanoramaFrameIdOffset), seq);
 }
@@ -760,7 +775,7 @@ bool Set::applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence 
 	if (!transition || frame >= count)
 		return false;
 	const byte *r = transition + 0x0c + frame * kPanoramaRecordStride;
-	if (r + kPanoramaRecordStride > _fileData.end())
+	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
 		return false;
 	return applyFrameResource(READ_LE_UINT32(r + kPanoramaFrameIdOffset), seq);
 }

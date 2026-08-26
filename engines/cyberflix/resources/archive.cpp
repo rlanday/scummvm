@@ -51,6 +51,7 @@ bool Archive::open(Common::SeekableReadStream *stream, const Common::String &nam
 
 	if (stream->size() < 0x28) {
 		warning("Cyberflix::Archive: '%s' is too small to be a container", name.c_str());
+		close();
 		return false;
 	}
 
@@ -69,6 +70,7 @@ bool Archive::open(Common::SeekableReadStream *stream, const Common::String &nam
 	if (_magic != 0x00010000 || sig1 != kSignature1 || sig2 != kSignature1) {
 		warning("Cyberflix::Archive: '%s' is not an LPPALPPA container "
 				"(magic=0x%08x sig=0x%08x%08x)", name.c_str(), _magic, sig1, sig2);
+		close();
 		return false;
 	}
 

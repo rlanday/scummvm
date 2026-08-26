@@ -23,6 +23,7 @@
 #include "common/textconsole.h"
 
 #include "cyberflix/cyberflix.h"
+#include "cyberflix/game_support.h"
 #include "cyberflix/vm.h"
 
 namespace Cyberflix {
@@ -54,43 +55,6 @@ static bool shouldLogTransitionDispatch(const Common::String &name) {
 			name.equalsIgnoreCase("savestages") ||
 			name.equalsIgnoreCase("openflat") ||
 			name.equalsIgnoreCase("closeflat");
-}
-
-static bool shouldLogEnigmaVariable(const Common::String &key) {
-	return key == "dialmess" ||
-			key == "goodmess" ||
-			key == "countdial";
-}
-
-// Story-progress globals that gate room encounters (e.g. the Smethels message
-// on GSTAIR3 needs mission==2 && phase==3 && savedeck=='c'). Logging writes to
-// these at level 1 makes a corrupted timeline state obvious without re-running
-// under a debugger.
-static bool shouldLogStoryVariable(const Common::String &key) {
-	return key == "mission" ||
-			key == "phase" ||
-			key == "smethphase" ||
-			key == "pennyphase" ||
-			key == "paintframe" ||
-			key == "savedeck" ||
-			key == "burnsphase" ||
-			key == "neckphase";
-}
-
-static bool isEnigmaStageContext(const Common::String &self) {
-	return self.equalsIgnoreCase("enigma.stg") ||
-			self.equalsIgnoreCase("enigma 1");
-}
-
-static bool shouldLogEnigmaDispatch(const Common::String &name, const Common::String &self) {
-	return name.equalsIgnoreCase("checkey") ||
-			name.equalsIgnoreCase("advancedial") ||
-			name.equalsIgnoreCase("dialset") ||
-			name.equalsIgnoreCase("goodkey") ||
-			name.equalsIgnoreCase("badkey") ||
-			((name.equalsIgnoreCase("keydown") || name.equalsIgnoreCase("keyrepeat")) &&
-				(isEnigmaStageContext(self) ||
-					self.equalsIgnoreCase("ctl 1")));
 }
 
 static bool isSendToOpcode(uint16 op);
@@ -221,21 +185,18 @@ void ScriptVM::setVar(const Common::String &name, const Value &v) {
 	// as implicit globals to stay permissive while subsystems land.)
 	Common::String key = name;
 	key.toLowercase();
+	const bool logGameVariable = gDebugLevel > 0 && _host &&
+			_host->gameSupport().shouldLogScriptVariable(key);
 	if (!_locals.empty() && _locals.back().contains(key)) {
-		if (gDebugLevel > 0 && shouldLogEnigmaVariable(key))
-			debug(1, "Cyberflix: Enigma var %s local %s -> %s",
+		if (logGameVariable)
+			debug(1, "Cyberflix: game var %s local %s -> %s",
 					key.c_str(), _locals.back()[key].toString().c_str(), v.toString().c_str());
 		_locals.back()[key] = v;
 		return;
 	}
-	if (gDebugLevel > 0 && shouldLogEnigmaVariable(key)) {
+	if (logGameVariable) {
 		Common::String oldValue = _vars.contains(key) ? _vars[key].toString() : Common::String("<unset>");
-		debug(1, "Cyberflix: Enigma var %s global %s -> %s",
-				key.c_str(), oldValue.c_str(), v.toString().c_str());
-	}
-	if (gDebugLevel > 0 && shouldLogStoryVariable(key)) {
-		Common::String oldValue = _vars.contains(key) ? _vars[key].toString() : Common::String("<unset>");
-		debug(1, "Cyberflix: story var %s global %s -> %s",
+		debug(1, "Cyberflix: game var %s global %s -> %s",
 				key.c_str(), oldValue.c_str(), v.toString().c_str());
 	}
 	_vars[key] = v;
@@ -882,17 +843,18 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 		*handled = false;
 	Value result;
 	const bool logTransitionDispatch = gDebugLevel > 0 && shouldLogTransitionDispatch(name);
-	const bool logEnigmaDispatch = gDebugLevel > 0 && shouldLogEnigmaDispatch(name, _ctxSelf);
-	Common::String enigmaArgText;
+	const bool logGameDispatch = gDebugLevel > 0 && _host &&
+			_host->gameSupport().shouldLogScriptDispatch(name, _ctxSelf);
+	Common::String gameArgText;
 
-	if (logEnigmaDispatch) {
+	if (logGameDispatch) {
 		for (uint32 i = 0; i < args.size(); ++i) {
 			if (i)
-				enigmaArgText += ", ";
-			enigmaArgText += args[i].toString();
+				gameArgText += ", ";
+			gameArgText += args[i].toString();
 		}
-		debug(1, "Cyberflix: Enigma script %s(%s) ctx self='%s' prop='%s'",
-				name.c_str(), enigmaArgText.c_str(), _ctxSelf.c_str(), _ctxProp.c_str());
+		debug(1, "Cyberflix: game script %s(%s) ctx self='%s' prop='%s'",
+				name.c_str(), gameArgText.c_str(), _ctxSelf.c_str(), _ctxProp.c_str());
 	}
 
 	if (_callDepth >= 64) { // TI.EXE has no explicit guard; protect the engine
@@ -948,9 +910,9 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 		if (logTransitionDispatch)
 			debug(1, "Cyberflix: script '%s' handled by scope %d -> %s",
 					name.c_str(), li, result.toString().c_str());
-		if (logEnigmaDispatch)
-			debug(1, "Cyberflix: Enigma script %s(%s) -> %s",
-					name.c_str(), enigmaArgText.c_str(), result.toString().c_str());
+		if (logGameDispatch)
+			debug(1, "Cyberflix: game script %s(%s) -> %s",
+					name.c_str(), gameArgText.c_str(), result.toString().c_str());
 		if (_trace)
 			debug(0, "  dispatch %s(%u args) -> %s", name.c_str(), args.size(),
 					result.toString().c_str());

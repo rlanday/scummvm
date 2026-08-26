@@ -41,6 +41,13 @@
 
 namespace Cyberflix {
 
+static const uint32 kTrackMasterHeaderSize = 0x28;
+static const uint32 kThemePlaylistOffset = 6;
+static const uint32 kThemeCueCountOffset = 0x10a;
+static const uint32 kThemeCueTableOffset = 0x10e;
+static const uint32 kSfxCueTableOffset = 8;
+static const uint32 kCueRecordSize = 0x1a;
+
 AudioRuntime::ThemeTrack *AudioRuntime::findTrack(const Common::String &name) {
 	Common::SharedPtr<ThemeTrack> track = findTrackRef(name);
 	return track ? track.get() : nullptr;
@@ -73,7 +80,7 @@ public:
 			const uint16 cueIdx = _track->playlist[i];
 			if (cueIdx >= 1 && cueIdx <= _track->cues.size()) {
 				const ThemeTrack::Cue &cue = _track->cues[cueIdx - 1];
-				if (cue.length && cue.dataOffset + cue.length <= _track->fileData.size()) {
+				if (cue.length && hasRange(_track->fileData.size(), cue.dataOffset, cue.length)) {
 					CbxAudioInfo info = getCbxAudioInfo(_track->fileData.begin() + cue.dataOffset, cue.length);
 					if (info.blockSamples != 0 &&
 							info.blockCount <= 0xffffffffU / info.blockSamples) {
@@ -111,7 +118,7 @@ public:
 
 			const uint32 n = MIN<uint32>(numSamples - produced, _blockValid - _blockOffset);
 			for (uint32 i = 0; i < n; ++i)
-				buffer[produced + i] = static_cast<int16>(((static_cast<int>(_block[_blockOffset + i]) - 128) << 8));
+				buffer[produced + i] = static_cast<int16>((static_cast<int>(_block[_blockOffset + i]) - 128) * 256);
 			_blockOffset += n;
 			produced += n;
 		}
@@ -314,7 +321,7 @@ void AudioRuntime::prepareThemeSpans(const ThemeTrack &track) {
 		_themeSpans.push_back(span);
 
 		uint32 samples = 0;
-		if (cue.length && cue.dataOffset + cue.length <= track.fileData.size()) {
+		if (cue.length && hasRange(track.fileData.size(), cue.dataOffset, cue.length)) {
 			const CbxAudioInfo info = getCbxAudioInfo(track.fileData.begin() + cue.dataOffset, cue.length);
 			if (info.blockSamples != 0 && info.blockCount <= 0xffffffffU / info.blockSamples)
 				samples = info.blockSamples * info.blockCount;
@@ -376,7 +383,12 @@ void AudioRuntime::openTrackFile(const Common::String &name) {
 		warning("Cyberflix: could not open track file '%s'", name.c_str());
 		return;
 	}
-	uint32 size = static_cast<uint32>(file.size());
+	const int64 fileSize = file.size();
+	if (fileSize <= 0 || fileSize > 0xffffffffLL) {
+		warning("Cyberflix: invalid track file size for '%s'", name.c_str());
+		return;
+	}
+	uint32 size = static_cast<uint32>(fileSize);
 	track->fileData.resize(size);
 	if (file.read(track->fileData.begin(), size) != size) {
 		warning("Cyberflix: could not read track file '%s'", name.c_str());
@@ -390,9 +402,13 @@ void AudioRuntime::openTrackFile(const Common::String &name) {
 		return;
 	}
 
-	const byte *master = archive.getResourceCount()
-			? resourceEngineBase(track->fileData, archive.getResource(0)) : nullptr;
-	if (!master || master + 0x28 > track->fileData.end()) {
+	const Archive::Resource *masterResource = archive.getResourceCount()
+			? &archive.getResource(0) : nullptr;
+	const byte *master = masterResource
+			? resourceEngineBase(track->fileData, *masterResource) : nullptr;
+	const uint64 masterSize = masterResource
+			? static_cast<uint64>(masterResource->length) + 4 : 0;
+	if (!master || masterSize < kTrackMasterHeaderSize) {
 		warning("Cyberflix: track '%s' has no master header", name.c_str());
 		return;
 	}
@@ -403,26 +419,30 @@ void AudioRuntime::openTrackFile(const Common::String &name) {
 	}
 	uint32 themeTableId = READ_LE_UINT32(master + 0x1c);
 	uint32 sfxTableId = READ_LE_UINT32(master + 0x20);
-	const byte *tt = (themeTableId < archive.getResourceCount())
-			? resourceEngineBase(track->fileData, archive.getResource(themeTableId)) : nullptr;
-	if (!tt || tt + 0x10e > track->fileData.end()) {
+	const Archive::Resource *themeTableResource = themeTableId < archive.getResourceCount()
+			? &archive.getResource(themeTableId) : nullptr;
+	const byte *tt = themeTableResource
+			? resourceEngineBase(track->fileData, *themeTableResource) : nullptr;
+	const uint64 themeTableSize = themeTableResource
+			? static_cast<uint64>(themeTableResource->length) + 4 : 0;
+	if (!tt || themeTableSize < kThemeCueTableOffset) {
 		warning("Cyberflix: track '%s' has no theme table", name.c_str());
 		return;
 	}
 
 	track->loopIdx = READ_LE_UINT32(tt);
-	uint16 playlistLen = READ_LE_UINT16(tt + 4);
-	for (uint i = 0; i < playlistLen && tt + 6 + 2 * i + 2 <= track->fileData.end(); ++i)
-		track->playlist.push_back(READ_LE_UINT16(tt + 6 + 2 * i));
+	uint32 playlistLen = boundedRecordCount(READ_LE_UINT16(tt + 4),
+			kThemeCueCountOffset, kThemePlaylistOffset, 2);
+	for (uint32 i = 0; i < playlistLen; ++i)
+		track->playlist.push_back(READ_LE_UINT16(tt + kThemePlaylistOffset + 2 * i));
 	// FUN_00411cc0 clamps the loop target into the playlist.
 	if (!track->playlist.empty() && track->loopIdx >= track->playlist.size())
 		track->loopIdx = track->playlist.size() - 1;
 
-	uint32 themeCueCount = READ_LE_UINT32(tt + 0x10a);
+	uint32 themeCueCount = boundedRecordCount(READ_LE_UINT32(tt + kThemeCueCountOffset),
+			themeTableSize, kThemeCueTableOffset, kCueRecordSize);
 	for (uint32 i = 0; i < themeCueCount; ++i) {
-		const byte *rec = tt + 0x10e + 0x1a * i;
-		if (rec + 0x1a > track->fileData.end())
-			break;
+		const byte *rec = tt + kThemeCueTableOffset + kCueRecordSize * i;
 		ThemeTrack::Cue cue;
 		uint32 resId = READ_LE_UINT32(rec + 4);
 		cue.resId = resId;
@@ -434,14 +454,17 @@ void AudioRuntime::openTrackFile(const Common::String &name) {
 		track->cues.push_back(cue);
 	}
 
-	const byte *st = (sfxTableId < archive.getResourceCount())
-			? resourceEngineBase(track->fileData, archive.getResource(sfxTableId)) : nullptr;
-	if (st && st + 8 <= track->fileData.end()) {
-		uint32 sfxCueCount = READ_LE_UINT32(st + 4);
+	const Archive::Resource *sfxTableResource = sfxTableId < archive.getResourceCount()
+			? &archive.getResource(sfxTableId) : nullptr;
+	const byte *st = sfxTableResource
+			? resourceEngineBase(track->fileData, *sfxTableResource) : nullptr;
+	const uint64 sfxTableSize = sfxTableResource
+			? static_cast<uint64>(sfxTableResource->length) + 4 : 0;
+	if (st && sfxTableSize >= kSfxCueTableOffset) {
+		uint32 sfxCueCount = boundedRecordCount(READ_LE_UINT32(st + 4),
+				sfxTableSize, kSfxCueTableOffset, kCueRecordSize);
 		for (uint32 i = 0; i < sfxCueCount; ++i) {
-			const byte *rec = st + 8 + 0x1a * i;
-			if (rec + 0x1a > track->fileData.end())
-				break;
+			const byte *rec = st + kSfxCueTableOffset + kCueRecordSize * i;
 			ThemeTrack::Cue cue;
 			cue.flags = rec[0];
 			cue.resId = READ_LE_UINT32(rec + 4);
@@ -515,7 +538,8 @@ bool AudioRuntime::playSoundCue(CyberflixEngine &engine, const Common::String &n
 		Common::String &currentCue, uint32 &currentResId) {
 	ThemeTrack *track = nullptr;
 	const ThemeTrack::Cue *cue = findSfxCue(name, &track);
-	if (!cue || !track || cue->length == 0 || cue->dataOffset + cue->length > track->fileData.size()) {
+	if (!cue || !track || cue->length == 0 ||
+			!hasRange(track->fileData.size(), cue->dataOffset, cue->length)) {
 		warning("Cyberflix: sound cue '%s' not found", name.c_str());
 		return false;
 	}

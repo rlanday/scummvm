@@ -38,6 +38,7 @@
 #include "audio/mixer.h"
 
 #include "cyberflix/cyberflix.h"
+#include "cyberflix/game_support.h"
 #include "cyberflix/saveload.h"
 #include "cyberflix/detection.h"
 #include "cyberflix/runtime/set_helpers.h"
@@ -101,104 +102,11 @@ static void writeChunk(Common::WriteStream &out, const char tag[4], Common::Memo
 		out.write(payload.getData(), static_cast<uint32>(payload.size()));
 }
 
-static Common::String defaultSaveSignature(int gameType) {
-	if (gameType == GType_Titanic)
-		return "Titanic 1.0";
-	return Common::String();
-}
-
 static bool isTourMode(const ScriptVM &vm) {
 	Common::HashMap<Common::String, Value>::const_iterator it = vm.globalVars().find("tour");
 	return it != vm.globalVars().end() &&
 			(it->_value.type == Value::kBool || it->_value.type == Value::kInt) &&
 			it->_value.intValue != 0;
-}
-
-static int globalIntValue(const Common::HashMap<Common::String, Value> &vars,
-		const Common::String &name) {
-	Common::HashMap<Common::String, Value>::const_iterator it = vars.find(name);
-	if (it == vars.end())
-		return 0;
-	if (it->_value.type != Value::kBool && it->_value.type != Value::kInt)
-		return 0;
-	return it->_value.intValue;
-}
-
-static void logTitanicGymLoadDiagnostics(CyberflixEngine &engine) {
-	SetRuntime &setRuntime = engine.setRuntime();
-	if (engine.getGameType() != GType_Titanic || !setRuntime.set() ||
-			!setRuntime.set()->isOpen() || !setRuntime.set()->setName().equalsIgnoreCase("gym"))
-		return;
-
-	const Set *set = setRuntime.set().get();
-	const Common::String sceneName = setRuntime.scene() >= 0 ?
-			set->sceneName(static_cast<uint32>(setRuntime.scene())) : Common::String("none");
-	warning("Cyberflix: GYM load diagnostics: set='%s' scene=%d '%s' table=%d angle=%d view='%s' visible=%d transition=%d/%u/%u",
-			set->setName().c_str(), setRuntime.scene(), sceneName.c_str(), setRuntime.table(),
-			setRuntime.angle(), setRuntime.view().c_str(), setRuntime.visible() ? 1 : 0,
-			static_cast<int>(setRuntime.transitionType()), setRuntime.transitionResource(),
-			setRuntime.transitionFrame());
-
-	const FrameSequence &seq = setRuntime.frameSequence();
-	if (!seq.empty()) {
-		const byte *pixels = seq.pixels();
-		const int width = seq.width();
-		const int height = seq.height();
-		const int left = MIN(54, width);
-		const int top = MIN(142, height);
-		const int right = MIN(198, width);
-		const int bottom = MIN(264, height);
-		uint32 zeroCount = 0;
-		uint32 totalCount = 0;
-		for (int y = top; y < bottom; ++y) {
-			for (int x = left; x < right; ++x) {
-				if (pixels[y * width + x] == 0)
-					++zeroCount;
-				++totalCount;
-			}
-		}
-		warning("Cyberflix: GYM load diagnostics: frame=%ux%u black-probe rect=(%d,%d)-(%d,%d) index0=%u/%u",
-				seq.width(), seq.height(), left, top, right, bottom, zeroCount, totalCount);
-	} else {
-		warning("Cyberflix: GYM load diagnostics: SET frame sequence is empty");
-	}
-
-	Set::CameraData cameraData;
-	if (setRuntime.scene() >= 0 && set->cameraData(static_cast<uint32>(setRuntime.scene()),
-			static_cast<uint32>(setRuntime.table()), static_cast<uint32>(setRuntime.angle()), cameraData)) {
-		warning("Cyberflix: GYM load diagnostics: camera pos=(%d,%d,%d) heading=%d baseZ=%d near=%d far=%d center=(%d,%d) focal=%d viewport=(%d,%d)-(%d,%d)",
-				cameraData.cameraX, cameraData.cameraY, cameraData.cameraZ, cameraData.heading,
-				cameraData.baseZ, cameraData.nearPlane, cameraData.farPlane, cameraData.centerX,
-				cameraData.centerY, cameraData.focal, cameraData.viewportLeft, cameraData.viewportTop,
-				cameraData.viewportRight, cameraData.viewportBottom);
-		Shop::WorldCamera camera = makeWorldCamera(cameraData);
-		ActorRuntime::ActorRef penny = engine.actorRuntime().findActorRef("penny");
-		if (penny.actor) {
-			Cast::ActorRenderResult rendered = penny.cast->renderWorldActor(*penny.actor, camera, set->setName());
-			warning("Cyberflix: GYM load diagnostics: penny visible=%d set='%s' star='%s' shape='%s' pos=(%d,%d,%d) angle=%d scale=%d zclip=%d rendered=%d rect=(%d,%d)-(%d,%d) depth=%d depthBucket=%d cel=%ux%u",
-					penny.actor->visible ? 1 : 0, penny.actor->setName.c_str(),
-					penny.actor->sceneName.c_str(), penny.actor->shapeName.c_str(),
-					penny.actor->x, penny.actor->y, penny.actor->z, penny.actor->angle,
-					penny.actor->scale, penny.actor->zClip, rendered.valid ? 1 : 0,
-					rendered.rect.left, rendered.rect.top, rendered.rect.right, rendered.rect.bottom,
-					rendered.depth, rendered.depthBucket, rendered.cel.width, rendered.cel.height);
-		} else {
-			warning("Cyberflix: GYM load diagnostics: penny actor is not present");
-		}
-
-		for (uint32 c = 0; c < engine.actorRuntime().casts().size(); ++c) {
-			const Cast &cast = *engine.actorRuntime().casts()[c];
-			for (uint32 i = 0; i < cast.actorCount(); ++i) {
-				const Cast::Actor &actor = cast.actor(i);
-				if (actor.visible && actor.setName.equalsIgnoreCase(set->setName()))
-					warning("Cyberflix: GYM load diagnostics: visible actor '%s' cast='%s' star='%s' shape='%s' pos=(%d,%d,%d)",
-							actor.name.c_str(), cast.name().c_str(), actor.sceneName.c_str(),
-							actor.shapeName.c_str(), actor.x, actor.y, actor.z);
-			}
-		}
-	} else {
-		warning("Cyberflix: GYM load diagnostics: camera data unavailable");
-	}
 }
 
 struct HeaderState {
@@ -215,7 +123,7 @@ struct HeaderState {
 	Common::String stageName;
 	int32 stageNode = 0;
 	Common::String flatName;
-	int32 frameCounter = 0; // frame() base; paintframe timers are absolute script frames.
+	int32 frameCounter = 0; // frame() base for absolute script-frame timers.
 	bool frameCounterSeen = false;
 	bool stageVisible = false;
 	Common::String setFileName;
@@ -731,32 +639,6 @@ static void restoreCastState(ActorRuntime &actorRuntime, const Common::Array<Cas
 	}
 }
 
-static void restoreTitanicLegacyCastState(CyberflixEngine &engine,
-		const Common::HashMap<Common::String, Value> &vars) {
-	// Early ScummVM CyberFlix saves wrote an empty CAST chunk. Native Titanic
-	// keeps GANG.CST open after boot (`opencastfile("gang.cst")`, then
-	// `sendtocast("gang.cst", initactors())`), and room scripts such as
-	// GYM.SET's openset() assume sendtoactor("penny", ...) can find that global
-	// actor table. Recreate that boot-time cast state only for those legacy saves;
-	// modern saves with real CAST contents restore exact per-actor runtime fields.
-	engine.actorRuntime().openCastFile(engine, "gang.cst");
-	Common::Array<Value> noArgs;
-	engine.actorRuntime().sendToCast(engine, "gang.cst", "initactors", noArgs);
-
-	// The same legacy saves lost actor dialogue counters. C73.SET schedules the
-	// Smethels door knock while actorvalue("smeth") is still zero, but the door
-	// only answers that knock during mission 1, phase 0. Once the durable story
-	// globals have moved past that initial cabin state, Smethels has necessarily
-	// already been handled; preserve that native post-runpuppet side effect.
-	const int mission = globalIntValue(vars, "mission");
-	const int phase = globalIntValue(vars, "phase");
-	const int smethPhase = globalIntValue(vars, "smethphase");
-	if (mission > 1 || (mission == 1 && phase > 0) || smethPhase > 0) {
-		const int talkedToSmethels = 1;
-		engine.actorRuntime().setActorValue("smeth", talkedToSmethels);
-	}
-}
-
 static void restoreTrackState(AudioRuntime &audioRuntime, const Common::Array<TrackState> &trackStates) {
 	for (uint i = 0; i < trackStates.size(); ++i) {
 		Common::SharedPtr<ThemeTrack> track(new ThemeTrack());
@@ -1216,7 +1098,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		return Common::Error(Common::kReadingFailed, "Incomplete CyberFlix save");
 
 	Common::String expectedSignature = !_saveSignature.empty()
-			? _saveSignature : defaultSaveSignature(getGameType());
+			? _saveSignature : gameSupport().profile().defaultSaveSignature;
 	if (!expectedSignature.empty() && !header.signature.equalsIgnoreCase(expectedSignature))
 		return Common::Error(Common::kReadingFailed, "Save signature does not match this game");
 
@@ -1246,24 +1128,6 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		_vm.globalVars().clear();
 		for (Common::HashMap<Common::String, Value>::const_iterator it = vars.begin(); it != vars.end(); ++it)
 			_vm.globalVars()[it->_key] = it->_value;
-	}
-
-	if (varsSeen && getGameType() == GType_Titanic) {
-		// Dump the story-progress globals on load so a timeline state that blocks
-		// a gated encounter (e.g. the Smethels message on GSTAIR3, which needs
-		// mission==2 && phase==3 && savedeck=='c') is immediately visible. Each
-		// of these is also logged on change at level 1 (vm.cpp shouldLogStoryVariable).
-		debug(1, "Cyberflix: load story state: mission=%d phase=%d smethphase=%d pennyphase=%d "
-				"burnsphase=%d neckphase=%d paintframe=%d savedeck=%s",
-				globalIntValue(_vm.globalVars(), "mission"),
-				globalIntValue(_vm.globalVars(), "phase"),
-				globalIntValue(_vm.globalVars(), "smethphase"),
-				globalIntValue(_vm.globalVars(), "pennyphase"),
-				globalIntValue(_vm.globalVars(), "burnsphase"),
-				globalIntValue(_vm.globalVars(), "neckphase"),
-				globalIntValue(_vm.globalVars(), "paintframe"),
-				_vm.globalVars().contains("savedeck")
-						? _vm.globalVars()["savedeck"].toString().c_str() : "<unset>");
 	}
 
 	restoreShopState(_propRuntime, shopStates);
@@ -1324,12 +1188,12 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	setSnapshot.transitionFrame = header.setTransitionFrame;
 	setRuntime().restoreSnapshot(setSnapshot);
 
-	if (castStates.empty() && getGameType() == GType_Titanic) {
-		restoreTitanicLegacyCastState(*this, _vm.globalVars());
-		Common::Array<Value> noArgs;
-		if (setRuntime().set() && setRuntime().set()->isOpen())
-			dispatchSetMessage("openset", noArgs);
-	}
+	GameLoadContext gameLoadContext;
+	gameLoadContext.variablesSeen = varsSeen;
+	gameLoadContext.castStatePresent = !castStates.empty();
+	gameLoadContext.frameCounterSeen = header.frameCounterSeen;
+	gameLoadContext.frameCounter = header.frameCounter;
+	gameSupport().restoreGameState(*this, _vm, gameLoadContext);
 
 	if (setRuntime().visible() && setRuntime().set() && setRuntime().set()->isOpen() && setRuntime().scene() >= 0 &&
 			!isReplacementStage(stageRuntime().stage())) {
@@ -1340,29 +1204,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		blackScreen();
 	}
 
-	// Story timers such as the cargo painting timer store `paintframe = frame()`
-	// in script globals. Preserve frame() across saves so those absolute-frame
-	// timers resume instead of restarting or going negative after reload. Older
-	// ScummVM saves lack frameCounter; when loading one mid-timer, resume from
-	// paintframe instead of leaving frame() below paintframe and freezing the
-	// countdown until the counter catches up.
-	_frameCounter = header.frameCounter;
-	if (getGameType() == GType_Titanic) {
-		const int paintFrame = globalIntValue(_vm.globalVars(), "paintframe");
-		const int mission = globalIntValue(_vm.globalVars(), "mission");
-		const int phase = globalIntValue(_vm.globalVars(), "phase");
-		Shop::Prop *painting = _propRuntime.findProp("painting");
-		if ((!header.frameCounterSeen || _frameCounter < paintFrame) &&
-				mission == 2 && phase == 0 && paintFrame > 0 && painting &&
-				painting->owner.equalsIgnoreCase("none"))
-			_frameCounter = paintFrame;
-	}
-	_cargoPaintingTimerStartFrame = 0;
-	_lastCargoPaintingTimerLogBucket = -1;
-	_cargoPaintingTimerExpiredLogged = false;
-
-	if (gDebugLevel > 0)
-		logTitanicGymLoadDiagnostics(*this);
+	_frameCounter = gameLoadContext.frameCounter;
 
 	programPalette(savedClut);
 	_hitKind = header.hitKind;
@@ -1386,7 +1228,7 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 	Common::ScopedPtr<Common::OutSaveFile> saveFile(out);
 
 	const Common::String signature = !_saveSignature.empty()
-			? _saveSignature : defaultSaveSignature(getGameType());
+			? _saveSignature : gameSupport().profile().defaultSaveSignature;
 
 	saveFile->write(kCyberflixSaveMagic, 4);
 	saveFile->writeUint32LE(kCyberflixSaveVersion);

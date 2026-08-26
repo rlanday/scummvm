@@ -57,13 +57,18 @@ bool Shop::open(const Common::String &name) {
 	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
 		warning("Cyberflix: shop '%s' has no master header", name.c_str());
+		_archive.close();
+		_fileData.clear();
 		return false;
 	}
 
 	const byte *hdr = engineBase(static_cast<uint32>(_master));
-	if (!hdr || hdr + kMasterPropTableOffset > _fileData.end()) {
+	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
+	if (!hdr || masterLen < kMasterPropTableOffset) {
 		warning("Cyberflix: shop '%s' master header truncated", name.c_str());
 		_master = -1;
+		_archive.close();
+		_fileData.clear();
 		return false;
 	}
 
@@ -88,21 +93,19 @@ bool Shop::open(const Common::String &name) {
 	// file-supplied count to the master resource's length (engine-base frame is
 	// res.length + 4 bytes) so a corrupt count cannot parse neighbouring
 	// resources' bytes as prop entries.
-	const uint32 masterLen = _archive.getResource(static_cast<uint32>(_master)).length + 4;
 	uint32 propCount = READ_LE_UINT32(hdr + kMasterPropCountOffset);
-	if (masterLen >= kMasterPropTableOffset)
-		propCount = MIN<uint32>(propCount, (masterLen - kMasterPropTableOffset) / kMasterPropStride);
-	else
-		propCount = 0;
+	propCount = MIN<uint32>(propCount,
+			static_cast<uint32>((masterLen - kMasterPropTableOffset) / kMasterPropStride));
 	const byte *entry = hdr + kMasterPropTableOffset;
 	for (uint32 i = 0; i < propCount; ++i, entry += kMasterPropStride) {
-		if (entry + kMasterPropStride > _fileData.end())
+		if (!hasBytes(entry, _fileData.end(), kMasterPropStride))
 			break;
 		uint32 masterId = READ_LE_UINT32(entry);
 		int mIdx = resourceIndexById(masterId);
 		const byte *pm = mIdx >= 0 ? engineBase(static_cast<uint32>(mIdx)) : nullptr;
-		const uint32 pmLen = mIdx >= 0 ? _archive.getResource(static_cast<uint32>(mIdx)).length + 4 : 0;
-		if (!pm || pmLen < kPropShapeTableOffset || pm + kPropShapeTableOffset > _fileData.end()) {
+		const uint64 pmLen = mIdx >= 0 ?
+				static_cast<uint64>(_archive.getResource(static_cast<uint32>(mIdx)).length) + 4 : 0;
+		if (!pm || pmLen < kPropShapeTableOffset) {
 			warning("Cyberflix: shop '%s' prop master %u missing", name.c_str(), masterId);
 			continue;
 		}
@@ -117,9 +120,10 @@ bool Shop::open(const Common::String &name) {
 
 		// Clamp the shape count to the prop-master resource, like propCount above.
 		uint32 shapeCount = READ_LE_UINT32(pm + kPropShapeCountOffset);
-		shapeCount = MIN<uint32>(shapeCount, (pmLen - kPropShapeTableOffset) / kPropShapeStride);
+		shapeCount = MIN<uint32>(shapeCount,
+				static_cast<uint32>((pmLen - kPropShapeTableOffset) / kPropShapeStride));
 		const byte *se = pm + kPropShapeTableOffset;
-		for (uint32 j = 0; j < shapeCount && se + kPropShapeStride <= _fileData.end(); ++j, se += kPropShapeStride) {
+		for (uint32 j = 0; j < shapeCount && hasBytes(se, _fileData.end(), kPropShapeStride); ++j, se += kPropShapeStride) {
 			Shape shape;
 			shape.resId = READ_LE_UINT32(se);
 			shape.name = pascalString(se + kPropShapeNameOffset);
@@ -198,7 +202,9 @@ Shop::ShapePoseResult Shop::shapePoseCount(const Prop &prop, const Common::Strin
 			continue;
 		int idx = resourceIndexById(prop.shapes[i].resId);
 		const byte *sh = idx >= 0 ? engineBase(static_cast<uint32>(idx)) : nullptr;
-		if (!sh || sh + kShapeCellTableOffset > _fileData.end())
+		const uint64 shapeLen = idx >= 0 ?
+				static_cast<uint64>(_archive.getResource(static_cast<uint32>(idx)).length) + 4 : 0;
+		if (!sh || shapeLen < kShapeCellTableOffset)
 			return result;
 		result.valid = true;
 		result.poseCount = READ_LE_UINT16(sh + kShapePoseCountOffset);
@@ -274,7 +280,7 @@ Shop::PropCellResult Shop::resolvePropCel(const Prop &prop, int angle) const {
 	const byte *cellTable = sh + kShapeCellTableOffset;
 	for (uint16 i = 0; i < cellCount; ++i) {
 		const byte *c = cellTable + static_cast<uint32>(i) * kShapeCellStride;
-		if (c + kShapeCellStride > _fileData.end())
+		if (!hasBytes(c, _fileData.end(), kShapeCellStride))
 			break;
 		if (READ_LE_UINT16(c + kCellIdOffset) != static_cast<uint16>(poseId - 1))
 			continue;
@@ -318,11 +324,21 @@ Shop::PropRenderResult Shop::renderProp(const Prop &prop) const {
 
 	// Display-item rect (FUN_0042bb90, screen mode): position minus the cell's
 	// registration point; extent from the cell bounds (the +40 bias cancels).
+	const int sourceH = cell.cellRect.height();
+	const int sourceW = cell.cellRect.width();
+	const int64 top = static_cast<int>(prop.y) - cell.regV;
+	const int64 left = static_cast<int>(prop.x) - cell.regH;
+	const int64 bottom = top + sourceH;
+	const int64 right = left + sourceW;
+	if (sourceH <= 0 || sourceW <= 0 || !fitsInt16(top) || !fitsInt16(left) ||
+			!fitsInt16(bottom) || !fitsInt16(right))
+		return result;
+
 	result.cel = cell.cel;
-	result.rect.top = prop.y - cell.regV;
-	result.rect.left = prop.x - cell.regH;
-	result.rect.bottom = result.rect.top + cell.cellRect.height();
-	result.rect.right = result.rect.left + cell.cellRect.width();
+	result.rect.top = static_cast<int16>(top);
+	result.rect.left = static_cast<int16>(left);
+	result.rect.bottom = static_cast<int16>(bottom);
+	result.rect.right = static_cast<int16>(right);
 	result.valid = true;
 	return result;
 }
@@ -346,15 +362,16 @@ Shop::PropRenderResult Shop::renderWorldProp(const Prop &prop, const WorldCamera
 	if (projectedDepth < 1)
 		return result;
 
-	const int zClippedDepth = MAX(projectedDepth - prop.zClip, 0);
+	const int64 zClippedDepth = MAX<int64>(static_cast<int64>(projectedDepth) - prop.zClip, 0);
 	const int nearLimit = (camera.nearPlane + (camera.nearPlane < 0 ? 3 : 0)) >> 2;
 	if (projectedDepth <= nearLimit || zClippedDepth > camera.farPlane)
 		return result;
 
 	const int projectedH = fixedShift14(relY * cosH - relX * sinH);
-	const int screenX = camera.centerX + projectedH * camera.focal / projectedDepth;
-	const int screenY = camera.centerY -
-			((prop.z - camera.baseZ - camera.cameraZ) * camera.focal) / projectedDepth;
+	const int64 screenX = camera.centerX +
+			static_cast<int64>(projectedH) * camera.focal / projectedDepth;
+	const int64 screenY = camera.centerY -
+			(static_cast<int64>(prop.z) - camera.baseZ - camera.cameraZ) * camera.focal / projectedDepth;
 	const int angleToCamera = nativePointAngle(camera.cameraY - prop.y, camera.cameraX - prop.x);
 	const int viewAngle = (prop.angle - angleToCamera) & 0xff;
 
@@ -366,23 +383,32 @@ Shop::PropRenderResult Shop::renderWorldProp(const Prop &prop, const WorldCamera
 	const int sourceW = cell.cellRect.width();
 	if (sourceH <= 0 || sourceW <= 0)
 		return result;
-	const int effectiveScale = (prop.scale * cell.cellScale) / 1000;
-	const int scaledH = (effectiveScale * sourceH) / projectedDepth;
-	const int scaledW = (effectiveScale * sourceW) / projectedDepth;
-	if (scaledH <= 0 || scaledW <= 0)
+	const int64 effectiveScale = (static_cast<int64>(prop.scale) * cell.cellScale) / 1000;
+	const int64 scaledH = (effectiveScale * sourceH) / projectedDepth;
+	const int64 scaledW = (effectiveScale * sourceW) / projectedDepth;
+	if (scaledH <= 0 || scaledW <= 0 || scaledH > 32767 || scaledW > 32767)
+		return result;
+
+	const int64 top = screenY - (scaledH * cell.regV) / sourceH;
+	const int64 left = screenX - (scaledW * cell.regH) / sourceW;
+	const int64 bottom = top + scaledH;
+	const int64 right = left + scaledW;
+	const int64 depthBucket = camera.nearPlane ? zClippedDepth / camera.nearPlane : 0;
+	if (!fitsInt16(top) || !fitsInt16(left) || !fitsInt16(bottom) || !fitsInt16(right) ||
+			!fitsInt16(projectedDepth) || !fitsInt16(depthBucket))
 		return result;
 
 	result.cel = cell.cel;
-	result.rect.top = screenY - (scaledH * cell.regV) / sourceH;
-	result.rect.left = screenX - (scaledW * cell.regH) / sourceW;
-	result.rect.bottom = result.rect.top + scaledH;
-	result.rect.right = result.rect.left + scaledW;
+	result.rect.top = static_cast<int16>(top);
+	result.rect.left = static_cast<int16>(left);
+	result.rect.bottom = static_cast<int16>(bottom);
+	result.rect.right = static_cast<int16>(right);
 	Common::Rect viewport(camera.viewportLeft, camera.viewportTop,
 			camera.viewportRight, camera.viewportBottom);
 	if (!result.rect.intersects(viewport))
 		return result;
 	result.depth = static_cast<int16>(projectedDepth);
-	result.depthBucket = camera.nearPlane ? static_cast<int16>(zClippedDepth / camera.nearPlane) : 0;
+	result.depthBucket = static_cast<int16>(depthBucket);
 	result.valid = true;
 	return result;
 }

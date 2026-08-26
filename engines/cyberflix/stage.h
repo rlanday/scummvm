@@ -142,6 +142,7 @@ public:
 	bool loadStagePalette(Palette &rgb) const;
 
 private:
+	void reset();
 	/** Engine-base pointer (record+8) of resource @p index, or nullptr. */
 	const byte *engineBase(uint32 index) const;
 	/** Payload pointer (record+12) of resource @p index, or nullptr. */

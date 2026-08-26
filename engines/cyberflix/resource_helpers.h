@@ -70,16 +70,41 @@ inline int findMasterHeaderIndex(const Archive &archive) {
 	return -1;
 }
 
+/** True when @p p points to at least @p length bytes before @p end. */
+inline bool hasBytes(const byte *p, const byte *end, uint64 length) {
+	return p && p <= end && length <= static_cast<uint64>(end - p);
+}
+
+/**
+ * True when the half-open range [@p offset, @p offset + @p length) fits in
+ * @p size.
+ */
+inline bool hasRange(uint64 size, uint64 offset, uint64 length) {
+	return offset <= size && length <= size - offset;
+}
+
+/** Clamp a file-supplied count to the complete records that fit in a range. */
+inline uint32 boundedRecordCount(uint32 count, uint64 size, uint64 offset, uint32 stride) {
+	if (stride == 0 || offset > size)
+		return 0;
+	const uint64 available = (size - offset) / stride;
+	return available < count ? static_cast<uint32>(available) : count;
+}
+
+inline bool fitsInt16(int64 value) {
+	return value >= -32768 && value <= 32767;
+}
+
 /**
  * Compare @p name against the Pascal string at @p p in place, case-insensitively,
  * without constructing a temporary Common::String. These lookups sit on
  * idle/mouse hit-test hot paths (scene/view/painting/button table records).
  */
 inline bool pascalEqualsIgnoreCase(const byte *p, const byte *end, const Common::String &name) {
-	if (!p || p >= end)
+	if (!hasBytes(p, end, 1))
 		return false;
 	const uint len = *p;
-	if (p + 1 + len > end || len != name.size())
+	if (!hasBytes(p, end, static_cast<uint64>(len) + 1) || len != name.size())
 		return false;
 	for (uint i = 0; i < len; ++i)
 		if (tolower((unsigned char)p[1 + i]) != tolower((unsigned char)name[i]))
@@ -89,11 +114,11 @@ inline bool pascalEqualsIgnoreCase(const byte *p, const byte *end, const Common:
 
 inline Common::String readPascalString(const byte *p,
 		const Common::Array<byte> &fileData, bool allowTruncated = false) {
-	if (!p || p < fileData.begin() || p >= fileData.end())
+	if (!p || p < fileData.begin() || !hasBytes(p, fileData.end(), 1))
 		return Common::String();
 	uint len = *p;
 	const byte *s = p + 1;
-	if (s + len > fileData.end()) {
+	if (!hasBytes(s, fileData.end(), len)) {
 		if (!allowTruncated)
 			return Common::String();
 		len = static_cast<uint>((fileData.end() - s));

@@ -43,6 +43,8 @@ enum {
 // reference.
 static bool decodeScanline(const byte *data, uint32 p, uint32 byteLen, uint16 width,
 		byte *row, byte *rowOpaque, const byte *prevRow, const byte *prevOpaque) {
+	if (byteLen > 0xffffffffU - p)
+		return false;
 	const uint32 end = p + byteLen;
 	uint16 x = 0;
 	while (p < end && x < width) {
@@ -125,11 +127,11 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
 
 	uint32 p = 0;
 	for (uint16 y = 0; y < height; ++y) {
-		if (p + 2 > remain)
+		if (p > remain || remain - p < 2)
 			return false;
 		const uint16 byteLen = static_cast<uint16>((data[p] | (data[p + 1] << 8)));
 		p += 2;
-		if (p + byteLen > remain)
+		if (byteLen > remain - p)
 			return false;
 		byte *row = &out.pixels[static_cast<uint>(y) * width];
 		byte *rowOpaque = &out.opaque[static_cast<uint>(y) * width];
@@ -201,11 +203,18 @@ public:
 
 private:
 	byte readByte() {
-		if (_s >= _srcSize) { _ok = false; return 0; }
+		if (_s >= _srcSize) {
+			_ok = false;
+			return 0;
+		}
 		return _src[_s++];
 	}
+
 	uint16 readWordLE() {
-		if (_s + 2 > _srcSize) { _ok = false; return 0; }
+		if (_s > _srcSize || _srcSize - _s < 2) {
+			_ok = false;
+			return 0;
+		}
 		const uint16 v = static_cast<uint16>((_src[_s] | (_src[_s + 1] << 8)));
 		_s += 2;
 		return v;
@@ -224,11 +233,14 @@ private:
 	}
 
 	bool destRange(int off, int len) const {
-		return off >= 0 && len >= 0 && off + len <= _dstSize;
+		return off >= 0 && len >= 0 && off <= _dstSize && len <= _dstSize - off;
 	}
 
 	void copyFromSrc(int di, int n) {
-		if (!destRange(di, n) || _s + static_cast<uint32>(n) > _srcSize) { _ok = false; return; }
+		if (!destRange(di, n) || _s > _srcSize || static_cast<uint32>(n) > _srcSize - _s) {
+			_ok = false;
+			return;
+		}
 		memcpy(_dst + di, _src + _s, n);
 		_s += n;
 	}
@@ -301,23 +313,39 @@ private:
 				int run = 0;
 				do {
 					const uint16 inv = static_cast<uint16>(~ax);
-					int chunk = inv ? 15 - Common::intLog2(inv) : 16;
+					int chunk = 16;
+					if (inv) {
+						const int highestBit = Common::intLog2(inv);
+						// ax has its high bit set here, so ~ax may only have
+						// significant bits 0..14. Reject an impossible result
+						// before using it as a shift count.
+						if (highestBit < 0 || highestBit >= 15) {
+							_ok = false;
+							break;
+						}
+						chunk = 15 - highestBit;
+					}
 					if (chunk > bits)
 						chunk = bits;
 					if (chunk > budget - run)
 						chunk = budget - run;
+					if (chunk <= 0 || chunk > 16) {
+						_ok = false;
+						break;
+					}
 
 					if (chunk == 16)
 						ax = dxw;
 					else
-						ax = static_cast<uint16>(((ax << chunk) | (dxw >> (16 - chunk))));
+						ax = static_cast<uint16>((static_cast<uint32>(ax) << chunk) |
+								(dxw >> (16 - chunk)));
 					bits -= chunk;
 					run += chunk;
 
 					if (run == budget)
 						break;
 					if (bits != 0)
-						dxw = static_cast<uint16>(dxw << chunk);
+						dxw = static_cast<uint16>(static_cast<uint32>(dxw) << chunk);
 					else { dxw = readWordBE(); bits = 16; }
 				} while (_ok && (ax & 0x8000));
 				if (!_ok)
@@ -352,20 +380,23 @@ private:
 			// look-ahead word and reloading it from the stream as it runs dry.
 			if (bits >= consume) {
 				if (consume > 0)
-					ax = static_cast<uint16>(((ax << consume) | (dxw >> (16 - consume))));
+					ax = static_cast<uint16>((static_cast<uint32>(ax) << consume) |
+							(dxw >> (16 - consume)));
 				bits -= consume;
 				if (bits == 0) { dxw = readWordBE(); bits = 16; }
-				else dxw = static_cast<uint16>(dxw << consume);
+				else dxw = static_cast<uint16>(static_cast<uint32>(dxw) << consume);
 			} else {
 				// The symbol straddles the look-ahead boundary: take the rest of
 				// the current word, reload, then take the remaining @c rem bits.
 				const int rem = consume - bits;
 				if (bits > 0)
-					ax = static_cast<uint16>(((ax << bits) | (dxw >> (16 - bits))));
+					ax = static_cast<uint16>((static_cast<uint32>(ax) << bits) |
+							(dxw >> (16 - bits)));
 				dxw = readWordBE();
 				if (rem > 0)
-					ax = static_cast<uint16>(((ax << rem) | (dxw >> (16 - rem))));
-				dxw = static_cast<uint16>(dxw << rem);
+					ax = static_cast<uint16>((static_cast<uint32>(ax) << rem) |
+							(dxw >> (16 - rem)));
+				dxw = static_cast<uint16>(static_cast<uint32>(dxw) << rem);
 				bits = 16 - rem;
 			}
 			if (budget == 0) break;

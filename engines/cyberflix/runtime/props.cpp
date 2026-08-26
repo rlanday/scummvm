@@ -378,49 +378,12 @@ Value PropRuntime::sendToPropFx(CyberflixEngine &engine, const Common::String &p
 			prop->name, prop->name, message, args, "propfx");
 }
 
-static bool shouldLogInterfaceProp(const Common::String &name) {
-	return name.equalsIgnoreCase("life") ||
-			name.equalsIgnoreCase("watch") ||
-			name.equalsIgnoreCase("bag") ||
-			name.equalsIgnoreCase("map") ||
-			name.equalsIgnoreCase("lid") ||
-			name.equalsIgnoreCase("light") ||
-			name.equalsIgnoreCase("invenhelp");
-}
-
-// The four props NAREND.STG reads to pick an ending. Every hand-over is worth
-// logging: losing one is silent in-game and only shows up in the epilogue.
-static bool isEndingProp(const Common::String &name) {
-	return name.equalsIgnoreCase("rubaiyat") ||
-			name.equalsIgnoreCase("realneck") ||
-			name.equalsIgnoreCase("painting") ||
-			name.equalsIgnoreCase("notebook");
-}
-
-static bool shouldLogEnigmaProp(const Common::String &name) {
-	return name.equalsIgnoreCase("dial1") ||
-			name.equalsIgnoreCase("dial2") ||
-			name.equalsIgnoreCase("dial3") ||
-			name.equalsIgnoreCase("dial4") ||
-			name.equalsIgnoreCase("zeitgram") ||
-			name.equalsIgnoreCase("enigsw") ||
-			name.equalsIgnoreCase("enigswlight") ||
-			name.equalsIgnoreCase("enigwirer") ||
-			name.equalsIgnoreCase("enigwireg") ||
-			name.equalsIgnoreCase("enigdecode") ||
-			name.equalsIgnoreCase("enigmess") ||
-			name.equalsIgnoreCase("reset");
-}
-
 bool PropRuntime::propVisible(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
 		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
 		return false;
 	}
-	if (gDebugLevel > 0 && (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name)))
-		debug(1, "Cyberflix: propvisible('%s') -> %s", name.c_str(),
-				prop->visible ? "true" : "false");
 	return prop->visible;
 }
 
@@ -431,9 +394,6 @@ void PropRuntime::propVisible(const Common::String &name, bool visible) {
 		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
 		return;
 	}
-	if (gDebugLevel > 0 && (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name)))
-		debug(1, "Cyberflix: propvisible('%s', %s) old=%s", name.c_str(),
-				visible ? "true" : "false", prop->visible ? "true" : "false");
 	if (prop->visible != visible) {
 		Common::Rect oldRect;
 		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
@@ -448,9 +408,6 @@ Common::String PropRuntime::propView(const Common::String &name) {
 		warning("Cyberflix: propview('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
-	if (gDebugLevel > 0 && (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name)))
-		debug(1, "Cyberflix: propview('%s') -> '%s'", name.c_str(),
-				prop->shapeName.c_str());
 	return prop->shapeName;
 }
 
@@ -476,9 +433,6 @@ void PropRuntime::propView(const Common::String &name, const Common::String &sha
 	}
 	Common::String key = shape;
 	key.toLowercase();
-	if (gDebugLevel > 0 && (shouldLogInterfaceProp(name) || shouldLogEnigmaProp(name)))
-		debug(1, "Cyberflix: propview('%s', '%s') old='%s'", name.c_str(),
-				key.c_str(), prop->shapeName.c_str());
 	const uint16 newPoseIndex = 0;
 	if (prop->shapeName != key || prop->poseCount != pose.poseCount || prop->poseIndex != newPoseIndex) {
 		Common::Rect oldRect;
@@ -542,9 +496,6 @@ void PropRuntime::propSet(CyberflixEngine &engine, const Common::String &name, c
 	}
 	Common::String key = setName;
 	key.toLowercase();
-	if (shouldLogInterfaceProp(name))
-		debug(1, "Cyberflix: propset('%s', '%s') mode %u -> 1", name.c_str(),
-				key.c_str(), prop->mode);
 	Common::Rect oldRect;
 	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 	prop->setName = key;
@@ -560,9 +511,6 @@ void PropRuntime::propXYZ(const Common::String &name, int x, int y, int z) {
 		warning("Cyberflix: propxyz('%s'): no such prop", name.c_str());
 		return;
 	}
-	if (shouldLogInterfaceProp(name))
-		debug(1, "Cyberflix: propxyz('%s', %d, %d, %d) mode %u -> 1",
-				name.c_str(), x, y, z, prop->mode);
 	Common::Rect oldRect;
 	bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
 	prop->mode = 1; // FUN_0042a140: world/SET-space placement.
@@ -695,8 +643,6 @@ int PropRuntime::getPropDeg(const Common::String &name) {
 		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
 		return 0;
 	}
-	if (shouldLogEnigmaProp(name))
-		debug(1, "Cyberflix: propdeg('%s') -> %d", name.c_str(), prop->angle);
 	return prop->angle;
 }
 
@@ -707,9 +653,6 @@ int PropRuntime::setPropDeg(const Common::String &name, int newDeg) {
 		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
 		return 0;
 	}
-	if (shouldLogEnigmaProp(name))
-		debug(1, "Cyberflix: propdeg('%s', %d) old=%d",
-				name.c_str(), newDeg & 0xff, prop->angle);
 	if (prop->angle != static_cast<int16>(newDeg & 0xff)) {
 		Common::Rect oldRect;
 		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
@@ -734,16 +677,7 @@ Common::String PropRuntime::setPropOwner(const Common::String &name, const Commo
 		warning("Cyberflix: propowner('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
-	// Log ending-critical hand-overs before the write so the old owner is still
-	// available; NAREND.STG derives the whole epilogue from these four props.
-	if (isEndingProp(name) && !prop->owner.equalsIgnoreCase(newOwner))
-		debug(1, "Cyberflix: ENDING PROP '%s': '%s' -> '%s'",
-				name.c_str(), prop->owner.c_str(), newOwner.c_str());
 	prop->owner = newOwner; // FUN_00428d40: copy into record +0x8c
-	if (shouldLogInterfaceProp(name))
-		debug(1, "Cyberflix: propowner('%s'%s%s%s) -> '%s'", name.c_str(),
-				", '", newOwner.c_str(), "'",
-				prop->owner.c_str());
 	return prop->owner;
 }
 

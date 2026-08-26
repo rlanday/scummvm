@@ -4,6 +4,8 @@ MODULE_OBJS = \
 	audio/audio_runtime.o \
 	audio/cbx_audio.o \
 	cyberflix.o \
+	game_support.o \
+	games/titanic.o \
 	metaengine.o \
 	resources/archive.o \
 	resources/cast.o \

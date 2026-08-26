@@ -27,13 +27,12 @@
 
 namespace Cyberflix {
 
-Common::String canonicalCDLabel(const Common::String &label);
-bool findExtractedCDRoot(const Common::String &label, Common::FSNode &out);
-bool findRepackagedDataRoot(Common::FSNode &out);
-bool validateTitanicDiscLayout();
+class GameSupport;
 
 class PathRuntime {
 public:
+	PathRuntime();
+
 	enum {
 		kPathSlotCount = 9
 	};
@@ -46,6 +45,7 @@ public:
 	void setPathSlotValue(int slot, const Common::String &path);
 	const Common::String &pathSlotValue(int slot) const { return _pathSlots[slot]; }
 	void setCurrentDiscRootName(const Common::String &name);
+	void setGameSupport(const GameSupport *gameSupport) { _gameSupport = gameSupport; }
 
 private:
 	void registerPathSlotDirectory(int slot);
@@ -53,6 +53,7 @@ private:
 	Common::String _pathSlots[kPathSlotCount];        ///< Native path slots 0..8 (FUN_00438450).
 	Common::String _pathSlotArchives[kPathSlotCount]; ///< SearchMan archive names for slots 1..8.
 	Common::String _currentCD;                        ///< Native current CD Pascal string (DAT_00460d60).
+	const GameSupport *_gameSupport;                  ///< Non-owning per-title path policy.
 };
 
 } // End of namespace Cyberflix

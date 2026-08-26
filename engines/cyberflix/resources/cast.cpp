@@ -56,13 +56,18 @@ bool Cast::open(const Common::String &name) {
 	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
 		warning("Cyberflix: cast '%s' has no master header", name.c_str());
+		_archive.close();
+		_fileData.clear();
 		return false;
 	}
 
 	const byte *hdr = engineBase(static_cast<uint32>(_master));
-	if (!hdr || hdr + kMasterActorTableOffset > _fileData.end()) {
+	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
+	if (!hdr || masterLen < kMasterActorTableOffset) {
 		warning("Cyberflix: cast '%s' master header truncated", name.c_str());
 		_master = -1;
+		_archive.close();
+		_fileData.clear();
 		return false;
 	}
 
@@ -85,20 +90,19 @@ bool Cast::open(const Common::String &name) {
 	// Clamp the file-supplied actor count to the master resource's length
 	// (engine-base frame is res.length + 4 bytes), as puppet.cpp does, so a
 	// corrupt count cannot parse neighbouring resources' bytes as actors.
-	const uint32 masterLen = _archive.getResource(static_cast<uint32>(_master)).length + 4;
 	uint32 actorCount = READ_LE_UINT32(hdr + kMasterActorCountOffset);
-	if (masterLen >= kMasterActorTableOffset)
-		actorCount = MIN<uint32>(actorCount, (masterLen - kMasterActorTableOffset) / kMasterActorStride);
-	else
-		actorCount = 0;
+	actorCount = MIN<uint32>(actorCount,
+			static_cast<uint32>((masterLen - kMasterActorTableOffset) / kMasterActorStride));
 	const byte *entry = hdr + kMasterActorTableOffset;
 	for (uint32 i = 0; i < actorCount; ++i, entry += kMasterActorStride) {
-		if (entry + kMasterActorStride > _fileData.end())
+		if (!hasBytes(entry, _fileData.end(), kMasterActorStride))
 			break;
 		uint32 masterId = READ_LE_UINT32(entry);
 		int mIdx = resourceIndexById(masterId);
 		const byte *am = mIdx >= 0 ? engineBase(static_cast<uint32>(mIdx)) : nullptr;
-		if (!am || am + kActorShapeTableOffset > _fileData.end()) {
+		const uint64 amLen = mIdx >= 0 ?
+				static_cast<uint64>(_archive.getResource(static_cast<uint32>(mIdx)).length) + 4 : 0;
+		if (!am || amLen < kActorShapeTableOffset) {
 			warning("Cyberflix: cast '%s' actor master %u missing", name.c_str(), masterId);
 			continue;
 		}
@@ -114,10 +118,11 @@ bool Cast::open(const Common::String &name) {
 		actor->sceneName.toLowercase();
 		actor->owner = "none";
 
-		uint32 shapeCount = READ_LE_UINT32(am + kActorShapeCountOffset);
+		uint32 shapeCount = MIN<uint32>(READ_LE_UINT32(am + kActorShapeCountOffset),
+				static_cast<uint32>((amLen - kActorShapeTableOffset) / kActorShapeStride));
 		const byte *shapeEntry = am + kActorShapeTableOffset;
 		for (uint32 shape = 0; shape < shapeCount; ++shape, shapeEntry += kActorShapeStride) {
-			if (shapeEntry + kActorShapeStride > _fileData.end())
+			if (!hasBytes(shapeEntry, _fileData.end(), kActorShapeStride))
 				break;
 			Actor::Shape actorShape;
 			actorShape.resId = READ_LE_UINT32(shapeEntry);
@@ -253,7 +258,7 @@ Cast::ActorCellResult Cast::resolveActorCell(const Actor &actor, int angle) cons
 	const byte *cellTable = sh + kShapeCellTableOffset;
 	for (uint16 i = 0; i < cellCount; ++i) {
 		const byte *c = cellTable + static_cast<uint32>(i) * kShapeCellStride;
-		if (c + kShapeCellStride > _fileData.end())
+		if (!hasBytes(c, _fileData.end(), kShapeCellStride))
 			break;
 		if (READ_LE_UINT16(c + kCellIdOffset) != static_cast<uint16>(poseId - 1))
 			continue;
@@ -304,15 +309,16 @@ Cast::ActorProjectionResult Cast::projectWorldActor(const Actor &actor, const Sh
 	if (projectedDepth < 1)
 		return result;
 
-	const int zClippedDepth = MAX(projectedDepth - actor.zClip, 0);
+	const int64 zClippedDepth = MAX<int64>(static_cast<int64>(projectedDepth) - actor.zClip, 0);
 	const int nearLimit = (camera.nearPlane + (camera.nearPlane < 0 ? 3 : 0)) >> 2;
 	if (projectedDepth <= nearLimit || zClippedDepth > camera.farPlane)
 		return result;
 
 	const int projectedH = fixedShift14(relY * cosH - relX * sinH);
-	const int screenX = camera.centerX + projectedH * camera.focal / projectedDepth;
-	const int screenY = camera.centerY -
-			((actor.z - camera.baseZ - camera.cameraZ) * camera.focal) / projectedDepth;
+	const int64 screenX = camera.centerX +
+			static_cast<int64>(projectedH) * camera.focal / projectedDepth;
+	const int64 screenY = camera.centerY -
+			(static_cast<int64>(actor.z) - camera.baseZ - camera.cameraZ) * camera.focal / projectedDepth;
 	const int angleToCamera = nativePointAngle(camera.cameraY - actor.y, camera.cameraX - actor.x);
 	const int viewAngle = (actor.angle - angleToCamera) & 0xff;
 
@@ -324,22 +330,31 @@ Cast::ActorProjectionResult Cast::projectWorldActor(const Actor &actor, const Sh
 	const int sourceW = result.cell.cellRect.width();
 	if (sourceH <= 0 || sourceW <= 0)
 		return result;
-	const int effectiveScale = (actor.scale * result.cell.cellScale) / 1000;
-	const int scaledH = (effectiveScale * sourceH) / projectedDepth;
-	const int scaledW = (effectiveScale * sourceW) / projectedDepth;
-	if (scaledH <= 0 || scaledW <= 0)
+	const int64 effectiveScale = (static_cast<int64>(actor.scale) * result.cell.cellScale) / 1000;
+	const int64 scaledH = (effectiveScale * sourceH) / projectedDepth;
+	const int64 scaledW = (effectiveScale * sourceW) / projectedDepth;
+	if (scaledH <= 0 || scaledW <= 0 || scaledH > 32767 || scaledW > 32767)
 		return result;
 
-	result.rect.top = screenY - (scaledH * result.cell.regV) / sourceH;
-	result.rect.left = screenX - (scaledW * result.cell.regH) / sourceW;
-	result.rect.bottom = result.rect.top + scaledH;
-	result.rect.right = result.rect.left + scaledW;
+	const int64 top = screenY - (scaledH * result.cell.regV) / sourceH;
+	const int64 left = screenX - (scaledW * result.cell.regH) / sourceW;
+	const int64 bottom = top + scaledH;
+	const int64 right = left + scaledW;
+	const int64 depthBucket = camera.nearPlane ? zClippedDepth / camera.nearPlane : 0;
+	if (!fitsInt16(top) || !fitsInt16(left) || !fitsInt16(bottom) || !fitsInt16(right) ||
+			!fitsInt16(projectedDepth) || !fitsInt16(depthBucket))
+		return result;
+
+	result.rect.top = static_cast<int16>(top);
+	result.rect.left = static_cast<int16>(left);
+	result.rect.bottom = static_cast<int16>(bottom);
+	result.rect.right = static_cast<int16>(right);
 	Common::Rect viewport(camera.viewportLeft, camera.viewportTop,
 			camera.viewportRight, camera.viewportBottom);
 	if (!result.rect.intersects(viewport))
 		return result;
 	result.depth = static_cast<int16>(projectedDepth);
-	result.depthBucket = camera.nearPlane ? static_cast<int16>(zClippedDepth / camera.nearPlane) : 0;
+	result.depthBucket = static_cast<int16>(depthBucket);
 	result.valid = true;
 	return result;
 }

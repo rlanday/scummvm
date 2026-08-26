@@ -35,7 +35,7 @@ inline void drawScaledCel(Graphics::Surface &screen, const CelImage &cel,
 		const FrameSequence *depthFrame = nullptr, int depthBucket = 0) {
 	const int destW = dest.width();
 	const int destH = dest.height();
-	if (destW <= 0 || destH <= 0 || cel.width <= 0 || cel.height <= 0)
+	if (destW <= 0 || destH <= 0 || cel.width == 0 || cel.height == 0)
 		return;
 	Common::Rect paint = dest;
 	paint.clip(clip);
@@ -51,25 +51,38 @@ inline void drawScaledCel(Graphics::Surface &screen, const CelImage &cel,
 			if (cel.isOpaque(srcX, srcY) &&
 					(!depthFrame || depthFrame->depthVisibleAt(x, y, depthBucket)))
 				*(reinterpret_cast<byte *>(screen.getBasePtr(x, y))) =
-						cel.pixels[static_cast<uint>(srcY) * cel.width + srcX];
+						cel.pixels[static_cast<uint>(srcY) * static_cast<uint>(cel.width) + srcX];
 		}
 	}
 }
 
 inline void drawCel(Graphics::Surface &screen, const CelImage &cel,
 		const Common::Rect &dest, const Common::Rect &clip) {
+	if (cel.width == 0 || cel.height == 0)
+		return;
+
 	Common::Rect paint = dest;
 	paint.clip(clip);
-	paint.clip(Common::Rect(dest.left, dest.top, dest.left + cel.width, dest.top + cel.height));
-	if (paint.isEmpty() || cel.width == 0 || cel.height == 0)
+	paint.clip(Common::Rect(0, 0, screen.w, screen.h));
+	if (paint.isEmpty())
 		return;
+
+	const int celRight = static_cast<int>(dest.left) + cel.width;
+	const int celBottom = static_cast<int>(dest.top) + cel.height;
+	if (celRight <= paint.left || celBottom <= paint.top)
+		return;
+	if (paint.right > celRight)
+		paint.right = static_cast<int16>(celRight);
+	if (paint.bottom > celBottom)
+		paint.bottom = static_cast<int16>(celBottom);
 
 	const int copyWidth = paint.width();
 	for (int y = paint.top; y < paint.bottom; ++y) {
 		const int srcY = y - dest.top;
 		const int srcX = paint.left - dest.left;
-		const byte *src = cel.pixels.begin() + static_cast<uint>(srcY) * cel.width + srcX;
-		const byte *opaque = cel.opaque.begin() + static_cast<uint>(srcY) * cel.width + srcX;
+		const uint srcOffset = static_cast<uint>(srcY) * static_cast<uint>(cel.width) + srcX;
+		const byte *src = &cel.pixels[srcOffset];
+		const byte *opaque = &cel.opaque[srcOffset];
 		byte *dst = reinterpret_cast<byte *>(screen.getBasePtr(paint.left, y));
 		for (int x = 0; x < copyWidth; ++x) {
 			if (opaque[x])
@@ -107,8 +120,9 @@ inline void copyFramePixelsToScreen(Graphics::Surface &screen, const byte *pixel
 	// Frame backgrounds are fully opaque. Clip once, then copy whole rows; this
 	// avoids the per-pixel bounds checks in the SET transition hot path.
 	for (int y = 0; y < copyHeight; ++y) {
+		const size_t srcOffset = static_cast<size_t>(srcY + y) * static_cast<uint>(width) + srcX;
 		memcpy(screen.getBasePtr(dstX, dstY + y),
-				pixels + static_cast<uint>(srcY + y) * width + srcX, copyWidth);
+				pixels + srcOffset, static_cast<size_t>(copyWidth));
 	}
 }
 

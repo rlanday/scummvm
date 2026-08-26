@@ -48,6 +48,7 @@ public:
 		Common::String message;
 		int32 remainingPasses = 0;
 		uint32 createdPass = 0;
+		uint32 processedPass = 0;
 	};
 
 	struct CricketState {

@@ -43,8 +43,8 @@ bool openArchiveFile(const Common::String &name, const char *kind,
 	}
 
 	int64 fileSize = file.size();
-	if (fileSize <= 0) {
-		warning("Cyberflix: could not stat %s '%s'", kind, name.c_str());
+	if (fileSize <= 0 || fileSize > 0xffffffffLL) {
+		warning("Cyberflix: invalid %s file size for '%s'", kind, name.c_str());
 		fileData.clear();
 		return false;
 	}

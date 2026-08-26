@@ -66,10 +66,15 @@ static bool openArchive(Console &console, const char *filename, Archive &archive
 		console.debugPrintf("Could not open '%s'\n", filename);
 		return false;
 	}
+	const int64 fileSize = file.size();
+	if (fileSize <= 0 || fileSize > 0xffffffffLL) {
+		console.debugPrintf("Invalid file size for '%s'\n", filename);
+		return false;
+	}
+	const uint32 size = static_cast<uint32>(fileSize);
 
 	bool ok;
 	if (fileData) {
-		uint32 size = static_cast<uint32>(file.size());
 		fileData->resize(size);
 		if (file.read(fileData->begin(), size) != size) {
 			console.debugPrintf("Could not read '%s'\n", filename);
@@ -77,7 +82,7 @@ static bool openArchive(Console &console, const char *filename, Archive &archive
 		}
 		ok = archive.open(new Common::MemoryReadStream(fileData->begin(), size, DisposeAfterUse::NO), filename);
 	} else {
-		ok = archive.open(file.readStream(file.size()), filename);
+		ok = archive.open(file.readStream(size), filename);
 	}
 	if (!ok) {
 		console.debugPrintf("'%s' is not a valid LPPALPPA container\n", filename);
@@ -95,10 +100,13 @@ static bool resolvePalette(Console &console, const char *palFilename, const char
 	if (palFilename) {
 		Common::File palFile;
 		if (palFile.open(palFilename)) {
-			uint32 palSize = static_cast<uint32>(palFile.size());
-			Common::Array<byte> palData(palSize);
-			if (palFile.read(palData.begin(), palSize) == palSize)
-				havePalette = loadPalette(palData.begin(), palSize, rgb);
+			const int64 palFileSize = palFile.size();
+			if (palFileSize > 0 && palFileSize <= 0xffffffffLL) {
+				const uint32 palSize = static_cast<uint32>(palFileSize);
+				Common::Array<byte> palData(palSize);
+				if (palFile.read(palData.begin(), palSize) == palSize)
+					havePalette = loadPalette(palData.begin(), palSize, rgb);
+			}
 		}
 		if (!havePalette)
 			console.debugPrintf("No palette found in '%s'; falling back to '%s'\n", palFilename, filename);
@@ -375,7 +383,12 @@ bool Console::cmdShowFrame(int argc, const char **argv) {
 
 	// Read the whole file so it can both feed the decoder and be scanned for an
 	// embedded palette.
-	uint32 size = static_cast<uint32>(file.size());
+	const int64 fileSize = file.size();
+	if (fileSize <= 0 || fileSize > 0xffffffffLL) {
+		debugPrintf("Invalid file size for '%s'\n", argv[1]);
+		return true;
+	}
+	const uint32 size = static_cast<uint32>(fileSize);
 	Common::Array<byte> fileData(size);
 	if (file.read(fileData.begin(), size) != size) {
 		debugPrintf("Could not read '%s'\n", argv[1]);
@@ -615,7 +628,7 @@ bool Console::cmdEnding(int argc, const char **argv) {
 	debugPrintf("  twohappens (WWII)  %s   (painting not held by you)\n", two ? "yes" : "no");
 	debugPrintf("  revhappens (Rev)   %s   (notebook not held by you)\n", rev ? "yes" : "no");
 
-	const char *future = "(no futures() branch matches - this is a bug)";
+	const char *future = "8,55,55b,56,57,58,59,60,nochange.01 -> BOOM.MOV (no change)";
 	if (!one && !two && !rev)      future = "7,50,51,51b,52,53,54,proz      -> PROZAC.MOV (best)";
 	else if (!one && !two && rev)  future = "7,39,39b,40,41,41b,42,soviet.01 -> RUSHEND.MOV";
 	else if (!one && two && !rev)  future = "6,31,32,33,33b,34,nazi.01      -> GERMEND.MOV";
@@ -623,7 +636,6 @@ bool Console::cmdEnding(int argc, const char **argv) {
 	else if (!one && two && rev)   future = "5,35,36,37,38,nuke.01          -> NUKE.MOV";
 	else if (one && !two && !rev)  future = "6,28,29,29b,30,30b,germsov.01";
 	else if (one && !two && rev)   future = "8,44,45,46,46b,46c,47,48,soviet.01 -> RUSHEND.MOV";
-	else                           future = "8,55,55b,56,57,58,59,60,nochange.01 -> BOOM.MOV (no change)";
 	debugPrintf("\nfutures() -> %s\n", future);
 
 	// worldwar1()/worldwar2() also pick which narration slides play.

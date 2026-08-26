@@ -140,11 +140,13 @@ void LoopRuntime::processScheduledLoops(CyberflixEngine &engine) {
 	const uint32 currentPass = ++_scheduledLoopPass;
 	Common::Array<Value> noArgs;
 	for (uint32 i = 0; i < _scheduledLoops.size();) {
-		if (_scheduledLoops[i].createdPass >= currentPass) {
+		if (_scheduledLoops[i].createdPass >= currentPass ||
+				_scheduledLoops[i].processedPass == currentPass) {
 			++i;
 			continue;
 		}
 
+		_scheduledLoops[i].processedPass = currentPass;
 		--_scheduledLoops[i].remainingPasses;
 		if (_scheduledLoops[i].remainingPasses > 0) {
 			++i;
@@ -175,6 +177,11 @@ void LoopRuntime::processScheduledLoops(CyberflixEngine &engine) {
 		default:
 			debug(1, "Cyberflix: makeloop kind '%s' unhandled", loop.kind.c_str());
 		}
+
+		// The callback may remove an earlier loop, shifting an unprocessed entry
+		// below i. Rescan after dispatch; processedPass prevents a second timer
+		// decrement, and createdPass keeps newly made loops for the next pass.
+		i = 0;
 	}
 	_processingScheduledLoops = false;
 }
