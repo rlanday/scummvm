@@ -55,6 +55,9 @@ private:
 	// framebuffer and blits the result (exercises inter-frame decoding).
 	bool cmdShowMovie(int argc, const char **argv);
 
+	// Decodes a MOV's complete frame sequence to binary PPM files.
+	bool cmdDumpMovie(int argc, const char **argv);
+
 	// Opens a STG deck and renders one of its nodes (exercises the Stage
 	// parser + node renderer used by openstagefile/sendtostage).
 	bool cmdShowNode(int argc, const char **argv);

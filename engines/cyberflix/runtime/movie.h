@@ -35,18 +35,6 @@ class MovieRuntime {
 public:
 	void playMovie(CyberflixEngine &engine, const Common::String &name);
 
-	/**
-	 * Diagnostic: decode @p name's frames and write each to a PPM in @p dir.
-	 *
-	 * Frames are emitted in coded order (the order their video resources
-	 * appear in the container), which for a single-segment movie is the order
-	 * the player displays them. Delta frames only decode correctly as a
-	 * sequence, so the whole chain is applied even though every frame is
-	 * written out. Driven by --dump-movie; not part of normal playback.
-	 */
-	bool dumpMovieFrames(CyberflixEngine &engine, const Common::String &name,
-			const Common::String &dir);
-
 private:
 	/** Blit one clipped band of a decoded frame (TI.EXE FUN_00410660). */
 	static void blitMovieBand(CyberflixEngine &engine, const byte *pixels, int w, int h,

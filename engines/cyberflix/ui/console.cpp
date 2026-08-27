@@ -20,6 +20,7 @@
  */
 
 #include "common/file.h"
+#include "common/path.h"
 
 #include "graphics/palette.h"
 #include "graphics/paletteman.h"
@@ -48,6 +49,7 @@ Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
 	registerCmd("showshape", WRAP_METHOD(Console, cmdShowShape));
 	registerCmd("showframe", WRAP_METHOD(Console, cmdShowFrame));
 	registerCmd("showmovie", WRAP_METHOD(Console, cmdShowMovie));
+	registerCmd("dumpmovie", WRAP_METHOD(Console, cmdDumpMovie));
 	registerCmd("shownode", WRAP_METHOD(Console, cmdShowNode));
 	registerCmd("showset", WRAP_METHOD(Console, cmdShowSet));
 	registerCmd("changeset", WRAP_METHOD(Console, cmdChangeSet));
@@ -478,6 +480,93 @@ bool Console::cmdShowMovie(int argc, const char **argv) {
 			havePalette ? "loaded" : "MISSING (grayscale)");
 	blitCenteredWithPalette(*this, seq.pixels(), nullptr,
 			seq.width(), seq.height(), rgb, havePalette);
+	return true;
+}
+
+bool Console::cmdDumpMovie(int argc, const char **argv) {
+	if (argc < 2 || argc > 3) {
+		debugPrintf("Decodes every composited MOV frame to a binary PPM file.\n");
+		debugPrintf("Usage: %s <movfile> [outputDirectory]\n", argv[0]);
+		debugPrintf("  e.g. %s MOVIES/LOGO.MOV dumps\n", argv[0]);
+		return true;
+	}
+
+	Common::Array<byte> fileData;
+	Archive archive;
+	if (!openArchive(*this, argv[1], archive, &fileData))
+		return true;
+
+	Palette palette = {};
+	if (!loadPalette(fileData.begin(), fileData.size(), palette)) {
+		debugPrintf("No palette found in '%s'; writing grayscale frames\n", argv[1]);
+		for (int i = 0; i < kPaletteColorCount; ++i) {
+			const uint32 color = Palette::colorOffset(i);
+			palette[color + 0] = palette[color + 1] = palette[color + 2] = static_cast<byte>(i);
+		}
+	}
+
+	const Common::Path outputDir(argc == 3 ? argv[2] : ".", Common::Path::kNativeSeparator);
+	const Common::String movieName = Common::Path(argv[1]).baseName();
+	FrameSequence sequence;
+	uint frameNumber = 0;
+	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
+		const Archive::Resource &resource = archive.getResource(i);
+		if (resource.empty || (resource.info >> 16) != kFrameInfoHigh || resource.dataOffset < 4)
+			continue;
+
+		if (sequence.applyFrame(fileData.begin() + resource.dataOffset - 4,
+				resource.length + 4) == 0) {
+			debugPrintf("Frame %u (resource %u) failed to decode\n", frameNumber, i);
+			break;
+		}
+
+		const int width = sequence.width();
+		const int height = sequence.height();
+		const byte *pixels = sequence.pixels();
+		if (!pixels || width <= 0 || height <= 0) {
+			debugPrintf("Frame %u (resource %u) has invalid dimensions\n", frameNumber, i);
+			break;
+		}
+
+		const Common::String outputName = Common::String::format("%s.%03u.ppm",
+				movieName.c_str(), frameNumber);
+		const Common::Path outputPath = outputDir.appendComponent(outputName);
+		Common::DumpFile output;
+		if (!output.open(outputPath, true)) {
+			debugPrintf("Could not write '%s'\n",
+					outputPath.toString(Common::Path::kNativeSeparator).c_str());
+			return true;
+		}
+
+		output.writeString(Common::String::format("P6\n%d %d\n255\n", width, height));
+		Common::Array<byte> rgbRow(static_cast<uint>(width) * 3);
+		bool writeFailed = false;
+		for (int y = 0; y < height; ++y) {
+			for (int x = 0; x < width; ++x) {
+				const uint32 color = Palette::colorOffset(pixels[y * width + x]);
+				const uint32 out = static_cast<uint32>(x) * 3;
+				rgbRow[out + 0] = palette[color + 0];
+				rgbRow[out + 1] = palette[color + 1];
+				rgbRow[out + 2] = palette[color + 2];
+			}
+			if (output.write(rgbRow.begin(), rgbRow.size()) != rgbRow.size()) {
+				writeFailed = true;
+				break;
+			}
+		}
+		output.close();
+		if (writeFailed) {
+			debugPrintf("Could not finish writing '%s'\n",
+					outputPath.toString(Common::Path::kNativeSeparator).c_str());
+			return true;
+		}
+
+		debugPrintf("Frame %u (resource %u) %dx%d -> %s\n", frameNumber, i,
+				width, height, outputPath.toString(Common::Path::kNativeSeparator).c_str());
+		++frameNumber;
+	}
+
+	debugPrintf("Wrote %u frame(s) from '%s'\n", frameNumber, argv[1]);
 	return true;
 }
 
