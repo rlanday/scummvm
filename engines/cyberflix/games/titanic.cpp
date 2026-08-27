@@ -138,8 +138,8 @@ static bool isRepackagedDataDir(const Common::FSNode &dir) {
 			findCaselessChildFile(dir, "SMETH1.PUP", file);
 }
 
-// Re-releases ship an already-installed tree with every asset flattened into
-// one LOCAL directory instead of the retail two-CD layout.
+// The Steam re-release ships an already-installed tree with every asset
+// flattened into one LOCAL directory instead of the retail two-CD layout.
 static bool findRepackagedDataRoot(Common::FSNode &out) {
 	static Common::String cachedFor;
 	static Common::FSNode cachedRoot;

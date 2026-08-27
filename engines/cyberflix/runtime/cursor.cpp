@@ -48,9 +48,9 @@ Common::PEResources *CursorRuntime::gameExe() {
 	const Common::FSNode gameDir(ConfMan.getPath("path"));
 
 	// The 2-CD retail installer puts the runtime under INSTALL/BINX (older
-	// builds: INSTALL/BIN). Re-releases repackage an already-installed tree, so
-	// also accept the same subdirectories at the top level and the profiled
-	// executable beside the data files.
+	// builds: INSTALL/BIN). The Steam re-release repackages an already-installed
+	// tree, so also accept the same subdirectories at the top level and the
+	// profiled executable beside the data files.
 	static const char *const candidates[][2] = {
 		{ "INSTALL", "BINX" },
 		{ "INSTALL", "BIN" },
