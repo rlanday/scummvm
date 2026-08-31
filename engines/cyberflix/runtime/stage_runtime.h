@@ -29,9 +29,9 @@
 #include "cyberflix/image.h"
 #include "cyberflix/stage.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-class CyberflixEngine;
+class CyberFlixEngine;
 struct Value;
 
 class StageRuntime {
@@ -58,9 +58,9 @@ public:
 	bool &nodeFrameValid() { return _nodeFrameValid; }
 	bool nodeFrameValid() const { return _nodeFrameValid; }
 
-	void openStageFile(CyberflixEngine &engine, const Common::String &name);
-	void closeStageFile(CyberflixEngine &engine);
-	void gotoFlat(CyberflixEngine &engine, const Value &flat);
+	void openStageFile(CyberFlixEngine &engine, const Common::String &name);
+	void closeStageFile(CyberFlixEngine &engine);
+	void gotoFlat(CyberFlixEngine &engine, const Value &flat);
 	Common::String currentStage() const;
 	bool getStageVisible() const;
 	bool setStageVisible(bool visible);
@@ -70,15 +70,15 @@ public:
 	int flatToIndex(const Common::String &name) const;
 	const FrameImage *stageShellFrame();
 
-	void sendToStage(CyberflixEngine &engine, const Common::String &message, const Common::Array<Value> &args);
-	Value sendToStageFx(CyberflixEngine &engine, const Common::String &message, const Common::Array<Value> &args);
-	void sendToFlat(CyberflixEngine &engine, const Common::String &flat, const Common::String &message,
+	void sendToStage(CyberFlixEngine &engine, const Common::String &message, const Common::Array<Value> &args);
+	Value sendToStageFx(CyberFlixEngine &engine, const Common::String &message, const Common::Array<Value> &args);
+	void sendToFlat(CyberFlixEngine &engine, const Common::String &flat, const Common::String &message,
 			const Common::Array<Value> &args);
-	Value sendToFlatFx(CyberflixEngine &engine, const Common::String &flat, const Common::String &message,
+	Value sendToFlatFx(CyberFlixEngine &engine, const Common::String &flat, const Common::String &message,
 			const Common::Array<Value> &args);
-	void sendToButton(CyberflixEngine &engine, const Common::String &flat, const Common::String &button,
+	void sendToButton(CyberFlixEngine &engine, const Common::String &flat, const Common::String &button,
 			const Common::String &message, const Common::Array<Value> &args);
-	Value sendToButtonFx(CyberflixEngine &engine, const Common::String &flat, const Common::String &button,
+	Value sendToButtonFx(CyberFlixEngine &engine, const Common::String &flat, const Common::String &button,
 			const Common::String &message, const Common::Array<Value> &args);
 
 	/**
@@ -87,9 +87,9 @@ public:
 	 * wipe can reveal it itself (native composites into a backing buffer and
 	 * only the transition copies it forward).
 	 */
-	void renderStageNode(CyberflixEngine &engine, int node, bool resetCursor = true,
+	void renderStageNode(CyberFlixEngine &engine, int node, bool resetCursor = true,
 			bool present = true);
-	void repaintDirtyStageRects(CyberflixEngine &engine, bool present = true);
+	void repaintDirtyStageRects(CyberFlixEngine &engine, bool present = true);
 	bool pointInButton(const Common::String &flat, const Common::String &button, int32 packedPoint) const;
 	Snapshot snapshot() const;
 	bool restoreSnapshot(const Snapshot &snapshot);
@@ -116,9 +116,9 @@ public:
 	}
 
 private:
-	bool dispatchFlatMessage(CyberflixEngine &engine, const Common::SharedPtr<Stage> &dispatchStage,
+	bool dispatchFlatMessage(CyberFlixEngine &engine, const Common::SharedPtr<Stage> &dispatchStage,
 			int dispatchNode, const Common::String &message, const Common::Array<Value> &args);
-	bool queueStageNodeRedraw(CyberflixEngine &engine, int targetNode);
+	bool queueStageNodeRedraw(CyberFlixEngine &engine, int targetNode);
 
 	Common::SharedPtr<Stage> _stage;
 	bool _visible = false;
@@ -129,6 +129,6 @@ private:
 	bool _nodeFrameValid = false;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

@@ -24,14 +24,14 @@
 
 #include "cyberflix/detection.h"
 
-static const PlainGameDescriptor cyberflixGames[] = {
+static const PlainGameDescriptor cyberFlixGames[] = {
 	{"titanicaoot", "Titanic: Adventure Out of Time"},
 	{nullptr, nullptr}
 };
 
 #include "cyberflix/detection_tables.h"
 
-using namespace Cyberflix;
+using namespace CyberFlix;
 
 // Match from the DATA subdirectory too, so the game is detected even when the
 // player points ScummVM at the installed top-level folder.
@@ -40,9 +40,9 @@ static const char *const directoryGlobs[] = {
 	nullptr
 };
 
-class CyberflixMetaEngineDetection : public AdvancedMetaEngineDetection<Cyberflix::CyberflixGameDescription> {
+class CyberFlixMetaEngineDetection : public AdvancedMetaEngineDetection<CyberFlix::CyberFlixGameDescription> {
 public:
-	CyberflixMetaEngineDetection() : AdvancedMetaEngineDetection(Cyberflix::gameDescriptions, cyberflixGames) {
+	CyberFlixMetaEngineDetection() : AdvancedMetaEngineDetection(CyberFlix::gameDescriptions, cyberFlixGames) {
 		_maxScanDepth = 2;
 		_directoryGlobs = directoryGlobs;
 	}
@@ -60,4 +60,4 @@ public:
 	}
 };
 
-REGISTER_PLUGIN_STATIC(CYBERFLIX_DETECTION, PLUGIN_TYPE_ENGINE_DETECTION, CyberflixMetaEngineDetection);
+REGISTER_PLUGIN_STATIC(CYBERFLIX_DETECTION, PLUGIN_TYPE_ENGINE_DETECTION, CyberFlixMetaEngineDetection);

@@ -26,7 +26,7 @@
 
 #include "cyberflix/resource_helpers.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 bool openArchiveFile(const Common::String &name, const char *kind,
 		Common::Array<byte> &fileData, Archive &archive) {
@@ -37,32 +37,32 @@ bool openArchiveFile(const Common::String &name, const char *kind,
 
 	Common::File file;
 	if (!file.open(Common::Path(name))) {
-		warning("Cyberflix: could not open %s '%s'", kind, name.c_str());
+		warning("CyberFlix: could not open %s '%s'", kind, name.c_str());
 		fileData.clear();
 		return false;
 	}
 
 	int64 fileSize = file.size();
 	if (fileSize <= 0 || fileSize > 0xffffffffLL) {
-		warning("Cyberflix: invalid %s file size for '%s'", kind, name.c_str());
+		warning("CyberFlix: invalid %s file size for '%s'", kind, name.c_str());
 		fileData.clear();
 		return false;
 	}
 	uint32 size = static_cast<uint32>(fileSize);
 	fileData.resize(size);
 	if (file.read(fileData.begin(), size) != size) {
-		warning("Cyberflix: could not read %s '%s'", kind, name.c_str());
+		warning("CyberFlix: could not read %s '%s'", kind, name.c_str());
 		fileData.clear();
 		return false;
 	}
 	file.close();
 
 	if (!archive.open(new Common::MemoryReadStream(fileData.begin(), size, DisposeAfterUse::NO), name)) {
-		warning("Cyberflix: '%s' is not a valid %s container", name.c_str(), kind);
+		warning("CyberFlix: '%s' is not a valid %s container", name.c_str(), kind);
 		fileData.clear();
 		return false;
 	}
 	return true;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

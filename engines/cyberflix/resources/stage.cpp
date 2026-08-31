@@ -26,7 +26,7 @@
 #include "cyberflix/stage.h"
 #include "cyberflix/resource_helpers.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 static bool pointInButtonRect(const byte *rec, int16 x, int16 y) {
 	int16 top = static_cast<int16>(READ_LE_UINT16(rec + Stage::kButtonRectOffset));
@@ -52,7 +52,7 @@ const byte *Stage::payload(uint32 index) const {
 }
 
 int Stage::resourceIndexById(uint32 id) const {
-	return Cyberflix::resourceIndexById(_archive, id);
+	return CyberFlix::resourceIndexById(_archive, id);
 }
 
 bool Stage::parseScriptResource(uint32 id) {
@@ -71,7 +71,7 @@ bool Stage::parseScriptResource(uint32 id) {
 		return true;
 	}
 
-	warning("Cyberflix: failed to parse stage '%s' script resource %u", _name.c_str(), id);
+	warning("CyberFlix: failed to parse stage '%s' script resource %u", _name.c_str(), id);
 	return false;
 }
 
@@ -218,7 +218,7 @@ bool Stage::open(const Common::String &name) {
 
 	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
-		warning("Cyberflix: stage '%s' has no master header", name.c_str());
+		warning("CyberFlix: stage '%s' has no master header", name.c_str());
 		reset();
 		return false;
 	}
@@ -226,7 +226,7 @@ bool Stage::open(const Common::String &name) {
 	const byte *hdr = engineBase(static_cast<uint32>(_master));
 	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
 	if (!hdr || masterLen < kNodeTableOffset) {
-		warning("Cyberflix: stage '%s' master header truncated", name.c_str());
+		warning("CyberFlix: stage '%s' master header truncated", name.c_str());
 		reset();
 		return false;
 	}
@@ -239,7 +239,7 @@ bool Stage::open(const Common::String &name) {
 	const uint64 tableEnd = static_cast<uint64>(kNodeTableOffset) +
 			static_cast<uint64>(_nodeCount) * kNodeRecordStride;
 	if (tableEnd > static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4) {
-		warning("Cyberflix: stage '%s' node table overruns file (count %u)", name.c_str(), _nodeCount);
+		warning("CyberFlix: stage '%s' node table overruns file (count %u)", name.c_str(), _nodeCount);
 		_nodeCount = 0;
 	}
 
@@ -274,14 +274,14 @@ bool Stage::open(const Common::String &name) {
 		}
 	}
 
-	debug(1, "Cyberflix: opened stage '%s': %ux%u, %u node(s)",
+	debug(1, "CyberFlix: opened stage '%s': %ux%u, %u node(s)",
 			name.c_str(), _width, _height, _nodeCount);
 	return true;
 }
 
 bool Stage::renderNode(uint32 node, FrameImage &out) {
 	if (node >= _nodeCount) {
-		warning("Cyberflix: stage '%s' node %u out of range (%u)", _name.c_str(), node, _nodeCount);
+		warning("CyberFlix: stage '%s' node %u out of range (%u)", _name.c_str(), node, _nodeCount);
 		return false;
 	}
 
@@ -305,7 +305,7 @@ bool Stage::renderNode(uint32 node, FrameImage &out) {
 		uint32 imgId = READ_LE_UINT32(rec + kNodeImageResOffset);
 		int idx = resourceIndexById(imgId);
 		if (idx < 0) {
-			warning("Cyberflix: stage '%s' node %u references missing image res %u",
+			warning("CyberFlix: stage '%s' node %u references missing image res %u",
 					_name.c_str(), n, imgId);
 			return false;
 		}
@@ -314,7 +314,7 @@ bool Stage::renderNode(uint32 node, FrameImage &out) {
 			return false;
 		uint32 frameLen = _archive.getResource(static_cast<uint32>(idx)).length + 4; // payload + info word
 		if (seq.applyFrame(frame, frameLen) == 0) {
-			warning("Cyberflix: stage '%s' node %u frame decode failed", _name.c_str(), n);
+			warning("CyberFlix: stage '%s' node %u frame decode failed", _name.c_str(), n);
 			return false;
 		}
 	}
@@ -329,4 +329,4 @@ bool Stage::loadStagePalette(Palette &rgb) const {
 	return loadPalette(_fileData.begin(), _fileData.size(), rgb);
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

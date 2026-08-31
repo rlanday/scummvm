@@ -25,7 +25,7 @@
 #include "cyberflix/script.h"
 #include "cyberflix/set.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 // Dispatch a message with a freshly built scope chain, mirroring the
 // original's per-dispatch chains (FUN_0042ae80 builds [prop script, shop
@@ -39,14 +39,14 @@ namespace Cyberflix {
 // fixed one/two/three-scope helpers are used by hot scheduled-loop callbacks
 // to avoid first building a temporary "scopes" array that is immediately
 // reversed again.
-void CyberflixEngine::dispatchWithScopes(const Script *scope1, const Script *scope2,
+void CyberFlixEngine::dispatchWithScopes(const Script *scope1, const Script *scope2,
 		const Common::String &self, const Common::String &targetProp,
 		const Common::String &message, const Common::Array<Value> &args,
 		const char *debugContext) {
 	dispatchWithScopesValue(scope1, scope2, self, targetProp, message, args, debugContext);
 }
 
-Value CyberflixEngine::dispatchWithScopesValue(const Script *scope1, const Script *scope2,
+Value CyberFlixEngine::dispatchWithScopesValue(const Script *scope1, const Script *scope2,
 		const Common::String &self, const Common::String &targetProp,
 		const Common::String &message, const Common::Array<Value> &args,
 		const char *debugContext) {
@@ -54,7 +54,7 @@ Value CyberflixEngine::dispatchWithScopesValue(const Script *scope1, const Scrip
 			message, args, debugContext);
 }
 
-Value CyberflixEngine::dispatchWithThreeScopesValue(const Script *scope1, const Script *scope2,
+Value CyberFlixEngine::dispatchWithThreeScopesValue(const Script *scope1, const Script *scope2,
 		const Script *scope3, const Common::String &self,
 		const Common::String &targetProp, const Common::String &message,
 		const Common::Array<Value> &args, const char *debugContext) {
@@ -70,14 +70,14 @@ Value CyberflixEngine::dispatchWithThreeScopesValue(const Script *scope1, const 
 	bool handled = false;
 	Value result = _vm.callFunction(message, args, &handled);
 	if (!handled)
-		debug(1, "Cyberflix: %s message '%s' unhandled", debugContext, message.c_str());
+		debug(1, "CyberFlix: %s message '%s' unhandled", debugContext, message.c_str());
 
 	_vm.setDispatchContext(prevSelf, prevProp);
 	_vm.restoreLibraries(prevChain);
 	return result;
 }
 
-Value CyberflixEngine::dispatchWithScopeChainValue(const Common::Array<const Script *> &scopes,
+Value CyberFlixEngine::dispatchWithScopeChainValue(const Common::Array<const Script *> &scopes,
 		const Common::String &self, const Common::String &targetProp,
 		const Common::String &message, const Common::Array<Value> &args,
 		const char *debugContext) {
@@ -87,7 +87,7 @@ Value CyberflixEngine::dispatchWithScopeChainValue(const Common::Array<const Scr
 			self, targetProp, message, args, debugContext);
 }
 
-Value CyberflixEngine::dispatchWithScopeChainContextsValue(const Common::Array<const Script *> &scopes,
+Value CyberFlixEngine::dispatchWithScopeChainContextsValue(const Common::Array<const Script *> &scopes,
 		const Common::Array<Common::String> &scopeSelf,
 		const Common::Array<Common::String> &scopeProp,
 		const Common::String &self, const Common::String &targetProp,
@@ -120,14 +120,14 @@ Value CyberflixEngine::dispatchWithScopeChainContextsValue(const Common::Array<c
 	bool handled = false;
 	Value result = _vm.callFunction(message, args, &handled);
 	if (!handled)
-		debug(1, "Cyberflix: %s message '%s' unhandled", debugContext, message.c_str());
+		debug(1, "CyberFlix: %s message '%s' unhandled", debugContext, message.c_str());
 
 	_vm.setDispatchContext(prevSelf, prevProp);
 	_vm.restoreLibraries(prevChain);
 	return result;
 }
 
-void CyberflixEngine::dispatchSetMessage(const Common::String &message, const Common::Array<Value> &args) {
+void CyberFlixEngine::dispatchSetMessage(const Common::String &message, const Common::Array<Value> &args) {
 	if (!_setRuntime.set() || !_setRuntime.set()->isOpen() || message.empty())
 		return;
 	Common::SharedPtr<Script> setScript = _setRuntime.set()->setScriptShared();
@@ -135,7 +135,7 @@ void CyberflixEngine::dispatchSetMessage(const Common::String &message, const Co
 			message, args, "set");
 }
 
-Value CyberflixEngine::dispatchSetMessageValue(const Common::String &message, const Common::Array<Value> &args) {
+Value CyberFlixEngine::dispatchSetMessageValue(const Common::String &message, const Common::Array<Value> &args) {
 	if (!_setRuntime.set() || !_setRuntime.set()->isOpen() || message.empty())
 		return Value();
 	Common::SharedPtr<Script> setScript = _setRuntime.set()->setScriptShared();
@@ -143,15 +143,15 @@ Value CyberflixEngine::dispatchSetMessageValue(const Common::String &message, co
 			Common::String(), message, args, "setfx");
 }
 
-Value CyberflixEngine::sendToSetFx(const Common::String &message, const Common::Array<Value> &args) {
+Value CyberFlixEngine::sendToSetFx(const Common::String &message, const Common::Array<Value> &args) {
 	return dispatchSetMessageValue(message, args);
 }
 
-void CyberflixEngine::sendToSet(const Common::String &message, const Common::Array<Value> &args) {
+void CyberFlixEngine::sendToSet(const Common::String &message, const Common::Array<Value> &args) {
 	dispatchSetMessage(message, args);
 }
 
-void CyberflixEngine::dispatchSceneMessage(uint32 scene, const Common::String &message,
+void CyberFlixEngine::dispatchSceneMessage(uint32 scene, const Common::String &message,
 		const Common::Array<Value> &args) {
 	if (!_setRuntime.set() || !_setRuntime.set()->isOpen() || message.empty())
 		return;
@@ -161,7 +161,7 @@ void CyberflixEngine::dispatchSceneMessage(uint32 scene, const Common::String &m
 			Common::String(), message, args, "scene");
 }
 
-bool CyberflixEngine::closeCurrentSceneForNavigation() {
+bool CyberFlixEngine::closeCurrentSceneForNavigation() {
 	if (!_setRuntime.set() || !_setRuntime.set()->isOpen() || _setRuntime.scene() < 0)
 		return false;
 
@@ -177,4 +177,4 @@ bool CyberflixEngine::closeCurrentSceneForNavigation() {
 
 // actionframe(n): did the last movie display its n'th action-cue frame?
 // Mirrors TI.EXE FUN_004362c0 reading the DAT_0046112a bitmask (n in 1..2).
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

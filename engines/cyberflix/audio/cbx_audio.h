@@ -25,7 +25,7 @@
 #include "common/scummsys.h"
 #include "common/array.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /**
  * MOV audio. The soundtrack is NOT the per-frame @c info==0x6 chunks (those
@@ -89,6 +89,6 @@ uint32 decodeCbxAudioBlock(const byte *payload, uint32 payloadLen, uint32 blockI
  */
 uint32 decodeCbxAudio(const byte *payload, uint32 payloadLen, Common::Array<byte> &out);
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

@@ -21,10 +21,10 @@
 
 #include "cyberflix/cyberflix.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-void CyberflixEngine::playMovie(const Common::String &name) {
+void CyberFlixEngine::playMovie(const Common::String &name) {
 	movieRuntime().playMovie(*this, name);
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

@@ -30,7 +30,7 @@
 
 #include "cyberflix/audio/cbx_audio.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /** Copy @p pcm into a malloc-owned buffer and transfer it to makeRawStream(). */
 inline Audio::SeekableAudioStream *makeOwnedRawPcmStream(const Common::Array<byte> &pcm) {
@@ -49,6 +49,6 @@ inline Audio::SeekableAudioStream *makeOwnedRawPcmStream(const Common::Array<byt
 	return stream;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

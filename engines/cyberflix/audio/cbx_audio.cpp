@@ -23,7 +23,7 @@
 
 #include "cyberflix/audio/cbx_audio.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 static const int8 kSignedNibble[16] = {
 	 0,  1,  2,  3,  4,  5,  6,  7,
@@ -159,4 +159,4 @@ uint32 decodeCbxAudio(const byte *payload, uint32 payloadLen, Common::Array<byte
 	return out.size() - startBytes;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

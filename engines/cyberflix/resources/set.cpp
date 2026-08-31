@@ -26,7 +26,7 @@
 #include "cyberflix/set.h"
 #include "cyberflix/resource_helpers.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 const byte *Set::engineBase(uint32 index) const {
 	if (index >= _archive.getResourceCount())
@@ -44,7 +44,7 @@ const byte *Set::payload(uint32 index) const {
 }
 
 int Set::resourceIndexById(uint32 id) const {
-	return Cyberflix::resourceIndexById(_archive, id);
+	return CyberFlix::resourceIndexById(_archive, id);
 }
 
 Common::String Set::pascalString(const byte *p) const {
@@ -175,7 +175,7 @@ bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq) const {
 
 	int idx = resourceIndexById(frameId);
 	if (idx < 0) {
-		warning("Cyberflix: set '%s' references missing frame res %u", _name.c_str(), frameId);
+		warning("CyberFlix: set '%s' references missing frame res %u", _name.c_str(), frameId);
 		return false;
 	}
 	const byte *frame = engineBase(static_cast<uint32>(idx));
@@ -183,7 +183,7 @@ bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq) const {
 		return false;
 	uint32 frameLen = _archive.getResource(static_cast<uint32>(idx)).length + 4; // payload + info word
 	if (seq.applyFrame(frame, frameLen) == 0) {
-		warning("Cyberflix: set '%s' frame %u decode failed", _name.c_str(), frameId);
+		warning("CyberFlix: set '%s' frame %u decode failed", _name.c_str(), frameId);
 		return false;
 	}
 	return true;
@@ -294,7 +294,7 @@ bool Set::open(const Common::String &name) {
 
 	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
-		warning("Cyberflix: set '%s' has no master header", name.c_str());
+		warning("CyberFlix: set '%s' has no master header", name.c_str());
 		reset();
 		return false;
 	}
@@ -302,7 +302,7 @@ bool Set::open(const Common::String &name) {
 	const byte *hdr = engineBase(static_cast<uint32>(_master));
 	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
 	if (!hdr || masterLen < kMasterDefaultViewOffset + 1) {
-		warning("Cyberflix: set '%s' master header truncated", name.c_str());
+		warning("CyberFlix: set '%s' master header truncated", name.c_str());
 		reset();
 		return false;
 	}
@@ -323,7 +323,7 @@ bool Set::open(const Common::String &name) {
 	uint32 sceneTableId = READ_LE_UINT32(hdr + kSceneTableIdOffset);
 	_sceneTable = resourceIndexById(sceneTableId);
 	if (_sceneTable < 0) {
-		warning("Cyberflix: set '%s' references missing scene table %u", name.c_str(), sceneTableId);
+		warning("CyberFlix: set '%s' references missing scene table %u", name.c_str(), sceneTableId);
 		reset();
 		return false;
 	}
@@ -340,10 +340,10 @@ bool Set::open(const Common::String &name) {
 		if (stream && script->parse(stream.get()))
 			_scripts[i] = script;
 		else
-			warning("Cyberflix: failed to parse set '%s' script resource %u", name.c_str(), res.id);
+			warning("CyberFlix: failed to parse set '%s' script resource %u", name.c_str(), res.id);
 	}
 
-	debug(1, "Cyberflix: opened set '%s': %ux%u, %u scene(s)",
+	debug(1, "CyberFlix: opened set '%s': %ux%u, %u scene(s)",
 			name.c_str(), _width, _height, _sceneCount);
 	return true;
 }
@@ -697,11 +697,11 @@ bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &s
 	uint32 count = 0;
 	const byte *pano = panoramaTable(scene, table, count);
 	if (!pano) {
-		warning("Cyberflix: set '%s' scene %u panorama table %u missing", _name.c_str(), scene, table);
+		warning("CyberFlix: set '%s' scene %u panorama table %u missing", _name.c_str(), scene, table);
 		return false;
 	}
 	if (angle >= count) {
-		warning("Cyberflix: set '%s' scene %u table %u angle %u out of range (%u)",
+		warning("CyberFlix: set '%s' scene %u table %u angle %u out of range (%u)",
 				_name.c_str(), scene, table, angle, count);
 		return false;
 	}
@@ -793,4 +793,4 @@ bool Set::loadSetPalette(Palette &rgb) const {
 	return loadPalette(_fileData.begin(), _fileData.size(), rgb);
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

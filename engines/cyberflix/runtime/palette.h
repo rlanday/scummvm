@@ -24,7 +24,7 @@
 
 #include "cyberflix/image.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 class PaletteRuntime {
 public:
@@ -46,6 +46,6 @@ private:
 	bool _gammaTableDirty = true;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

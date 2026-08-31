@@ -39,9 +39,9 @@
 #include "cyberflix/set.h"
 #include "cyberflix/vm.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-Console::Console(CyberflixEngine *engine) : GUI::Debugger(), _engine(engine) {
+Console::Console(CyberFlixEngine *engine) : GUI::Debugger(), _engine(engine) {
 	registerCmd("dumpArchive", WRAP_METHOD(Console, cmdDumpArchive));
 	registerCmd("disasm", WRAP_METHOD(Console, cmdDisasm));
 	registerCmd("vmtrace", WRAP_METHOD(Console, cmdVmTrace));
@@ -768,4 +768,4 @@ bool Console::cmdSetOwner(int argc, const char **argv) {
 	return true;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

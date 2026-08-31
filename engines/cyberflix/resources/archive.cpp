@@ -27,7 +27,7 @@
 
 #include "cyberflix/archive.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 Archive::Archive() :
 		_magic(0), _declaredSize(0),
@@ -50,7 +50,7 @@ bool Archive::open(Common::SeekableReadStream *stream, const Common::String &nam
 	_name = name;
 
 	if (stream->size() < 0x28) {
-		warning("Cyberflix::Archive: '%s' is too small to be a container", name.c_str());
+		warning("CyberFlix::Archive: '%s' is too small to be a container", name.c_str());
 		close();
 		return false;
 	}
@@ -68,7 +68,7 @@ bool Archive::open(Common::SeekableReadStream *stream, const Common::String &nam
 	uint32 sig2 = stream->readUint32BE();
 
 	if (_magic != 0x00010000 || sig1 != kSignature1 || sig2 != kSignature1) {
-		warning("Cyberflix::Archive: '%s' is not an LPPALPPA container "
+		warning("CyberFlix::Archive: '%s' is not an LPPALPPA container "
 				"(magic=0x%08x sig=0x%08x%08x)", name.c_str(), _magic, sig1, sig2);
 		close();
 		return false;
@@ -76,19 +76,19 @@ bool Archive::open(Common::SeekableReadStream *stream, const Common::String &nam
 
 	if (_declaredSize != static_cast<uint32>(stream->size())) {
 		// Non-fatal: warn but keep going, the header size is informational.
-		warning("Cyberflix::Archive: '%s' declared size %u != file size %d",
+		warning("CyberFlix::Archive: '%s' declared size %u != file size %d",
 				name.c_str(), _declaredSize, static_cast<int>(stream->size()));
 	}
 
 	_stream.reset(owned.release());
 
 	if (!readDirectory()) {
-		warning("Cyberflix::Archive: '%s' has an invalid resource directory", name.c_str());
+		warning("CyberFlix::Archive: '%s' has an invalid resource directory", name.c_str());
 		close();
 		return false;
 	}
 
-	debug(1, "Cyberflix::Archive: opened '%s' (%u resources, %u bytes)",
+	debug(1, "CyberFlix::Archive: opened '%s' (%u resources, %u bytes)",
 			name.c_str(), getResourceCount(), _declaredSize);
 
 	return true;
@@ -132,12 +132,12 @@ bool Archive::readDirectory() {
 			// rejecting the container.
 			if (static_cast<uint64>(res.dataOffset) + res.length > fileSize) {
 				uint32 avail = fileSize - res.dataOffset;
-				debug(2, "Cyberflix::Archive: resource %u length %u clamped to %u",
+				debug(2, "CyberFlix::Archive: resource %u length %u clamped to %u",
 						i, res.length, avail);
 				res.length = avail;
 			}
 		} else if (recOffset != 0) {
-			debug(2, "Cyberflix::Archive: resource %u has out-of-range offset %#x, treating as empty",
+			debug(2, "CyberFlix::Archive: resource %u has out-of-range offset %#x, treating as empty",
 					i, recOffset);
 		}
 
@@ -172,4 +172,4 @@ void Archive::swapLongs(byte *data, uint32 size) {
 	}
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

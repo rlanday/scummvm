@@ -27,17 +27,17 @@
 
 #include "audio/mixer.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-class CyberflixEngine;
+class CyberFlixEngine;
 
 class MovieRuntime {
 public:
-	void playMovie(CyberflixEngine &engine, const Common::String &name);
+	void playMovie(CyberFlixEngine &engine, const Common::String &name);
 
 private:
 	/** Blit one clipped band of a decoded frame (TI.EXE FUN_00410660). */
-	static void blitMovieBand(CyberflixEngine &engine, const byte *pixels, int w, int h,
+	static void blitMovieBand(CyberFlixEngine &engine, const byte *pixels, int w, int h,
 			int x0, int y0, int left, int top, int right, int bottom);
 
 	/**
@@ -46,14 +46,14 @@ private:
 	 * Members rather than free functions so they inherit the engine friendship
 	 * that reaching _system/_eventMan requires.
 	 */
-	static void runMovieTransition(CyberflixEngine &engine, uint16 op, const byte *pixels,
+	static void runMovieTransition(CyberFlixEngine &engine, uint16 op, const byte *pixels,
 			int w, int h, int x0, int y0, int steps);
 
 	/** True while any frame cue is still sounding (TI.EXE FUN_0042fcc0). */
-	static bool cueStillPlaying(CyberflixEngine &engine,
+	static bool cueStillPlaying(CyberFlixEngine &engine,
 			const Common::Array<Audio::SoundHandle> &handles);
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

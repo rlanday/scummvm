@@ -28,9 +28,9 @@
 
 #include "audio/mixer.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-class CyberflixEngine;
+class CyberFlixEngine;
 
 class AudioRuntime {
 public:
@@ -74,29 +74,29 @@ public:
 	ThemeTrack::Cue *findMutableSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr);
 
 	byte effectiveAudioVolume(int baseVolume) const;
-	void applyLiveAudioVolumes(CyberflixEngine &engine);
+	void applyLiveAudioVolumes(CyberFlixEngine &engine);
 	void prepareThemeSpans(const ThemeTrack &track);
-	bool startThemeStream(CyberflixEngine &engine, const Common::SharedPtr<ThemeTrack> &track, uint32 startSample);
-	bool playSoundCue(CyberflixEngine &engine, const Common::String &name, Audio::SoundHandle &handle,
+	bool startThemeStream(CyberFlixEngine &engine, const Common::SharedPtr<ThemeTrack> &track, uint32 startSample);
+	bool playSoundCue(CyberFlixEngine &engine, const Common::String &name, Audio::SoundHandle &handle,
 			Common::String &currentCue, uint32 &currentResId);
 
 	void openTrackFile(const Common::String &name);
 	void closeTrackFile(const Common::String &name);
-	void playTheme(CyberflixEngine &engine, const Common::String &name);
-	void haltTheme(CyberflixEngine &engine);
-	void playSound(CyberflixEngine &engine, const Common::String &name, int mode);
-	void playVoice(CyberflixEngine &engine, const Common::String &name);
-	void haltSound(CyberflixEngine &engine, int which);
-	void haltVoice(CyberflixEngine &engine);
-	void themeVolume(CyberflixEngine &engine, const Common::String &name, int volume);
-	int getWaveVolume(CyberflixEngine &engine);
-	int setWaveVolume(CyberflixEngine &engine, int newLevel);
-	int getSoundVolume(CyberflixEngine &engine, const Common::String &name);
-	int setSoundVolume(CyberflixEngine &engine, const Common::String &name, int newVolume);
-	Common::String currentTheme(CyberflixEngine &engine, int which);
-	Common::String currentSound(CyberflixEngine &engine, int which);
-	Common::String currentVoice(CyberflixEngine &engine);
-	bool voiceDone(CyberflixEngine &engine);
+	void playTheme(CyberFlixEngine &engine, const Common::String &name);
+	void haltTheme(CyberFlixEngine &engine);
+	void playSound(CyberFlixEngine &engine, const Common::String &name, int mode);
+	void playVoice(CyberFlixEngine &engine, const Common::String &name);
+	void haltSound(CyberFlixEngine &engine, int which);
+	void haltVoice(CyberFlixEngine &engine);
+	void themeVolume(CyberFlixEngine &engine, const Common::String &name, int volume);
+	int getWaveVolume(CyberFlixEngine &engine);
+	int setWaveVolume(CyberFlixEngine &engine, int newLevel);
+	int getSoundVolume(CyberFlixEngine &engine, const Common::String &name);
+	int setSoundVolume(CyberFlixEngine &engine, const Common::String &name, int newVolume);
+	Common::String currentTheme(CyberFlixEngine &engine, int which);
+	Common::String currentSound(CyberFlixEngine &engine, int which);
+	Common::String currentVoice(CyberFlixEngine &engine);
+	bool voiceDone(CyberFlixEngine &engine);
 
 	Common::Array<Common::SharedPtr<ThemeTrack> > &tracks() { return _tracks; }
 	const Common::Array<Common::SharedPtr<ThemeTrack> > &tracks() const { return _tracks; }
@@ -126,6 +126,6 @@ private:
 	int _waveVolumeLevel = 9;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

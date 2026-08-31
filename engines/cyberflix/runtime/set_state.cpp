@@ -26,9 +26,9 @@
 #include "cyberflix/set.h"
 #include "cyberflix/stage.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name,
+void SetRuntime::openSetFile(CyberFlixEngine &engine, const Common::String &name,
 		const Common::String &sceneName, const Common::String &viewName) {
 	if (name.empty())
 		return;
@@ -41,7 +41,7 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 
 	Common::ScopedPtr<Set> newSet(new Set());
 	if (!newSet->open(name)) {
-		warning("Cyberflix: opensetfile('%s') failed", name.c_str());
+		warning("CyberFlix: opensetfile('%s') failed", name.c_str());
 		return;
 	}
 	set().reset(newSet.release());
@@ -54,7 +54,7 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 	transitionFrame() = 0;
 	frameSequence().clear();
 	visible() = true;
-	debug(1, "Cyberflix: set '%s' open (%u scenes, name '%s', default scene '%s' view '%s')",
+	debug(1, "CyberFlix: set '%s' open (%u scenes, name '%s', default scene '%s' view '%s')",
 			name.c_str(), set()->sceneCount(), set()->setName().c_str(),
 			set()->defaultScene().c_str(), set()->defaultView().c_str());
 	engine.actorRuntime().refreshActorStarPositions(engine);
@@ -69,10 +69,10 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 		sceneIdx = set()->findScene(useScene);
 		if (sceneIdx < 0) {
 			if (set()->sceneCount() == 0) {
-				warning("Cyberflix: set '%s' has no scenes", set()->name().c_str());
+				warning("CyberFlix: set '%s' has no scenes", set()->name().c_str());
 				return;
 			}
-			debug(1, "Cyberflix: set '%s' scene '%s' not found, using first scene '%s'",
+			debug(1, "CyberFlix: set '%s' scene '%s' not found, using first scene '%s'",
 					set()->name().c_str(), useScene.c_str(), set()->sceneName(0).c_str());
 			sceneIdx = 0;
 		}
@@ -90,7 +90,7 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 				// calling FUN_004425e0.
 				viewIdx = set()->nearestViewForHeading(static_cast<uint32>(sceneIdx), previousHeading);
 				if (viewIdx >= 0)
-					debug(1, "Cyberflix: opensetfile view '%s' not found in scene '%s', using nearest view '%s'",
+					debug(1, "CyberFlix: opensetfile view '%s' not found in scene '%s', using nearest view '%s'",
 							useView.c_str(), actualScene.c_str(),
 							set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx)).c_str());
 			}
@@ -103,7 +103,7 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 				angle = viewAngle;
 				activeView = set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx));
 			} else {
-				warning("Cyberflix: opensetfile view '%s' not found in scene '%s'",
+				warning("CyberFlix: opensetfile view '%s' not found in scene '%s'",
 						useView.c_str(), actualScene.c_str());
 			}
 		}
@@ -130,7 +130,7 @@ void SetRuntime::openSetFile(CyberflixEngine &engine, const Common::String &name
 // global closeset() calls putdownsound() which halts the room theme, and it
 // switches on currentset(), so the messages must go out while the set is
 // still current.
-void SetRuntime::closeSetFile(CyberflixEngine &engine) {
+void SetRuntime::closeSetFile(CyberFlixEngine &engine) {
 	if (set() && set()->isOpen()) {
 		Common::Array<Value> noArgs;
 		Common::String openedName = set()->setName();
@@ -177,7 +177,7 @@ bool SetRuntime::restoreSnapshot(const Snapshot &snapshot) {
 
 	Common::ScopedPtr<Set> newSet(new Set());
 	if (!newSet->open(snapshot.fileName)) {
-		warning("Cyberflix: load could not reopen set '%s'", snapshot.fileName.c_str());
+		warning("CyberFlix: load could not reopen set '%s'", snapshot.fileName.c_str());
 		return false;
 	}
 
@@ -253,14 +253,14 @@ static bool chooseSceneView(const SetRuntime &runtime, int sceneIdx, const Commo
 	if (viewIdx < 0 && fallbackToNearest) {
 		viewIdx = runtime.set()->nearestViewForHeading(static_cast<uint32>(sceneIdx), previousHeading);
 		if (viewIdx >= 0 && !requestedView.empty())
-			debug(1, "Cyberflix: %s view '%s' not found in scene '%s', using nearest view '%s'",
+			debug(1, "CyberFlix: %s view '%s' not found in scene '%s', using nearest view '%s'",
 					operation, requestedView.c_str(),
 					runtime.set()->sceneName(static_cast<uint32>(sceneIdx)).c_str(),
 					runtime.set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx)).c_str());
 	}
 	if (viewIdx < 0) {
 		if (!requestedView.empty())
-			warning("Cyberflix: %s view '%s' not found in scene '%s'",
+			warning("CyberFlix: %s view '%s' not found in scene '%s'",
 					operation, requestedView.c_str(),
 					runtime.set()->sceneName(static_cast<uint32>(sceneIdx)).c_str());
 		return false;
@@ -271,7 +271,7 @@ static bool chooseSceneView(const SetRuntime &runtime, int sceneIdx, const Commo
 	int viewAngle = runtime.set()->angleForView(static_cast<uint32>(sceneIdx),
 			Set::kNativeStablePanoramaTable, viewIdx);
 	if (viewAngle < 0) {
-		warning("Cyberflix: %s view '%s' has no panorama angle in scene '%s'",
+		warning("CyberFlix: %s view '%s' has no panorama angle in scene '%s'",
 				operation,
 				runtime.set()->viewName(static_cast<uint32>(sceneIdx), static_cast<uint32>(viewIdx)).c_str(),
 				runtime.set()->sceneName(static_cast<uint32>(sceneIdx)).c_str());
@@ -286,7 +286,7 @@ static bool chooseSceneView(const SetRuntime &runtime, int sceneIdx, const Commo
 // the requested view against the current scene (FUN_00433b30), closes the old
 // scene (FUN_00430f30), copies DAT_004611dc, normalizes the camera
 // (FUN_00433960/FUN_004425e0), then sends openscene via FUN_00430ec0.
-Common::String SetRuntime::setCurrentView(CyberflixEngine &engine, const Common::String &target) {
+Common::String SetRuntime::setCurrentView(CyberFlixEngine &engine, const Common::String &target) {
 	if (target.empty())
 		return getCurrentView();
 	if (!set() || !set()->isOpen() || scene() < 0)
@@ -364,14 +364,14 @@ int SetRuntime::playerXYZ(int selector) const {
 // currentscene([arg]): no-arg reads DAT_004611cc. With "left"/"right"/"strait",
 // BOOTFILE res2's keydown fallback reaches TI.EXE FUN_00430c70/FUN_00442140 to
 // navigate the current set; other strings are scene names to switch to.
-Common::String SetRuntime::getCurrentScene(CyberflixEngine &) const {
+Common::String SetRuntime::getCurrentScene(CyberFlixEngine &) const {
 	if (!set() || !set()->isOpen() || scene() < 0)
 		return "none";
 
 	return set()->sceneName(static_cast<uint32>(scene()));
 }
 
-Common::String SetRuntime::setCurrentScene(CyberflixEngine &engine, const Common::String &target) {
+Common::String SetRuntime::setCurrentScene(CyberFlixEngine &engine, const Common::String &target) {
 	if (!set() || !set()->isOpen() || scene() < 0)
 		return "none";
 
@@ -399,7 +399,7 @@ Common::String SetRuntime::setCurrentScene(CyberflixEngine &engine, const Common
 				Common::Array<Value> noArgs;
 				engine.dispatchSceneMessage(static_cast<uint32>(sceneIdx), "openscene", noArgs);
 			} else {
-				warning("Cyberflix: currentscene('%s'): no such scene", target.c_str());
+				warning("CyberFlix: currentscene('%s'): no such scene", target.c_str());
 			}
 		}
 	}
@@ -433,13 +433,13 @@ bool SetRuntime::roadAhead(const Common::String &scene, const Common::String &vi
 	return set()->forwardTransitionForView(static_cast<uint32>(sceneIdx), viewIdx) != 0;
 }
 
-bool SetRuntime::getSetVisible(CyberflixEngine &) const {
+bool SetRuntime::getSetVisible(CyberFlixEngine &) const {
 	if (!set() || !set()->isOpen())
 		return false;
 	return visible();
 }
 
-bool SetRuntime::setSetVisible(CyberflixEngine &engine, bool newVisible) {
+bool SetRuntime::setSetVisible(CyberFlixEngine &engine, bool newVisible) {
 	if (!set() || !set()->isOpen())
 		return false;
 	bool wasVisible = visible();
@@ -458,4 +458,4 @@ bool SetRuntime::setSetVisible(CyberflixEngine &engine, bool newVisible) {
 	return visible();
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

@@ -45,7 +45,7 @@
 #include "cyberflix/resource_helpers.h"
 #include "cyberflix/runtime/graphics_helpers.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 // Sample-add an 8-bit unsigned mono SFX buffer into the music track at the given
 // sample offset, extending the track with silence (0x80) if needed and clamping.
@@ -188,7 +188,7 @@ struct MovieReturnFrame {
 
 // Blit one clipped band of the decoded frame (TI.EXE FUN_00410660: intersect
 // the band with the movie rect, offset by the movie origin, then copy).
-void MovieRuntime::blitMovieBand(CyberflixEngine &engine, const byte *pixels, int w, int h,
+void MovieRuntime::blitMovieBand(CyberFlixEngine &engine, const byte *pixels, int w, int h,
 		int x0, int y0, int left, int top, int right, int bottom) {
 	left = MAX(left, 0);
 	top = MAX(top, 0);
@@ -224,7 +224,7 @@ void MovieRuntime::blitMovieBand(CyberflixEngine &engine, const byte *pixels, in
 // per-band geometry below is a direct port of FUN_0040f250 (barn close),
 // FUN_0040f330 (barn open), FUN_0040f570 (iris open) and FUN_0040fb40 (wipe);
 // the pacing mirrors FUN_00410620, which waits until tick (start + i).
-void MovieRuntime::runMovieTransition(CyberflixEngine &engine, uint16 op, const byte *pixels,
+void MovieRuntime::runMovieTransition(CyberFlixEngine &engine, uint16 op, const byte *pixels,
 		int w, int h, int x0, int y0, int steps) {
 	if (steps < 1)
 		steps = 1;
@@ -336,12 +336,12 @@ static bool runMovieCommand(MovieCommand command, const Common::String &currentM
 	}
 	case MovieCommand::kMarker:
 		if (!movieName.empty()) {
-			debug(0, "Cyberflix: movie '%s' MARKER at frame %d (%s) -> movie '%s'",
+			debug(0, "CyberFlix: movie '%s' MARKER at frame %d (%s) -> movie '%s'",
 					currentMovieName.c_str(), currentFrame, source, movieName.c_str());
 			nextMovieName = movieName;
 			nextMovieStartFrame = 0;
 		} else {
-			warning("Cyberflix: movie '%s' marker %s frame %d has no movie name",
+			warning("CyberFlix: movie '%s' marker %s frame %d has no movie name",
 					currentMovieName.c_str(), source, currentFrame);
 		}
 		return true;
@@ -355,7 +355,7 @@ static bool runMovieCommand(MovieCommand command, const Common::String &currentM
 			nextMovieName = movieName;
 			nextMovieStartFrame = 0;
 		} else {
-			warning("Cyberflix: movie '%s' cannot gosub %s movie '%s' target '%s'",
+			warning("CyberFlix: movie '%s' cannot gosub %s movie '%s' target '%s'",
 					currentMovieName.c_str(), source, movieName.c_str(),
 					targetFrameName.c_str());
 		}
@@ -368,7 +368,7 @@ static bool runMovieCommand(MovieCommand command, const Common::String &currentM
 			nextMovieName = ret.name;
 			nextMovieStartFrame = ret.frame;
 		} else {
-			warning("Cyberflix: movie '%s' return %s has an empty GOSUB stack",
+			warning("CyberFlix: movie '%s' return %s has an empty GOSUB stack",
 					currentMovieName.c_str(), source);
 		}
 		return true;
@@ -379,7 +379,7 @@ static bool runMovieCommand(MovieCommand command, const Common::String &currentM
 		nextFrame = (currentFrame > 0) ? currentFrame - 1 : 0;
 		return false;
 	default:
-		warning("Cyberflix: movie '%s' unsupported %s command %u at frame %d",
+		warning("CyberFlix: movie '%s' unsupported %s command %u at frame %d",
 				currentMovieName.c_str(), source, static_cast<uint>(command), currentFrame);
 		return true;
 	}
@@ -388,7 +388,7 @@ static bool runMovieCommand(MovieCommand command, const Common::String &currentM
 // TI.EXE FUN_0042fcc0 ("DAT_00460aac == 0") reports whether the single cue
 // channel is still sounding; FUN_0040e0b0 spins on it for frames flagged at
 // event chunk +6 bit 0.
-bool MovieRuntime::cueStillPlaying(CyberflixEngine &engine,
+bool MovieRuntime::cueStillPlaying(CyberFlixEngine &engine,
 		const Common::Array<Audio::SoundHandle> &handles) {
 	for (uint i = 0; i < handles.size(); ++i) {
 		if (engine._mixer->isSoundHandleActive(handles[i]))
@@ -397,7 +397,7 @@ bool MovieRuntime::cueStillPlaying(CyberflixEngine &engine,
 	return false;
 }
 
-void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name) {
+void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name) {
 	if (name.empty())
 		return;
 
@@ -413,13 +413,13 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 
 	Common::File file;
 	if (!file.open(Common::Path(currentMovieName))) {
-		warning("Cyberflix: could not open movie '%s'", currentMovieName.c_str());
+		warning("CyberFlix: could not open movie '%s'", currentMovieName.c_str());
 		return;
 	}
 
 	int64 fileSize = file.size();
 	if (fileSize <= 0 || fileSize > 0xffffffffLL) {
-		warning("Cyberflix: could not stat movie '%s'", currentMovieName.c_str());
+		warning("CyberFlix: could not stat movie '%s'", currentMovieName.c_str());
 		return;
 	}
 	uint32 size = static_cast<uint32>(fileSize);
@@ -428,14 +428,14 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	// payloads through raw pointers into it.
 	Common::Array<byte> fileData(size);
 	if (file.read(fileData.begin(), size) != size) {
-		warning("Cyberflix: could not read movie '%s'", currentMovieName.c_str());
+		warning("CyberFlix: could not read movie '%s'", currentMovieName.c_str());
 		return;
 	}
 	file.close();
 
 	Archive archive;
 	if (!archive.open(new Common::MemoryReadStream(fileData.begin(), size, DisposeAfterUse::NO), currentMovieName)) {
-		warning("Cyberflix: '%s' is not a valid movie container", currentMovieName.c_str());
+		warning("CyberFlix: '%s' is not a valid movie container", currentMovieName.c_str());
 		return;
 	}
 
@@ -545,7 +545,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 
 	int masterIdx = findMasterHeaderIndex(archive);
 	if (masterIdx < 0) {
-		warning("Cyberflix: movie '%s' has no master header; playing without audio", currentMovieName.c_str());
+		warning("CyberFlix: movie '%s' has no master header; playing without audio", currentMovieName.c_str());
 	} else {
 		// Walk the segment chain starting from the first master header.
 		uint32 segBase = static_cast<uint32>(masterIdx);
@@ -851,7 +851,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		}
 	}
 
-	debug(0, "Cyberflix: movie '%s' frames=%u audioBytes=%u frameSfxBytes=%u audioMs=%u",
+	debug(0, "CyberFlix: movie '%s' frames=%u audioBytes=%u frameSfxBytes=%u audioMs=%u",
 			currentMovieName.c_str(), pfVideoRes.empty() ? frames.size() : pfVideoRes.size(), pcmBuf.size(), frameSfxBytes,
 			static_cast<uint32>((static_cast<uint64>(pcmBuf.size()) * 1000 / kAudioSampleRate)));
 
@@ -878,11 +878,11 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 	const bool usePF = !pfVideoRes.empty();
 	const int frameCount = usePF ? static_cast<int>(pfVideoRes.size()) : static_cast<int>(frames.size());
 	if (frameCount == 0)
-		warning("Cyberflix: movie '%s' has no frames to show", currentMovieName.c_str());
+		warning("CyberFlix: movie '%s' has no frames to show", currentMovieName.c_str());
 
 	uint32 wallStartMs = engine._system->getMillis();
 	int fi = (initialFrame >= 0 && initialFrame < frameCount) ? initialFrame : 0;
-	debug(0, "Cyberflix: movie '%s' start frame=%d/%d segments=%d usePF=%d interactive=%d audio=%d skippable=%d cue1=%d cue2=%d",
+	debug(0, "CyberFlix: movie '%s' start frame=%d/%d segments=%d usePF=%d interactive=%d audio=%d skippable=%d cue1=%d cue2=%d",
 			currentMovieName.c_str(), fi, frameCount, static_cast<int>(segmentStartFrame.size()),
 			usePF ? 1 : 0, hasInteractive ? 1 : 0,
 			hasMovieAudio ? 1 : 0, movieSkippable ? 1 : 0, actionCue1, actionCue2);
@@ -909,14 +909,14 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		}
 		uint32 resIdx = usePF ? pfVideoRes[frameIndex] : frames[frameIndex];
 		if (resIdx >= archive.getResourceCount()) {
-			warning("Cyberflix: movie '%s' frame %d: resIdx %u out of range (%u resources)",
+			warning("CyberFlix: movie '%s' frame %d: resIdx %u out of range (%u resources)",
 					currentMovieName.c_str(), fi, resIdx, archive.getResourceCount());
 			break;
 		}
 		const Archive::Resource &res = archive.getResource(resIdx);
 		if (res.empty || res.dataOffset < 4 ||
 				seq.applyFrame(fileData.begin() + res.dataOffset - 4, res.length + 4) == 0) {
-			warning("Cyberflix: movie '%s' frame %d failed to decode", currentMovieName.c_str(), fi);
+			warning("CyberFlix: movie '%s' frame %d failed to decode", currentMovieName.c_str(), fi);
 			break;
 		}
 
@@ -974,7 +974,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 				uint32 holdMs = (usePF && frameIndex < pfHoldMs.size()) ? pfHoldMs[frameIndex]
 						: kFallbackFrameDelayMs;
 				int steps = static_cast<int>(holdMs * 60 / 1000);
-				debug(1, "Cyberflix: movie '%s' frame %d transition op %#04x over %d step(s)",
+				debug(1, "CyberFlix: movie '%s' frame %d transition op %#04x over %d step(s)",
 						currentMovieName.c_str(), fi, drawOp, steps);
 				runMovieTransition(engine, drawOp, pixels, w, h, x0, y0, steps);
 			} else {
@@ -1064,7 +1064,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 									nextMovieStartFrame, "button")) {
 								skip = true;
 							}
-							debug(1, "Cyberflix: movie '%s' button frame %d '%s' click (%d,%d) action %u marker '%s' target '%s' -> frame %d movie '%s'",
+							debug(1, "CyberFlix: movie '%s' button frame %d '%s' click (%d,%d) action %u marker '%s' target '%s' -> frame %d movie '%s'",
 									currentMovieName.c_str(), fi,
 									(frameIndex < pfName.size()) ? pfName[frameIndex].c_str() : "",
 									fx, fy, static_cast<uint>(mb.action), mb.marker.c_str(), mb.target.c_str(),
@@ -1120,7 +1120,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 			// all, which includes the narration-paced tour movies.
 			const bool waitForCue = usePF && frameIndex < pfWaitForCue.size() && pfWaitForCue[frameIndex];
 			if (waitForCue)
-				debug(1, "Cyberflix: movie '%s' frame %d holds for its cue",
+				debug(1, "CyberFlix: movie '%s' frame %d holds for its cue",
 						currentMovieName.c_str(), fi);
 			while (!engine.shouldQuit() && !skip) {
 				bool cursorDirty = false;
@@ -1228,7 +1228,7 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 		fi = nextFi >= 0 ? nextFi : fi + 1;
 	}
 
-	debug(0, "Cyberflix: movie '%s' frame loop ended: fi=%d/%d quit=%d skip=%d nextMovie='%s'",
+	debug(0, "CyberFlix: movie '%s' frame loop ended: fi=%d/%d quit=%d skip=%d nextMovie='%s'",
 			currentMovieName.c_str(), fi, frameCount, engine.shouldQuit() ? 1 : 0, skip ? 1 : 0,
 			nextMovieName.c_str());
 
@@ -1248,4 +1248,4 @@ void MovieRuntime::playMovie(CyberflixEngine &engine, const Common::String &name
 }
 
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

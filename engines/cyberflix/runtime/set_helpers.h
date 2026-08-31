@@ -26,7 +26,7 @@
 #include "cyberflix/set.h"
 #include "cyberflix/shop.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /** Depth returned for world items that are off-camera/unprojectable — the
  *  native far sentinel (actors and props share it). */
@@ -85,6 +85,6 @@ inline CurrentWorldCameraResult currentWorldCamera(SetRuntime &setRuntime) {
 	return result;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

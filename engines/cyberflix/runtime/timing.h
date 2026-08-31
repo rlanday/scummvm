@@ -24,7 +24,7 @@
 
 #include "common/scummsys.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 class FramePacingRuntime {
 public:
@@ -44,6 +44,6 @@ private:
 	bool _idleForceUpdatePresented = false; ///< Current idle() already presented via forceupdate().
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

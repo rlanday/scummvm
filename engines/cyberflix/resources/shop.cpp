@@ -26,7 +26,7 @@
 #include "cyberflix/shop.h"
 #include "cyberflix/resource_helpers.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 const byte *Shop::engineBase(uint32 index) const {
 	if (index >= _archive.getResourceCount())
@@ -35,7 +35,7 @@ const byte *Shop::engineBase(uint32 index) const {
 }
 
 int Shop::resourceIndexById(uint32 id) const {
-	return Cyberflix::resourceIndexById(_archive, id);
+	return CyberFlix::resourceIndexById(_archive, id);
 }
 
 Common::String Shop::pascalString(const byte *p) const {
@@ -56,7 +56,7 @@ bool Shop::open(const Common::String &name) {
 	// an empty placeholder slot with resource id 0 ahead of the real master.
 	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
-		warning("Cyberflix: shop '%s' has no master header", name.c_str());
+		warning("CyberFlix: shop '%s' has no master header", name.c_str());
 		_archive.close();
 		_fileData.clear();
 		return false;
@@ -65,7 +65,7 @@ bool Shop::open(const Common::String &name) {
 	const byte *hdr = engineBase(static_cast<uint32>(_master));
 	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
 	if (!hdr || masterLen < kMasterPropTableOffset) {
-		warning("Cyberflix: shop '%s' master header truncated", name.c_str());
+		warning("CyberFlix: shop '%s' master header truncated", name.c_str());
 		_master = -1;
 		_archive.close();
 		_fileData.clear();
@@ -83,9 +83,9 @@ bool Shop::open(const Common::String &name) {
 			if (s && script->parse(s.get()))
 				_script.reset(script.release());
 			if (!_script)
-				warning("Cyberflix: shop '%s' script res %u failed to parse", name.c_str(), scriptRes);
+				warning("CyberFlix: shop '%s' script res %u failed to parse", name.c_str(), scriptRes);
 		} else {
-			warning("Cyberflix: shop '%s' script res %u missing", name.c_str(), scriptRes);
+			warning("CyberFlix: shop '%s' script res %u missing", name.c_str(), scriptRes);
 		}
 	}
 
@@ -106,7 +106,7 @@ bool Shop::open(const Common::String &name) {
 		const uint64 pmLen = mIdx >= 0 ?
 				static_cast<uint64>(_archive.getResource(static_cast<uint32>(mIdx)).length) + 4 : 0;
 		if (!pm || pmLen < kPropShapeTableOffset) {
-			warning("Cyberflix: shop '%s' prop master %u missing", name.c_str(), masterId);
+			warning("CyberFlix: shop '%s' prop master %u missing", name.c_str(), masterId);
 			continue;
 		}
 
@@ -155,7 +155,7 @@ bool Shop::open(const Common::String &name) {
 		_props.push_back(prop);
 	}
 
-	debug(1, "Cyberflix: opened shop '%s': %u prop(s)", name.c_str(), _props.size());
+	debug(1, "CyberFlix: opened shop '%s': %u prop(s)", name.c_str(), _props.size());
 	return true;
 }
 
@@ -250,7 +250,7 @@ Shop::PropCellResult Shop::resolvePropCel(const Prop &prop, int angle) const {
 			break;
 		}
 	if (!shape) {
-		debug(1, "Cyberflix: renderProp('%s'): shape '%s' not in master",
+		debug(1, "CyberFlix: renderProp('%s'): shape '%s' not in master",
 				prop.name.c_str(), prop.shapeName.c_str());
 		return result;
 	}
@@ -259,7 +259,7 @@ Shop::PropCellResult Shop::resolvePropCel(const Prop &prop, int angle) const {
 	const uint64 shapeLen = shIdx >= 0 ?
 			static_cast<uint64>(_archive.getResource(static_cast<uint32>(shIdx)).length) + 4 : 0;
 	if (!sh || shapeLen < kShapeCellTableOffset) {
-		debug(1, "Cyberflix: renderProp('%s'): shape res %u missing",
+		debug(1, "CyberFlix: renderProp('%s'): shape res %u missing",
 				prop.name.c_str(), shape->resId);
 		return result;
 	}
@@ -291,7 +291,7 @@ Shop::PropCellResult Shop::resolvePropCel(const Prop &prop, int angle) const {
 		}
 	}
 	if (!best) {
-		debug(2, "Cyberflix: renderProp('%s'): no cell for pose %u in shape '%s'",
+		debug(2, "CyberFlix: renderProp('%s'): no cell for pose %u in shape '%s'",
 				prop.name.c_str(), poseId, prop.shapeName.c_str());
 		return result;
 	}
@@ -300,7 +300,7 @@ Shop::PropCellResult Shop::resolvePropCel(const Prop &prop, int angle) const {
 	uint32 frameRes = READ_LE_UINT32(best + kCellFrameResOffset);
 	result.cel = celResource(frameRes);
 	if (!result.cel) {
-		debug(1, "Cyberflix: renderProp('%s'): cel res %u decode failed",
+		debug(1, "CyberFlix: renderProp('%s'): cel res %u decode failed",
 				prop.name.c_str(), frameRes);
 		return result;
 	}
@@ -413,4 +413,4 @@ Shop::PropRenderResult Shop::renderWorldProp(const Prop &prop, const WorldCamera
 	return result;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

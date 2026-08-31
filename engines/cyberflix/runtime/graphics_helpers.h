@@ -28,7 +28,7 @@
 
 #include "cyberflix/image.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 inline void drawScaledCel(Graphics::Surface &screen, const CelImage &cel,
 		const Common::Rect &dest, const Common::Rect &clip,
@@ -132,6 +132,6 @@ inline void copyFrameToScreen(Graphics::Surface &screen, const FrameImage &frame
 			frame.height, dstX, dstY);
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

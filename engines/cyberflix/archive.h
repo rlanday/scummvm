@@ -32,7 +32,7 @@ namespace Common {
 class SeekableReadStream;
 }
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /**
  * Reader for CyberFlix "Bicycle"-engine container files (the "LPPALPPA"
@@ -131,6 +131,6 @@ private:
 	Common::Array<Resource> _resources;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_ARCHIVE_H

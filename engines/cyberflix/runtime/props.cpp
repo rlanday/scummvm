@@ -26,7 +26,7 @@
 #include "cyberflix/stage.h"
 #include "cyberflix/runtime/set_helpers.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 // ---- Shop/prop subsystem (TI.EXE FUN_00428450 and friends) ----------------
 // The original keeps
@@ -71,7 +71,7 @@ Common::SharedPtr<Shop> PropRuntime::findPropOwnerShared(const Common::String &n
 	return Common::SharedPtr<Shop>();
 }
 
-bool PropRuntime::resolvePropStar(CyberflixEngine &engine, Shop::Prop &prop) {
+bool PropRuntime::resolvePropStar(CyberFlixEngine &engine, Shop::Prop &prop) {
 	if (!engine._setRuntime.set() || !engine._setRuntime.set()->isOpen() ||
 			!prop.setName.equalsIgnoreCase(engine._setRuntime.set()->setName()))
 		return false;
@@ -123,7 +123,7 @@ void PropRuntime::advancePropPoses() {
 		_shops[i]->advancePropPoses();
 }
 
-void PropRuntime::advanceAnimationFrame(CyberflixEngine &engine) {
+void PropRuntime::advanceAnimationFrame(CyberFlixEngine &engine) {
 	Common::Array<Common::Rect> oldRects;
 	Common::Array<bool> hadOldRects;
 	Common::Array<const Shop::Prop *> props;
@@ -167,7 +167,7 @@ void PropRuntime::advanceAnimationFrame(CyberflixEngine &engine) {
 		_propsDirty = true;
 }
 
-void PropRuntime::collectWorldProps(CyberflixEngine &engine, Common::Array<const Shop::Prop *> &draw,
+void PropRuntime::collectWorldProps(CyberFlixEngine &engine, Common::Array<const Shop::Prop *> &draw,
 		Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
 		const Shop::WorldCamera &camera) const {
 	if (!engine._setRuntime.set() || !engine._setRuntime.set()->isOpen())
@@ -248,11 +248,11 @@ void PropRuntime::markShopDirty(const Shop &shop) {
 	_propsDirty = true;
 }
 
-void PropRuntime::openShopFile(CyberflixEngine &engine, const Common::String &name) {
+void PropRuntime::openShopFile(CyberFlixEngine &engine, const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
 	if (findShop(key)) {
-		debug(1, "Cyberflix: shop '%s' already open", key.c_str());
+		debug(1, "CyberFlix: shop '%s' already open", key.c_str());
 		return;
 	}
 
@@ -274,12 +274,12 @@ void PropRuntime::openShopFile(CyberflixEngine &engine, const Common::String &na
 	refreshPropsIfDirty(engine);
 }
 
-void PropRuntime::closeShopFile(CyberflixEngine &engine, const Common::String &name) {
+void PropRuntime::closeShopFile(CyberFlixEngine &engine, const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
 	for (uint32 i = 0; i < _shops.size(); ++i) {
 		if (_shops[i]->name() == key) {
-			debug(1, "Cyberflix: shop '%s' closed", key.c_str());
+			debug(1, "CyberFlix: shop '%s' closed", key.c_str());
 			// Native closeshopfile (FUN_0042a7e0) tears down each prop through
 			// FUN_0042aa00 before deleting the shop's prop records. That helper
 			// stops makeloop("prop", <prop>, ...) callbacks via FUN_00423bf0.
@@ -294,19 +294,19 @@ void PropRuntime::closeShopFile(CyberflixEngine &engine, const Common::String &n
 			return;
 		}
 	}
-	debug(1, "Cyberflix: closeshopfile('%s'): shop not open", key.c_str());
+	debug(1, "CyberFlix: closeshopfile('%s'): shop not open", key.c_str());
 }
 
 void PropRuntime::propInstance(const Common::String &source, const Common::String &newName) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(source, &shop);
 	if (!prop || !shop) {
-		warning("Cyberflix: propinstance('%s', '%s'): source prop not found",
+		warning("CyberFlix: propinstance('%s', '%s'): source prop not found",
 				source.c_str(), newName.c_str());
 		return;
 	}
 	if (newName.size() > kMaxInstanceNameLength) {
-		warning("Cyberflix: propinstance('%s', '%s'): name too long",
+		warning("CyberFlix: propinstance('%s', '%s'): name too long",
 				source.c_str(), newName.c_str());
 		return;
 	}
@@ -314,18 +314,18 @@ void PropRuntime::propInstance(const Common::String &source, const Common::Strin
 		return;
 
 	if (shop->addPropInstance(*prop, newName)) {
-		debug(1, "Cyberflix: propinstance('%s', '%s')", source.c_str(), newName.c_str());
+		debug(1, "CyberFlix: propinstance('%s', '%s')", source.c_str(), newName.c_str());
 		_propsDirty = true;
 	}
 }
 
-void PropRuntime::sendToShop(CyberflixEngine &engine, const Common::String &shopName, const Common::String &message,
+void PropRuntime::sendToShop(CyberFlixEngine &engine, const Common::String &shopName, const Common::String &message,
 		const Common::Array<Value> &args) {
-	debug(1, "Cyberflix: sendtoshop('%s') -> %s(%u args)", shopName.c_str(),
+	debug(1, "CyberFlix: sendtoshop('%s') -> %s(%u args)", shopName.c_str(),
 			message.c_str(), args.size());
 	Common::SharedPtr<Shop> shop = findShopShared(shopName);
 	if (!shop) {
-		warning("Cyberflix: sendtoshop('%s'): shop not open", shopName.c_str());
+		warning("CyberFlix: sendtoshop('%s'): shop not open", shopName.c_str());
 		return;
 	}
 	engine.dispatchWithScopes(shop->shopScript(), nullptr, shop->name(), Common::String(),
@@ -333,13 +333,13 @@ void PropRuntime::sendToShop(CyberflixEngine &engine, const Common::String &shop
 	refreshPropsIfDirty(engine);
 }
 
-Value PropRuntime::sendToShopFx(CyberflixEngine &engine, const Common::String &shopName, const Common::String &message,
+Value PropRuntime::sendToShopFx(CyberFlixEngine &engine, const Common::String &shopName, const Common::String &message,
 		const Common::Array<Value> &args) {
-	debug(1, "Cyberflix: sendtoshopfx('%s') -> %s(%u args)", shopName.c_str(),
+	debug(1, "CyberFlix: sendtoshopfx('%s') -> %s(%u args)", shopName.c_str(),
 			message.c_str(), args.size());
 	Common::SharedPtr<Shop> shop = findShopShared(shopName);
 	if (!shop) {
-		warning("Cyberflix: sendtoshopfx('%s'): shop not open", shopName.c_str());
+		warning("CyberFlix: sendtoshopfx('%s'): shop not open", shopName.c_str());
 		return Value();
 	}
 
@@ -349,14 +349,14 @@ Value PropRuntime::sendToShopFx(CyberflixEngine &engine, const Common::String &s
 			message, args, "shopfx");
 }
 
-void PropRuntime::sendToProp(CyberflixEngine &engine, const Common::String &propName, const Common::String &message,
+void PropRuntime::sendToProp(CyberFlixEngine &engine, const Common::String &propName, const Common::String &message,
 		const Common::Array<Value> &args) {
-	debug(1, "Cyberflix: sendtoprop('%s') -> %s(%u args)", propName.c_str(),
+	debug(1, "CyberFlix: sendtoprop('%s') -> %s(%u args)", propName.c_str(),
 			message.c_str(), args.size());
 	Shop::Prop *prop = nullptr;
 	Common::SharedPtr<Shop> shopOwner = findPropOwnerShared(propName, &prop);
 	if (!prop) {
-		warning("Cyberflix: sendtoprop('%s'): no such prop", propName.c_str());
+		warning("CyberFlix: sendtoprop('%s'): no such prop", propName.c_str());
 		return;
 	}
 	engine.dispatchWithScopes(prop->script.get(), shopOwner->shopScript(), prop->name, prop->name,
@@ -364,14 +364,14 @@ void PropRuntime::sendToProp(CyberflixEngine &engine, const Common::String &prop
 	refreshPropsIfDirty(engine);
 }
 
-Value PropRuntime::sendToPropFx(CyberflixEngine &engine, const Common::String &propName, const Common::String &message,
+Value PropRuntime::sendToPropFx(CyberFlixEngine &engine, const Common::String &propName, const Common::String &message,
 		const Common::Array<Value> &args) {
-	debug(1, "Cyberflix: sendtopropfx('%s') -> %s(%u args)", propName.c_str(),
+	debug(1, "CyberFlix: sendtopropfx('%s') -> %s(%u args)", propName.c_str(),
 			message.c_str(), args.size());
 	Shop::Prop *prop = nullptr;
 	Common::SharedPtr<Shop> shopOwner = findPropOwnerShared(propName, &prop);
 	if (!prop) {
-		warning("Cyberflix: sendtopropfx('%s'): no such prop", propName.c_str());
+		warning("CyberFlix: sendtopropfx('%s'): no such prop", propName.c_str());
 		return Value();
 	}
 	return engine.dispatchWithScopesValue(prop->script.get(), shopOwner->shopScript(),
@@ -381,7 +381,7 @@ Value PropRuntime::sendToPropFx(CyberflixEngine &engine, const Common::String &p
 bool PropRuntime::propVisible(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
-		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propvisible('%s'): no such prop", name.c_str());
 		return false;
 	}
 	return prop->visible;
@@ -391,7 +391,7 @@ void PropRuntime::propVisible(const Common::String &name, bool visible) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
-		warning("Cyberflix: propvisible('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propvisible('%s'): no such prop", name.c_str());
 		return;
 	}
 	if (prop->visible != visible) {
@@ -405,7 +405,7 @@ void PropRuntime::propVisible(const Common::String &name, bool visible) {
 Common::String PropRuntime::propView(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
-		warning("Cyberflix: propview('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propview('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
 	return prop->shapeName;
@@ -415,7 +415,7 @@ void PropRuntime::propView(const Common::String &name, const Common::String &sha
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
-		warning("Cyberflix: propview('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propview('%s'): no such prop", name.c_str());
 		return;
 	}
 	// FUN_004293a0 validates the shape against the prop master (FUN_0042c0c0)
@@ -428,7 +428,7 @@ void PropRuntime::propView(const Common::String &name, const Common::String &sha
 	// poses 1,2,3,4,5,0 and visibly flickers as it wraps on the last update.
 	Shop::ShapePoseResult pose = shop->shapePoseCount(*prop, shape);
 	if (!pose.valid) {
-		warning("Cyberflix: propview('%s'): no shape '%s'", name.c_str(), shape.c_str());
+		warning("CyberFlix: propview('%s'): no shape '%s'", name.c_str(), shape.c_str());
 		return;
 	}
 	Common::String key = shape;
@@ -450,7 +450,7 @@ void PropRuntime::propView(const Common::String &name, const Common::String &sha
 int PropRuntime::propXY(const Common::String &name, int selector) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
-		warning("Cyberflix: propxy('%s', %d): no such prop", name.c_str(), selector);
+		warning("CyberFlix: propxy('%s', %d): no such prop", name.c_str(), selector);
 		return 0;
 	}
 	switch (selector) {
@@ -463,7 +463,7 @@ int PropRuntime::propXY(const Common::String &name, int selector) {
 		// uses selector 4 for the same packing).
 		return packPoint(prop->x, prop->y);
 	default:
-		warning("Cyberflix: propxy('%s', %d): bad selector", name.c_str(), selector);
+		warning("CyberFlix: propxy('%s', %d): bad selector", name.c_str(), selector);
 		return 0;
 	}
 }
@@ -472,7 +472,7 @@ void PropRuntime::setPropXY(const Common::String &name, int x, int y) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
-		warning("Cyberflix: propxy('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propxy('%s'): no such prop", name.c_str());
 		return;
 	}
 	// FUN_0042a370: screen-space placement — mode = 0, depth = -1 when the
@@ -487,11 +487,11 @@ void PropRuntime::setPropXY(const Common::String &name, int x, int y) {
 	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
-void PropRuntime::propSet(CyberflixEngine &engine, const Common::String &name, const Common::String &setName) {
+void PropRuntime::propSet(CyberFlixEngine &engine, const Common::String &name, const Common::String &setName) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
-		warning("Cyberflix: propset('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propset('%s'): no such prop", name.c_str());
 		return;
 	}
 	Common::String key = setName;
@@ -508,7 +508,7 @@ void PropRuntime::propXYZ(const Common::String &name, int x, int y, int z) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
-		warning("Cyberflix: propxyz('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propxyz('%s'): no such prop", name.c_str());
 		return;
 	}
 	Common::Rect oldRect;
@@ -522,10 +522,10 @@ void PropRuntime::propXYZ(const Common::String &name, int x, int y, int z) {
 
 // propxyz(name, selector) getter -> FUN_0042a250: world position from the prop
 // record; 1=x, 2=y, 3=z, 4=packed x/y point (CONCAT22(x, y) natively).
-int PropRuntime::propXYZ(CyberflixEngine &engine, const Common::String &name, int selector) {
+int PropRuntime::propXYZ(CyberFlixEngine &engine, const Common::String &name, int selector) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
-		warning("Cyberflix: propxyz('%s', %d): no such prop", name.c_str(), selector);
+		warning("CyberFlix: propxyz('%s', %d): no such prop", name.c_str(), selector);
 		return 0;
 	}
 	switch (selector) {
@@ -538,7 +538,7 @@ int PropRuntime::propXYZ(CyberflixEngine &engine, const Common::String &name, in
 	case 4:
 		return engine.makePoint(prop->x, prop->y);
 	default:
-		warning("Cyberflix: propxyz('%s', %d): bad selector", name.c_str(), selector);
+		warning("CyberFlix: propxyz('%s', %d): bad selector", name.c_str(), selector);
 		return 0;
 	}
 }
@@ -546,17 +546,17 @@ int PropRuntime::propXYZ(CyberflixEngine &engine, const Common::String &name, in
 Common::String PropRuntime::getPropStar(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
-		warning("Cyberflix: propstar('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propstar('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
 	return prop->sceneName;
 }
 
-Common::String PropRuntime::setPropStar(CyberflixEngine &engine, const Common::String &name, const Common::String &newStar) {
+Common::String PropRuntime::setPropStar(CyberFlixEngine &engine, const Common::String &name, const Common::String &newStar) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
-		warning("Cyberflix: propstar('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propstar('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
 	Common::String key = newStar;
@@ -574,7 +574,7 @@ void PropRuntime::propScale(const Common::String &name, int scale) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
-		warning("Cyberflix: propscale('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propscale('%s'): no such prop", name.c_str());
 		return;
 	}
 	Common::Rect oldRect;
@@ -587,7 +587,7 @@ void PropRuntime::propZClip(const Common::String &name, int dist) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
-		warning("Cyberflix: propzclip('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propzclip('%s'): no such prop", name.c_str());
 		return;
 	}
 	Common::Rect oldRect;
@@ -596,11 +596,11 @@ void PropRuntime::propZClip(const Common::String &name, int dist) {
 	markPropDirty(*shop, *prop, hadOldRect ? &oldRect : nullptr);
 }
 
-int PropRuntime::getPropDist(CyberflixEngine &engine, const Common::String &name) {
+int PropRuntime::getPropDist(CyberFlixEngine &engine, const Common::String &name) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
-		warning("Cyberflix: propdist('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propdist('%s'): no such prop", name.c_str());
 		return 0;
 	}
 
@@ -623,12 +623,12 @@ void PropRuntime::propDist(const Common::String &name, int dist) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
-		warning("Cyberflix: propdist('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propdist('%s'): no such prop", name.c_str());
 		return;
 	}
 	// FUN_004295c0: only applied to screen-space props with a negative value.
 	if (prop->mode == 0 && dist < 0) {
-		debug(1, "Cyberflix: propdist('%s', %d) depth %d -> %d",
+		debug(1, "CyberFlix: propdist('%s', %d) depth %d -> %d",
 				name.c_str(), dist, prop->depth, dist);
 		Common::Rect oldRect;
 		bool hadOldRect = screenPropRect(*shop, *prop, oldRect);
@@ -640,7 +640,7 @@ void PropRuntime::propDist(const Common::String &name, int dist) {
 int PropRuntime::getPropDeg(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
-		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propdeg('%s'): no such prop", name.c_str());
 		return 0;
 	}
 	return prop->angle;
@@ -650,7 +650,7 @@ int PropRuntime::setPropDeg(const Common::String &name, int newDeg) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop) {
-		warning("Cyberflix: propdeg('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propdeg('%s'): no such prop", name.c_str());
 		return 0;
 	}
 	if (prop->angle != static_cast<int16>(newDeg & 0xff)) {
@@ -665,7 +665,7 @@ int PropRuntime::setPropDeg(const Common::String &name, int newDeg) {
 Common::String PropRuntime::getPropOwner(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
-		warning("Cyberflix: propowner('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propowner('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
 	return prop->owner;
@@ -674,7 +674,7 @@ Common::String PropRuntime::getPropOwner(const Common::String &name) {
 Common::String PropRuntime::setPropOwner(const Common::String &name, const Common::String &newOwner) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
-		warning("Cyberflix: propowner('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propowner('%s'): no such prop", name.c_str());
 		return Common::String();
 	}
 	prop->owner = newOwner; // FUN_00428d40: copy into record +0x8c
@@ -684,7 +684,7 @@ Common::String PropRuntime::setPropOwner(const Common::String &name, const Commo
 int PropRuntime::getPropValue(const Common::String &name) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
-		warning("Cyberflix: propvalue('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propvalue('%s'): no such prop", name.c_str());
 		return 0;
 	}
 	return prop->value;
@@ -693,7 +693,7 @@ int PropRuntime::getPropValue(const Common::String &name) {
 int PropRuntime::setPropValue(const Common::String &name, int newValue) {
 	Shop::Prop *prop = findProp(name);
 	if (!prop) {
-		warning("Cyberflix: propvalue('%s'): no such prop", name.c_str());
+		warning("CyberFlix: propvalue('%s'): no such prop", name.c_str());
 		return 0;
 	}
 	prop->value = newValue; // FUN_00428e00: copy int to record +0x46
@@ -722,7 +722,7 @@ bool PropRuntime::pointInProp(const Common::String &name, int32 packedPoint) {
 	Shop *shop = nullptr;
 	Shop::Prop *prop = findProp(name, &shop);
 	if (!prop || !shop) {
-		warning("Cyberflix: pointinprop('%s'): no such prop", name.c_str());
+		warning("CyberFlix: pointinprop('%s'): no such prop", name.c_str());
 		return false;
 	}
 	if (!prop->visible || prop->mode != 0)
@@ -746,7 +746,7 @@ bool PropRuntime::pointInProp(const Common::String &name, int32 packedPoint) {
 	return rendered.cel->isOpaque(celX, celY);
 }
 
-void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine, bool explicitForceUpdate,
+void PropRuntime::refreshPropsIfDirty(CyberFlixEngine &engine, bool explicitForceUpdate,
 		bool present) {
 	// The original recomposites the display list every tick; this engine
 	// renders on demand, so repaint the current room after a dispatch that
@@ -795,4 +795,4 @@ void PropRuntime::refreshPropsIfDirty(CyberflixEngine &engine, bool explicitForc
 	_dirtyRects.clear();
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

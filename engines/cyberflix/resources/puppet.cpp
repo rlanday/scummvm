@@ -30,7 +30,7 @@
 #include "cyberflix/audio/cbx_audio.h"
 #include "cyberflix/resource_helpers.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 const byte *Puppet::engineBase(uint32 index) const {
 	if (index >= _archive.getResourceCount())
@@ -48,7 +48,7 @@ const byte *Puppet::payload(uint32 index) const {
 }
 
 int Puppet::resourceIndexById(uint32 id) const {
-	return Cyberflix::resourceIndexById(_archive, id);
+	return CyberFlix::resourceIndexById(_archive, id);
 }
 
 Common::String Puppet::pascalString(const byte *p) const {
@@ -87,7 +87,7 @@ bool Puppet::open(const Common::String &name) {
 
 	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
-		warning("Cyberflix: puppet '%s' has no master header", name.c_str());
+		warning("CyberFlix: puppet '%s' has no master header", name.c_str());
 		_archive.close();
 		_fileData.clear();
 		return false;
@@ -96,7 +96,7 @@ bool Puppet::open(const Common::String &name) {
 	const byte *hdr = engineBase(static_cast<uint32>(_master));
 	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
 	if (!hdr || masterLen < kMasterBaseCountOffset + 4) {
-		warning("Cyberflix: puppet '%s' master header truncated", name.c_str());
+		warning("CyberFlix: puppet '%s' master header truncated", name.c_str());
 		_master = -1;
 		_archive.close();
 		_fileData.clear();
@@ -144,7 +144,7 @@ bool Puppet::open(const Common::String &name) {
 	int tableIdx = resourceIndexById(kScriptTableResourceId);
 	const byte *table = tableIdx >= 0 ? payload(static_cast<uint32>(tableIdx)) : nullptr;
 	if (!table || _archive.getResource(static_cast<uint32>(tableIdx)).length < kScriptTableEntriesOffset) {
-		warning("Cyberflix: puppet '%s' script table missing", name.c_str());
+		warning("CyberFlix: puppet '%s' script table missing", name.c_str());
 		return true;
 	}
 
@@ -168,7 +168,7 @@ bool Puppet::open(const Common::String &name) {
 		}
 	}
 
-	debug(1, "Cyberflix: opened puppet '%s': name '%s', %u script(s), %u action(s)",
+	debug(1, "CyberFlix: opened puppet '%s': name '%s', %u script(s), %u action(s)",
 			_sourceName.c_str(), _puppetName.c_str(), _scripts.size(), _actions.size());
 	return true;
 }
@@ -226,7 +226,7 @@ Common::SharedPtr<CelImage> Puppet::celResource(uint32 resId) const {
 	Common::SharedPtr<CelImage> cel(new CelImage());
 	bool ok = decodeCel(*s, width, height, *cel);
 	if (!ok) {
-		warning("Cyberflix: puppet '%s' could not decode cel resource %u",
+		warning("CyberFlix: puppet '%s' could not decode cel resource %u",
 				_sourceName.c_str(), resId);
 		return Common::SharedPtr<CelImage>();
 	}
@@ -463,4 +463,4 @@ bool Puppet::loadPuppetPalette(Palette &rgb) const {
 	return loadPalette(_fileData.begin(), _fileData.size(), rgb);
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

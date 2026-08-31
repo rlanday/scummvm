@@ -29,14 +29,14 @@
 #include "cyberflix/console.h"
 #include "cyberflix/cyberflix.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 static const double kPaletteGammaUp = 1.05;
 static const double kPaletteGammaDown = 0.9523809523809523;
 static const double kPaletteGammaMin = 0.15;
 static const double kPaletteGammaMax = 2.5;
 
-uint32 CyberflixEngine::handleMovieHotkeys(const Common::Event &event, bool skippable,
+uint32 CyberFlixEngine::handleMovieHotkeys(const Common::Event &event, bool skippable,
 		const Audio::SoundHandle &audioHandle, bool &skip) {
 	if (event.type == Common::EVENT_QUIT || event.type == Common::EVENT_RETURN_TO_LAUNCHER) {
 		requestQuit();
@@ -109,7 +109,7 @@ uint32 CyberflixEngine::handleMovieHotkeys(const Common::Event &event, bool skip
 	return 0;
 }
 
-bool CyberflixEngine::handleGlobalKey(const Common::Event &event) {
+bool CyberFlixEngine::handleGlobalKey(const Common::Event &event) {
 	if (event.type != Common::EVENT_KEYDOWN)
 		return false;
 
@@ -167,7 +167,7 @@ bool CyberflixEngine::handleGlobalKey(const Common::Event &event) {
 	return true;
 }
 
-void CyberflixEngine::showAboutDialog() {
+void CyberFlixEngine::showAboutDialog() {
 	// Faithful reproduction of TI.EXE FUN_00404120's "About" MessageBox (format
 	// string @0x00457380, build stamp @0x004574d0). The original also appends
 	// live OS/heap/joystick/audio lines; under ScummVM we show the static engine
@@ -184,7 +184,7 @@ void CyberflixEngine::showAboutDialog() {
 	dialog.runModal();
 }
 
-bool CyberflixEngine::questionDialog(const Common::String &message) {
+bool CyberFlixEngine::questionDialog(const Common::String &message) {
 	Common::String text = message;
 	if (text == "Are you sure you want to quit? You can't save your game during the tour.")
 		text = "Are you sure you want to quit? You can't save your game during the tour, but you can still use OPEN to load another saved game.";
@@ -192,8 +192,8 @@ bool CyberflixEngine::questionDialog(const Common::String &message) {
 	return dialog.runModal() == GUI::kMessageOK;
 }
 
-void CyberflixEngine::requestQuit() {
+void CyberFlixEngine::requestQuit() {
 	Engine::quitGame();
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

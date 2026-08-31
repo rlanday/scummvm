@@ -29,9 +29,9 @@ namespace Common {
 class FSNode;
 }
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-class CyberflixEngine;
+class CyberFlixEngine;
 class PathRuntime;
 class Script;
 class ScriptVM;
@@ -42,19 +42,10 @@ struct GameProfile {
 	const char *defaultSaveSignature;
 };
 
-/** Mutable load information that a game may repair for legacy compatibility. */
-struct GameLoadContext {
-	bool variablesSeen = false;
-	bool castStatePresent = false;
-	bool frameCounterSeen = false;
-	int frameCounter = 0;
-};
-
 /**
  * Per-game policy around the shared CyberFlix/Bicycle interpreter. File
  * formats, script execution and runtime systems stay outside this interface;
- * only installation, authored-data quirks and compatibility repair belong
- * here.
+ * only installation and authored-data quirks belong here.
  */
 class GameSupport {
 public:
@@ -70,9 +61,8 @@ public:
 	virtual bool resolvePathDirectory(const Common::String &path,
 			Common::FSNode &out) const = 0;
 
-	virtual void onForceUpdate(CyberflixEngine &) {}
-	virtual void restoreGameState(CyberflixEngine &, const ScriptVM &,
-			GameLoadContext &) {}
+	virtual void onForceUpdate(CyberFlixEngine &) {}
+	virtual void onGameStateLoaded(const ScriptVM &) {}
 
 	virtual bool shouldLogScriptVariable(const Common::String &) const {
 		return false;
@@ -85,6 +75,6 @@ public:
 
 GameSupport *createGameSupport(int gameType);
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_GAME_SUPPORT_H

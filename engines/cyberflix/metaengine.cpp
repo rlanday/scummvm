@@ -32,13 +32,13 @@
 #include "cyberflix/detection.h"
 #include "cyberflix/saveload.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-static bool readCyberflixSaveDescription(Common::SeekableReadStream &in, Common::String &description) {
+static bool readCyberFlixSaveDescription(Common::SeekableReadStream &in, Common::String &description) {
 	char magic[5] = {};
-	if (in.read(magic, 4) != 4 || memcmp(magic, kCyberflixSaveMagic, 4))
+	if (in.read(magic, 4) != 4 || memcmp(magic, kCyberFlixSaveMagic, 4))
 		return false;
-	if (in.readUint32LE() != kCyberflixSaveVersion)
+	if (in.readUint32LE() != kCyberFlixSaveVersion)
 		return false;
 
 	char tag[5];
@@ -68,7 +68,7 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 
-class CyberflixMetaEngine : public AdvancedMetaEngine<Cyberflix::CyberflixGameDescription> {
+class CyberFlixMetaEngine : public AdvancedMetaEngine<CyberFlix::CyberFlixGameDescription> {
 public:
 	const char *getName() const override {
 		return "cyberflix";
@@ -78,8 +78,8 @@ public:
 		return optionsList;
 	}
 
-	Common::Error createInstance(OSystem *syst, Engine **engine, const Cyberflix::CyberflixGameDescription *desc) const override {
-		*engine = new Cyberflix::CyberflixEngine(syst, desc);
+	Common::Error createInstance(OSystem *syst, Engine **engine, const CyberFlix::CyberFlixGameDescription *desc) const override {
+		*engine = new CyberFlix::CyberFlixEngine(syst, desc);
 		return Common::kNoError;
 	}
 
@@ -105,7 +105,7 @@ public:
 
 			Common::ScopedPtr<Common::InSaveFile> saveFile(saveFileMan->openForLoading(file));
 			Common::String description;
-			if (!saveFile || !readCyberflixSaveDescription(*saveFile, description))
+			if (!saveFile || !readCyberFlixSaveDescription(*saveFile, description))
 				continue;
 
 			// CyberFlix saves are large because they persist open audio/runtime
@@ -123,10 +123,10 @@ public:
 	}
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #if PLUGIN_ENABLED_DYNAMIC(CYBERFLIX)
-	REGISTER_PLUGIN_DYNAMIC(CYBERFLIX, PLUGIN_TYPE_ENGINE, Cyberflix::CyberflixMetaEngine);
+	REGISTER_PLUGIN_DYNAMIC(CYBERFLIX, PLUGIN_TYPE_ENGINE, CyberFlix::CyberFlixMetaEngine);
 #else
-	REGISTER_PLUGIN_STATIC(CYBERFLIX, PLUGIN_TYPE_ENGINE, Cyberflix::CyberflixMetaEngine);
+	REGISTER_PLUGIN_STATIC(CYBERFLIX, PLUGIN_TYPE_ENGINE, CyberFlix::CyberFlixMetaEngine);
 #endif

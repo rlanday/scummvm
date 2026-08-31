@@ -29,7 +29,7 @@
 
 #include "cyberflix/script.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /**
  * Tagged value held on the CyberFlix VM operand stack.
@@ -71,7 +71,7 @@ inline int32 packPoint(int x, int y) {
 			static_cast<uint32>(static_cast<uint16>(y)));
 }
 
-class CyberflixEngine;
+class CyberFlixEngine;
 
 /**
  * Executes a parsed CyberFlix Script. This is the structural harness that
@@ -92,7 +92,7 @@ public:
 	 * usable as a standalone reverse-engineering harness (the debug console
 	 * runs hostless ScriptVMs). Not owned.
 	 */
-	void setHost(CyberflixEngine *host) { _host = host; }
+	void setHost(CyberFlixEngine *host) { _host = host; }
 
 	/** Run @p script from the top until the terminator or a step budget. */
 	void run(const Script &script, uint32 maxSteps = 100000);
@@ -348,13 +348,13 @@ private:
 	/// fall-through, so ~128 stubbed opcodes don't spam every frame. Maps
 	/// opcode -> true once reported.
 	Common::HashMap<uint16, bool> _reportedOpcodes;
-	CyberflixEngine *_host; ///< Engine host for effectful builtins; null = no-op. Not owned.
+	CyberFlixEngine *_host; ///< Engine host for effectful builtins; null = no-op. Not owned.
 
 	/// Dispatch context for the atoms 0xfba/0xfbb (see setDispatchContext).
 	Common::String _ctxSelf;
 	Common::String _ctxProp;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_VM_H

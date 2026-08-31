@@ -36,7 +36,7 @@ namespace Graphics {
 struct WinCursorGroup;
 }
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 class CursorRuntime {
 public:
@@ -79,6 +79,6 @@ private:
 	Common::String _appliedCursor; ///< Name last handed to CursorMan.
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

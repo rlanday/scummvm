@@ -25,7 +25,7 @@
 #include "common/fs.h"
 #include "common/str.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 class GameSupport;
 
@@ -56,6 +56,6 @@ private:
 	const GameSupport *_gameSupport;                  ///< Non-owning per-title path policy.
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

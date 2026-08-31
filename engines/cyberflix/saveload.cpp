@@ -49,7 +49,7 @@
 #include "cyberflix/stage.h"
 #include "cyberflix/vm.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 typedef AudioRuntime::ThemeTrack ThemeTrack;
 
@@ -124,7 +124,6 @@ struct HeaderState {
 	int32 stageNode = 0;
 	Common::String flatName;
 	int32 frameCounter = 0; // frame() base for absolute script-frame timers.
-	bool frameCounterSeen = false;
 	bool stageVisible = false;
 	Common::String setFileName;
 	Common::String setName;
@@ -281,13 +280,10 @@ static bool parseHeaderChunk(Common::SeekableReadStream &in, int64 end, HeaderSt
 	header.setTransitionType = in.readUint32LE();
 	header.setTransitionResource = in.readUint32LE();
 	header.setTransitionFrame = in.readUint32LE();
-	header.stageVisible = !header.stageName.empty();
-	if (in.pos() < end)
-		header.stageVisible = in.readByte() != 0;
-	if (in.pos() + 4 <= end) {
-		header.frameCounter = in.readSint32LE();
-		header.frameCounterSeen = true;
-	}
+	if (in.pos() + 5 > end) // stageVisible + frameCounter
+		return false;
+	header.stageVisible = in.readByte() != 0;
+	header.frameCounter = in.readSint32LE();
 	return !in.err();
 }
 
@@ -569,14 +565,14 @@ static void restoreShopState(PropRuntime &propRuntime, const Common::Array<ShopS
 	for (uint i = 0; i < shopStates.size(); ++i) {
 		Common::SharedPtr<Shop> shop(new Shop());
 		if (!shop->open(shopStates[i].name)) {
-			warning("Cyberflix: load could not reopen shop '%s'", shopStates[i].name.c_str());
+			warning("CyberFlix: load could not reopen shop '%s'", shopStates[i].name.c_str());
 			continue;
 		}
 		for (uint p = 0; p < shopStates[i].props.size(); ++p) {
 			const PropState &state = shopStates[i].props[p];
 			Shop::Prop *prop = shop->findProp(state.name);
 			if (!prop) {
-				warning("Cyberflix: load shop '%s' missing prop '%s'",
+				warning("CyberFlix: load shop '%s' missing prop '%s'",
 						shopStates[i].name.c_str(), state.name.c_str());
 				continue;
 			}
@@ -603,7 +599,7 @@ static void restoreCastState(ActorRuntime &actorRuntime, const Common::Array<Cas
 	for (uint i = 0; i < castStates.size(); ++i) {
 		Common::SharedPtr<Cast> cast(new Cast());
 		if (!cast->open(castStates[i].name)) {
-			warning("Cyberflix: load could not reopen cast '%s'", castStates[i].name.c_str());
+			warning("CyberFlix: load could not reopen cast '%s'", castStates[i].name.c_str());
 			continue;
 		}
 		for (uint a = 0; a < castStates[i].actors.size(); ++a) {
@@ -615,7 +611,7 @@ static void restoreCastState(ActorRuntime &actorRuntime, const Common::Array<Cas
 					actor = cast->findActor(state.name);
 			}
 			if (!actor) {
-				warning("Cyberflix: load cast '%s' missing actor '%s'",
+				warning("CyberFlix: load cast '%s' missing actor '%s'",
 						castStates[i].name.c_str(), state.name.c_str());
 				continue;
 			}
@@ -685,27 +681,12 @@ static void restoreCueVolumes(AudioRuntime &audioRuntime, const Common::Array<Cu
 	}
 }
 
-static bool isStaleGeneratedExtraActorLoop(const ActorRuntime &actorRuntime,
-		const LoopRuntime::ScheduledLoop &loop) {
-	// Older ScummVM saves can contain generated EXTRA.CST idle loops that native
-	// closecastfile would have removed with the actor record.
-	return loop.kindId == LoopRuntime::ScheduledLoop::kActor &&
-			loop.message.equalsIgnoreCase("extraidle") &&
-			ActorRuntime::isGeneratedExtraActorName(loop.target) &&
-			!actorRuntime.findActorRef(loop.target).actor;
-}
-
-static void restoreLoopState(LoopRuntime &loopRuntime, const ActorRuntime &actorRuntime,
-		bool removeStaleGeneratedExtraActorLoops, bool loopsPaused,
+static void restoreLoopState(LoopRuntime &loopRuntime, bool loopsPaused,
 		const Common::Array<LoopRuntime::ScheduledLoop> &loopStates,
 		bool cricketsPaused, const Common::Array<LoopRuntime::CricketState> &cricketStates) {
 	loopRuntime.setLoopsPaused(loopsPaused);
-	for (uint i = 0; i < loopStates.size(); ++i) {
-		if (removeStaleGeneratedExtraActorLoops &&
-				isStaleGeneratedExtraActorLoop(actorRuntime, loopStates[i]))
-			continue;
+	for (uint i = 0; i < loopStates.size(); ++i)
 		loopRuntime.restoreLoop(loopStates[i]);
-	}
 
 	loopRuntime.setCricketsPaused(cricketsPaused);
 	for (uint i = 0; i < cricketStates.size(); ++i)
@@ -911,7 +892,7 @@ static void writeEmptyCountChunk(Common::WriteStream &out, const char tag[4]) {
 	writeChunk(out, tag, payload);
 }
 
-bool CyberflixEngine::canSaveGameStateCurrently(Common::U32String *msg) {
+bool CyberFlixEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 	if (isTourMode(_vm)) {
 		if (msg)
 			*msg = _("You can't save your game during the tour.");
@@ -926,11 +907,11 @@ bool CyberflixEngine::canSaveGameStateCurrently(Common::U32String *msg) {
 			(setRuntime().set() && setRuntime().set()->isOpen());
 }
 
-bool CyberflixEngine::canSaveAutosaveCurrently() {
+bool CyberFlixEngine::canSaveAutosaveCurrently() {
 	return !isTourMode(_vm) && canSaveGameStateCurrently();
 }
 
-bool CyberflixEngine::canLoadGameStateCurrently(Common::U32String *msg) {
+bool CyberFlixEngine::canLoadGameStateCurrently(Common::U32String *msg) {
 	// The original blocks loading during the tour: the CTL.STG OPEN button
 	// script shows notedialog("Sorry, you can't open a saved game during the
 	// tour.") instead of calling opengame(). Mirror that for ScummVM's own
@@ -954,14 +935,14 @@ bool CyberflixEngine::canLoadGameStateCurrently(Common::U32String *msg) {
 	return true;
 }
 
-void CyberflixEngine::saveGame(const Common::String &signature) {
+void CyberFlixEngine::saveGame(const Common::String &signature) {
 	Common::String oldSignature = _saveSignature;
 	_saveSignature = signature;
 	saveGameDialog();
 	_saveSignature = oldSignature;
 }
 
-void CyberflixEngine::openGame(const Common::String &signature) {
+void CyberFlixEngine::openGame(const Common::String &signature) {
 	Common::U32String msg;
 	if (!canLoadGameStateCurrently(&msg)) {
 		g_system->displayMessageOnOSD(msg.empty()
@@ -983,7 +964,7 @@ void CyberflixEngine::openGame(const Common::String &signature) {
 	_pendingLoadSignature = signature;
 }
 
-bool CyberflixEngine::processPendingLoad() {
+bool CyberFlixEngine::processPendingLoad() {
 	if (_pendingLoadSlot < 0)
 		return false;
 
@@ -1006,7 +987,7 @@ bool CyberflixEngine::processPendingLoad() {
 	return true;
 }
 
-Common::Error CyberflixEngine::loadGameState(int slot) {
+Common::Error CyberFlixEngine::loadGameState(int slot) {
 	// A framework-initiated load (GMM/F7) can be reached from event pumping
 	// inside a VM builtin (delayticks/voicedone waits open the GMM
 	// synchronously). Restoring there would destroy shops/casts whose scripts
@@ -1025,10 +1006,10 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	Common::ScopedPtr<Common::InSaveFile> saveFile(inFile);
 
 	char magic[5] = {};
-	if (saveFile->read(magic, 4) != 4 || memcmp(magic, kCyberflixSaveMagic, 4))
+	if (saveFile->read(magic, 4) != 4 || memcmp(magic, kCyberFlixSaveMagic, 4))
 		return Common::Error(Common::kReadingFailed, "Not a CyberFlix save");
 	uint32 version = saveFile->readUint32LE();
-	if (version != kCyberflixSaveVersion)
+	if (version != kCyberFlixSaveVersion)
 		return Common::Error(Common::kReadingFailed, "Unsupported CyberFlix save version");
 
 	HeaderState header;
@@ -1160,10 +1141,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		// transient one-shot SFX or voice playback buffers.
 	}
 
-	// Empty CAST chunks are older compatibility saves that still rely on the
-	// missing-actor recovery path; only prune impossible loops once actor state is
-	// present and can prove the target actor was not saved.
-	restoreLoopState(_loopRuntime, _actorRuntime, !castStates.empty(), loopsPaused,
+	restoreLoopState(_loopRuntime, loopsPaused,
 			loopStates, cricketsPaused, cricketStates);
 
 	StageRuntime::Snapshot stageSnapshot;
@@ -1188,12 +1166,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	setSnapshot.transitionFrame = header.setTransitionFrame;
 	setRuntime().restoreSnapshot(setSnapshot);
 
-	GameLoadContext gameLoadContext;
-	gameLoadContext.variablesSeen = varsSeen;
-	gameLoadContext.castStatePresent = !castStates.empty();
-	gameLoadContext.frameCounterSeen = header.frameCounterSeen;
-	gameLoadContext.frameCounter = header.frameCounter;
-	gameSupport().restoreGameState(*this, _vm, gameLoadContext);
+	gameSupport().onGameStateLoaded(_vm);
 
 	if (setRuntime().visible() && setRuntime().set() && setRuntime().set()->isOpen() && setRuntime().scene() >= 0 &&
 			!isReplacementStage(stageRuntime().stage())) {
@@ -1204,7 +1177,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 		blackScreen();
 	}
 
-	_frameCounter = gameLoadContext.frameCounter;
+	_frameCounter = header.frameCounter;
 
 	programPalette(savedClut);
 	_hitKind = header.hitKind;
@@ -1221,7 +1194,7 @@ Common::Error CyberflixEngine::loadGameState(int slot) {
 	return Common::kNoError;
 }
 
-Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
+Common::Error CyberFlixEngine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
 	Common::OutSaveFile *out = _saveFileMan->openForSaving(getSaveStateName(slot));
 	if (!out)
 		return Common::Error(Common::kCreatingFileFailed, getSaveStateName(slot));
@@ -1230,8 +1203,8 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 	const Common::String signature = !_saveSignature.empty()
 			? _saveSignature : gameSupport().profile().defaultSaveSignature;
 
-	saveFile->write(kCyberflixSaveMagic, 4);
-	saveFile->writeUint32LE(kCyberflixSaveVersion);
+	saveFile->write(kCyberFlixSaveMagic, 4);
+	saveFile->writeUint32LE(kCyberFlixSaveVersion);
 
 	{
 		Common::MemoryWriteStreamDynamic payload(DisposeAfterUse::YES);
@@ -1314,4 +1287,4 @@ Common::Error CyberflixEngine::saveGameState(int slot, const Common::String &des
 	return Common::kNoError;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

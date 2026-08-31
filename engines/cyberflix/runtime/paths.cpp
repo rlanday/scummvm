@@ -28,7 +28,7 @@
 #include "cyberflix/game_support.h"
 #include "cyberflix/runtime/paths.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 PathRuntime::PathRuntime() : _gameSupport(nullptr) {
 }
@@ -47,7 +47,7 @@ static bool validNativeCDLabel(const Common::String &label) {
 
 Common::String PathRuntime::getPathSlot(int slot) const {
 	if (slot < 0 || slot > 8) {
-		warning("Cyberflix: path(%d): invalid slot", slot);
+		warning("CyberFlix: path(%d): invalid slot", slot);
 		return Common::String();
 	}
 
@@ -67,14 +67,14 @@ Common::String PathRuntime::setCurrentCD(const Common::String &requested) {
 	if (requested.empty()) {
 		_currentCD.clear();
 	} else if (!validNativeCDLabel(requested)) {
-		warning("Cyberflix: currentcd('%s'): invalid CD label", requested.c_str());
+		warning("CyberFlix: currentcd('%s'): invalid CD label", requested.c_str());
 	} else {
 		Common::String mountedLabel;
 		if (_gameSupport && _gameSupport->resolveDisc(requested, mountedLabel)) {
 			_currentCD = mountedLabel;
 		} else {
 			_currentCD.clear();
-			debug(1, "Cyberflix: currentcd('%s') did not find an extracted disc directory",
+			debug(1, "CyberFlix: currentcd('%s') did not find an extracted disc directory",
 					requested.c_str());
 		}
 	}
@@ -109,31 +109,31 @@ void PathRuntime::registerPathSlotDirectory(int slot) {
 
 	Common::FSNode dir;
 	if (!_gameSupport || !_gameSupport->resolvePathDirectory(_pathSlots[slot], dir)) {
-		debug(1, "Cyberflix: path slot %d '%s' did not resolve to a directory",
+		debug(1, "CyberFlix: path slot %d '%s' did not resolve to a directory",
 				slot, _pathSlots[slot].c_str());
 		return;
 	}
 
 	_pathSlotArchives[slot] = Common::String::format("cyberflix-path%d", slot);
 	SearchMan.addDirectory(_pathSlotArchives[slot], dir, 10, 1, false);
-	debug(1, "Cyberflix: path slot %d '%s' -> '%s'", slot, _pathSlots[slot].c_str(),
+	debug(1, "CyberFlix: path slot %d '%s' -> '%s'", slot, _pathSlots[slot].c_str(),
 			dir.getPath().toString(Common::Path::kNativeSeparator).c_str());
 }
 
-Common::String CyberflixEngine::getPathSlot(int slot) {
+Common::String CyberFlixEngine::getPathSlot(int slot) {
 	return _pathRuntime.getPathSlot(slot);
 }
 
-Common::String CyberflixEngine::setPathSlot(int slot, const Common::String &newPath) {
+Common::String CyberFlixEngine::setPathSlot(int slot, const Common::String &newPath) {
 	return _pathRuntime.setPathSlot(slot, newPath);
 }
 
-Common::String CyberflixEngine::getCurrentCD() {
+Common::String CyberFlixEngine::getCurrentCD() {
 	return _pathRuntime.getCurrentCD();
 }
 
-Common::String CyberflixEngine::setCurrentCD(const Common::String &requested) {
+Common::String CyberFlixEngine::setCurrentCD(const Common::String &requested) {
 	return _pathRuntime.setCurrentCD(requested);
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

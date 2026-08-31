@@ -44,7 +44,7 @@
 #include "cyberflix/set.h"
 #include "cyberflix/stage.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 // Puppet action playback cadence: the native player advances one action frame
 // per two 60 Hz timer ticks (FUN_00448a60), i.e. 30 fps.
@@ -94,7 +94,7 @@ void PuppetRuntime::openPuppetFile(const Common::String &name) {
 	if (name.empty())
 		return;
 	if (isOpen()) {
-		warning("Cyberflix: openpuppetfile('%s'): puppet already open", name.c_str());
+		warning("CyberFlix: openpuppetfile('%s'): puppet already open", name.c_str());
 		return;
 	}
 
@@ -105,30 +105,30 @@ void PuppetRuntime::openPuppetFile(const Common::String &name) {
 		return;
 
 	open(puppet);
-	debug(1, "Cyberflix: puppet '%s' open", puppet->sourceName().c_str());
+	debug(1, "CyberFlix: puppet '%s' open", puppet->sourceName().c_str());
 }
 
-void PuppetRuntime::closePuppetFile(CyberflixEngine &engine) {
+void PuppetRuntime::closePuppetFile(CyberFlixEngine &engine) {
 	if (!isOpen()) {
-		warning("Cyberflix: closepuppetfile(): no puppet open");
+		warning("CyberFlix: closepuppetfile(): no puppet open");
 		return;
 	}
-	debug(1, "Cyberflix: puppet '%s' closed", _puppet->sourceName().c_str());
+	debug(1, "CyberFlix: puppet '%s' closed", _puppet->sourceName().c_str());
 	close(engine._mixer);
 }
 
-void PuppetRuntime::sendToPuppet(CyberflixEngine &engine, const Common::String &puppetName,
+void PuppetRuntime::sendToPuppet(CyberFlixEngine &engine, const Common::String &puppetName,
 		const Common::String &message, const Common::Array<Value> &args) {
-	debug(1, "Cyberflix: sendtopuppet('%s') -> %s(%u args)", puppetName.c_str(),
+	debug(1, "CyberFlix: sendtopuppet('%s') -> %s(%u args)", puppetName.c_str(),
 			message.c_str(), args.size());
 	if (!isOpen()) {
-		warning("Cyberflix: sendtopuppet('%s'): no puppet open", puppetName.c_str());
+		warning("CyberFlix: sendtopuppet('%s'): no puppet open", puppetName.c_str());
 		return;
 	}
 
 	Common::SharedPtr<Script> script = _puppet->scriptByName(puppetName);
 	if (!script) {
-		warning("Cyberflix: sendtopuppet('%s'): no such puppet script", puppetName.c_str());
+		warning("CyberFlix: sendtopuppet('%s'): no such puppet script", puppetName.c_str());
 		return;
 	}
 
@@ -140,18 +140,18 @@ void PuppetRuntime::sendToPuppet(CyberflixEngine &engine, const Common::String &
 	engine.propRuntime().refreshPropsIfDirty(engine);
 }
 
-Value PuppetRuntime::sendToPuppetFx(CyberflixEngine &engine, const Common::String &puppetName,
+Value PuppetRuntime::sendToPuppetFx(CyberFlixEngine &engine, const Common::String &puppetName,
 		const Common::String &message, const Common::Array<Value> &args) {
-	debug(1, "Cyberflix: sendtopuppetfx('%s') -> %s(%u args)", puppetName.c_str(),
+	debug(1, "CyberFlix: sendtopuppetfx('%s') -> %s(%u args)", puppetName.c_str(),
 			message.c_str(), args.size());
 	if (!isOpen()) {
-		warning("Cyberflix: sendtopuppetfx('%s'): no puppet open", puppetName.c_str());
+		warning("CyberFlix: sendtopuppetfx('%s'): no puppet open", puppetName.c_str());
 		return Value();
 	}
 
 	Common::SharedPtr<Script> script = _puppet->scriptByName(puppetName);
 	if (!script) {
-		warning("Cyberflix: sendtopuppetfx('%s'): no such puppet script", puppetName.c_str());
+		warning("CyberFlix: sendtopuppetfx('%s'): no such puppet script", puppetName.c_str());
 		return Value();
 	}
 
@@ -161,38 +161,38 @@ Value PuppetRuntime::sendToPuppetFx(CyberflixEngine &engine, const Common::Strin
 
 void PuppetRuntime::puppetScript(const Common::String &name) {
 	if (!isOpen()) {
-		warning("Cyberflix: puppetscript('%s'): no puppet open", name.c_str());
+		warning("CyberFlix: puppetscript('%s'): no puppet open", name.c_str());
 		return;
 	}
 	if (!_puppet->scriptByName(name)) {
-		warning("Cyberflix: puppetscript('%s'): no such puppet script", name.c_str());
+		warning("CyberFlix: puppetscript('%s'): no such puppet script", name.c_str());
 		return;
 	}
-	debug(1, "Cyberflix: puppetscript('%s')", name.c_str());
+	debug(1, "CyberFlix: puppetscript('%s')", name.c_str());
 }
 
-void PuppetRuntime::puppetClear(CyberflixEngine &engine) {
+void PuppetRuntime::puppetClear(CyberFlixEngine &engine) {
 	if (!isOpen()) {
-		warning("Cyberflix: puppetclear(): no puppet open");
+		warning("CyberFlix: puppetclear(): no puppet open");
 		return;
 	}
 	_bevels.clear();
 	_highlightBevel = -1;
 	renderCurrentFrame(engine, true);
-	debug(1, "Cyberflix: puppetclear()");
+	debug(1, "CyberFlix: puppetclear()");
 }
 
-void PuppetRuntime::puppetSpeak(CyberflixEngine &engine, const Common::String &name, int mode) {
+void PuppetRuntime::puppetSpeak(CyberFlixEngine &engine, const Common::String &name, int mode) {
 	if (!isVisible()) {
-		warning("Cyberflix: puppetspeak('%s'): no visible puppet", name.c_str());
+		warning("CyberFlix: puppetspeak('%s'): no visible puppet", name.c_str());
 		return;
 	}
 	const Puppet::ActionEntry *action = _puppet->actionByName(name);
 	if (!action) {
-		warning("Cyberflix: puppetspeak('%s'): no such action", name.c_str());
+		warning("CyberFlix: puppetspeak('%s'): no such action", name.c_str());
 		return;
 	}
-	debug(1, "Cyberflix: puppetspeak('%s', %d)", name.c_str(), mode);
+	debug(1, "CyberFlix: puppetspeak('%s', %d)", name.c_str(), mode);
 	// Record the spoken line for the click-to-repeat path (native FUN_00447ce0
 	// -> FUN_0044a470 pushes the action index into DAT_00486790). Skip a
 	// duplicate of the immediately-prior entry and cap at three, matching native.
@@ -204,9 +204,9 @@ void PuppetRuntime::puppetSpeak(CyberflixEngine &engine, const Common::String &n
 	playAction(engine, *action);
 }
 
-void PuppetRuntime::puppetBevel(CyberflixEngine &engine, const Common::String &name, int mode) {
+void PuppetRuntime::puppetBevel(CyberFlixEngine &engine, const Common::String &name, int mode) {
 	if (!isVisible()) {
-		warning("Cyberflix: puppetbevel('%s'): no visible puppet", name.c_str());
+		warning("CyberFlix: puppetbevel('%s'): no visible puppet", name.c_str());
 		return;
 	}
 	BevelOption option;
@@ -217,17 +217,17 @@ void PuppetRuntime::puppetBevel(CyberflixEngine &engine, const Common::String &n
 	_highlightBevel = -1;
 	_bevels.push_back(option);
 	renderBevels(engine, true);
-	debug(1, "Cyberflix: puppetbevel('%s', %d)", name.c_str(), mode);
+	debug(1, "CyberFlix: puppetbevel('%s', %d)", name.c_str(), mode);
 }
 
 void PuppetRuntime::puppetGrab(bool enabled) {
 	_grab = enabled;
-	debug(1, "Cyberflix: puppetgrab(%s)", enabled ? "true" : "false");
+	debug(1, "CyberFlix: puppetgrab(%s)", enabled ? "true" : "false");
 }
 
-int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
+int PuppetRuntime::puppetEvent(CyberFlixEngine &engine, int timeout) {
 	if (!isVisible()) {
-		warning("Cyberflix: puppetevent(%d): no visible puppet", timeout);
+		warning("CyberFlix: puppetevent(%d): no visible puppet", timeout);
 		return -1;
 	}
 	if (engine.shouldQuit())
@@ -292,7 +292,7 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 				if (!_bevels[i].rect.contains(mouse))
 					continue;
 				const int id = _bevels[i].id;
-				debug(1, "Cyberflix: puppetevent(%d) click (%d,%d) -> %d",
+				debug(1, "CyberFlix: puppetevent(%d) click (%d,%d) -> %d",
 						timeout, mouse.x, mouse.y, id);
 				// Frame the chosen option and leave it up: the original draws
 				// the highlight and then starts the response over it, rather
@@ -309,7 +309,7 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 			// FUN_00449e40: a click that misses every bevel but lands in the
 			// puppet display area replays the most recent puppetspeak action).
 			if (replayLastSpokenAction(engine)) {
-				debug(1, "Cyberflix: puppetevent(%d) click (%d,%d) -> repeat",
+				debug(1, "CyberFlix: puppetevent(%d) click (%d,%d) -> repeat",
 						timeout, mouse.x, mouse.y);
 				engine.setGameCursor("CURS.ARROW");
 				hoverState = -1;
@@ -322,7 +322,7 @@ int PuppetRuntime::puppetEvent(CyberflixEngine &engine, int timeout) {
 	}
 }
 
-bool PuppetRuntime::replayLastSpokenAction(CyberflixEngine &engine) {
+bool PuppetRuntime::replayLastSpokenAction(CyberFlixEngine &engine) {
 	if (!isOpen() || _spokenActions.empty())
 		return false;
 
@@ -355,7 +355,7 @@ bool PuppetRuntime::replayLastSpokenAction(CyberflixEngine &engine) {
 
 Common::String PuppetRuntime::getPuppetBase() const {
 	if (!isOpen()) {
-		warning("Cyberflix: puppetbase(): no puppet open");
+		warning("CyberFlix: puppetbase(): no puppet open");
 		return Common::String();
 	}
 	return _base;
@@ -363,18 +363,18 @@ Common::String PuppetRuntime::getPuppetBase() const {
 
 Common::String PuppetRuntime::setPuppetBase(const Common::String &newBase) {
 	if (!isOpen()) {
-		warning("Cyberflix: puppetbase(): no puppet open");
+		warning("CyberFlix: puppetbase(): no puppet open");
 		return Common::String();
 	}
 	if (newBase.size() > 31) {
-		warning("Cyberflix: puppetbase('%s'): name too long", newBase.c_str());
+		warning("CyberFlix: puppetbase('%s'): name too long", newBase.c_str());
 		return _base;
 	}
 	_base = newBase;
 	_base.toLowercase();
 	_currentAction = _base;
 	_currentFrame = 0;
-	debug(1, "Cyberflix: puppetbase('%s')", _base.c_str());
+	debug(1, "CyberFlix: puppetbase('%s')", _base.c_str());
 	return _base;
 }
 
@@ -384,13 +384,13 @@ bool PuppetRuntime::getPuppetVisible() const {
 	return _visible;
 }
 
-bool PuppetRuntime::setPuppetVisible(CyberflixEngine &engine, bool visible) {
+bool PuppetRuntime::setPuppetVisible(CyberFlixEngine &engine, bool visible) {
 	if (!isOpen())
 		return false;
 	_visible = visible;
 	if (_visible)
 		renderCurrentFrame(engine, true);
-	debug(1, "Cyberflix: puppetvisible(%s)", _visible ? "true" : "false");
+	debug(1, "CyberFlix: puppetvisible(%s)", _visible ? "true" : "false");
 	return _visible;
 }
 
@@ -415,7 +415,7 @@ static void copyPuppetGrabBackdropToScreen(const Common::Array<byte> &backdrop,
 	copyFramePixelsToScreen(screen, backdrop.begin(), kScreenWidth, kScreenHeight, 0, 0);
 }
 
-bool PuppetRuntime::captureGrabBackdrop(CyberflixEngine &engine, Common::Array<byte> &backdrop) {
+bool PuppetRuntime::captureGrabBackdrop(CyberFlixEngine &engine, Common::Array<byte> &backdrop) {
 	if (!_grab) {
 		backdrop.clear();
 		return false;
@@ -489,7 +489,7 @@ bool PuppetRuntime::captureGrabBackdrop(CyberflixEngine &engine, Common::Array<b
 	return true;
 }
 
-bool PuppetRuntime::paintGrabBackdrop(CyberflixEngine &engine, Graphics::Surface &screen,
+bool PuppetRuntime::paintGrabBackdrop(CyberFlixEngine &engine, Graphics::Surface &screen,
 		const Common::Array<byte> *cachedBackdrop) {
 	if (!_grab)
 		return false;
@@ -506,7 +506,7 @@ bool PuppetRuntime::paintGrabBackdrop(CyberflixEngine &engine, Graphics::Surface
 	return true;
 }
 
-bool PuppetRuntime::renderFrame(CyberflixEngine &engine, const Puppet::ActionEntry &action,
+bool PuppetRuntime::renderFrame(CyberFlixEngine &engine, const Puppet::ActionEntry &action,
 		uint32 frameIndex, bool present, const Common::Array<byte> *cachedBackdrop) {
 	Graphics::Surface *screen = engine._system->lockScreen();
 	const bool backdropPainted = paintGrabBackdrop(engine, *screen, cachedBackdrop);
@@ -520,7 +520,7 @@ bool PuppetRuntime::renderFrame(CyberflixEngine &engine, const Puppet::ActionEnt
 	return drew;
 }
 
-bool PuppetRuntime::renderCurrentFrame(CyberflixEngine &engine, bool present) {
+bool PuppetRuntime::renderCurrentFrame(CyberFlixEngine &engine, bool present) {
 	const Puppet::ActionEntry *action = currentActionEntry();
 	if (!action)
 		return false;
@@ -581,7 +581,7 @@ const Graphics::Font *PuppetRuntime::textFont(int size) {
 	return font;
 }
 
-void PuppetRuntime::renderBevels(CyberflixEngine &engine, bool present) {
+void PuppetRuntime::renderBevels(CyberFlixEngine &engine, bool present) {
 	if (!isOpen())
 		return;
 
@@ -634,7 +634,7 @@ void PuppetRuntime::strokeBevelHighlight(Graphics::Surface &screen, const Common
 	}
 }
 
-void PuppetRuntime::drawBevelHighlight(CyberflixEngine &engine, const Common::Rect &rect) {
+void PuppetRuntime::drawBevelHighlight(CyberFlixEngine &engine, const Common::Rect &rect) {
 	Common::Rect clipped = rect;
 	clipped.clip(Common::Rect(kScreenWidth, kScreenHeight));
 	if (clipped.isEmpty())
@@ -644,11 +644,11 @@ void PuppetRuntime::drawBevelHighlight(CyberflixEngine &engine, const Common::Re
 	strokeBevelHighlight(*screen, rect);
 	engine._system->unlockScreen();
 	engine._system->updateScreen();
-	debug(1, "Cyberflix: bevel highlight (%d,%d)-(%d,%d) color %d",
+	debug(1, "CyberFlix: bevel highlight (%d,%d)-(%d,%d) color %d",
 			rect.left, rect.top, rect.right, rect.bottom, _params[kPuppetParamBevelColor]);
 }
 
-void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntry &action) {
+void PuppetRuntime::playAction(CyberFlixEngine &engine, const Puppet::ActionEntry &action) {
 	// Never start a new dialogue clip (audio + frames) once a quit is
 	// requested. ScriptVM::callMethod also makes builtins inert while
 	// quitting, but keep this direct guard on the playback entry point for
@@ -772,7 +772,7 @@ void PuppetRuntime::playAction(CyberflixEngine &engine, const Puppet::ActionEntr
 
 int PuppetRuntime::getPuppetParam(int selector) const {
 	if (selector < 1 || selector > 10) {
-		warning("Cyberflix: puppetparam(%d): selector out of range", selector);
+		warning("CyberFlix: puppetparam(%d): selector out of range", selector);
 		return 0;
 	}
 	return _params[selector - 1];
@@ -780,18 +780,18 @@ int PuppetRuntime::getPuppetParam(int selector) const {
 
 int PuppetRuntime::setPuppetParam(int selector, int newValue) {
 	if (selector < 1 || selector > 10) {
-		warning("Cyberflix: puppetparam(%d): selector out of range", selector);
+		warning("CyberFlix: puppetparam(%d): selector out of range", selector);
 		return 0;
 	}
 	int16 &slot = _params[selector - 1];
 	slot = static_cast<int16>(newValue);
-	debug(1, "Cyberflix: puppetparam(%d, %d)", selector, newValue);
+	debug(1, "CyberFlix: puppetparam(%d, %d)", selector, newValue);
 	return slot;
 }
 
 int PuppetRuntime::countPuppets() const {
 	if (!isOpen()) {
-		warning("Cyberflix: countpuppets(): no puppet open");
+		warning("CyberFlix: countpuppets(): no puppet open");
 		return 0;
 	}
 	return static_cast<int>(_puppet->scriptCount());
@@ -799,14 +799,14 @@ int PuppetRuntime::countPuppets() const {
 
 Common::String PuppetRuntime::indexToPuppet(int index) const {
 	if (!isOpen()) {
-		warning("Cyberflix: indextopuppet(%d): no puppet open", index);
+		warning("CyberFlix: indextopuppet(%d): no puppet open", index);
 		return Common::String();
 	}
 	if (index < 1 || static_cast<uint32>(index) > _puppet->scriptCount()) {
-		warning("Cyberflix: indextopuppet(%d): index out of range", index);
+		warning("CyberFlix: indextopuppet(%d): index out of range", index);
 		return Common::String();
 	}
 	return _puppet->scriptName(static_cast<uint32>(index) - 1);
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

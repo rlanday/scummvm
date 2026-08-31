@@ -22,12 +22,12 @@
 #ifndef CYBERFLIX_GAMES_TITANIC_H
 #define CYBERFLIX_GAMES_TITANIC_H
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 class GameSupport;
 
 GameSupport *createTitanicGameSupport();
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_GAMES_TITANIC_H

@@ -24,13 +24,13 @@
 
 #include "gui/debugger.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-class CyberflixEngine;
+class CyberFlixEngine;
 
 class Console : public GUI::Debugger {
 public:
-	explicit Console(CyberflixEngine *engine);
+	explicit Console(CyberFlixEngine *engine);
 	~Console() override = default;
 
 private:
@@ -78,9 +78,9 @@ private:
 	// Sets a prop's owner directly, to reach an ending state without replaying.
 	bool cmdSetOwner(int argc, const char **argv);
 
-	CyberflixEngine *_engine;
+	CyberFlixEngine *_engine;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_CONSOLE_H

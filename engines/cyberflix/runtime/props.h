@@ -30,9 +30,9 @@
 #include "cyberflix/shop.h"
 #include "cyberflix/vm.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-class CyberflixEngine;
+class CyberFlixEngine;
 
 class PropRuntime {
 public:
@@ -40,7 +40,7 @@ public:
 	Common::SharedPtr<Shop> findShopShared(const Common::String &name);
 	Shop::Prop *findProp(const Common::String &name, Shop **shopOut = nullptr);
 	Common::SharedPtr<Shop> findPropOwnerShared(const Common::String &name, Shop::Prop **propOut);
-	bool resolvePropStar(CyberflixEngine &engine, Shop::Prop &prop);
+	bool resolvePropStar(CyberFlixEngine &engine, Shop::Prop &prop);
 
 	void collectScreenProps(Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop) const;
@@ -54,8 +54,8 @@ public:
 	 *  makeloop('prop', ..., 'fuseoff', 9): advancing them from the render path
 	 *  (which a single script dispatch can reach several times) wraps the pose
 	 *  index past the last frame and the fuse visibly flips back. */
-	void advanceAnimationFrame(CyberflixEngine &engine);
-	void collectWorldProps(CyberflixEngine &engine, Common::Array<const Shop::Prop *> &draw,
+	void advanceAnimationFrame(CyberFlixEngine &engine);
+	void collectWorldProps(CyberFlixEngine &engine, Common::Array<const Shop::Prop *> &draw,
 			Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
 			const Shop::WorldCamera &camera) const;
 	bool screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const;
@@ -63,16 +63,16 @@ public:
 	void markPropDirty(const Shop &shop, const Shop::Prop &prop, const Common::Rect *oldRect);
 	void markShopDirty(const Shop &shop);
 
-	void openShopFile(CyberflixEngine &engine, const Common::String &name);
-	void closeShopFile(CyberflixEngine &engine, const Common::String &name);
+	void openShopFile(CyberFlixEngine &engine, const Common::String &name);
+	void closeShopFile(CyberFlixEngine &engine, const Common::String &name);
 	void propInstance(const Common::String &source, const Common::String &newName);
-	void sendToShop(CyberflixEngine &engine, const Common::String &shopName,
+	void sendToShop(CyberFlixEngine &engine, const Common::String &shopName,
 			const Common::String &message, const Common::Array<Value> &args);
-	Value sendToShopFx(CyberflixEngine &engine, const Common::String &shopName,
+	Value sendToShopFx(CyberFlixEngine &engine, const Common::String &shopName,
 			const Common::String &message, const Common::Array<Value> &args);
-	void sendToProp(CyberflixEngine &engine, const Common::String &propName,
+	void sendToProp(CyberFlixEngine &engine, const Common::String &propName,
 			const Common::String &message, const Common::Array<Value> &args);
-	Value sendToPropFx(CyberflixEngine &engine, const Common::String &propName,
+	Value sendToPropFx(CyberFlixEngine &engine, const Common::String &propName,
 			const Common::String &message, const Common::Array<Value> &args);
 
 	bool propVisible(const Common::String &name);
@@ -81,14 +81,14 @@ public:
 	void propView(const Common::String &name, const Common::String &shape);
 	int propXY(const Common::String &name, int selector);
 	void setPropXY(const Common::String &name, int x, int y);
-	void propSet(CyberflixEngine &engine, const Common::String &name, const Common::String &setName);
+	void propSet(CyberFlixEngine &engine, const Common::String &name, const Common::String &setName);
 	void propXYZ(const Common::String &name, int x, int y, int z);
-	int propXYZ(CyberflixEngine &engine, const Common::String &name, int selector);
+	int propXYZ(CyberFlixEngine &engine, const Common::String &name, int selector);
 	Common::String getPropStar(const Common::String &name);
-	Common::String setPropStar(CyberflixEngine &engine, const Common::String &name, const Common::String &newStar);
+	Common::String setPropStar(CyberFlixEngine &engine, const Common::String &name, const Common::String &newStar);
 	void propScale(const Common::String &name, int scale);
 	void propZClip(const Common::String &name, int dist);
-	int getPropDist(CyberflixEngine &engine, const Common::String &name);
+	int getPropDist(CyberFlixEngine &engine, const Common::String &name);
 	void propDist(const Common::String &name, int dist);
 	int getPropDeg(const Common::String &name);
 	int setPropDeg(const Common::String &name, int newDeg);
@@ -99,7 +99,7 @@ public:
 	int countProps() const;
 	Common::String indexToProp(int index) const;
 	bool pointInProp(const Common::String &name, int32 packedPoint);
-	void refreshPropsIfDirty(CyberflixEngine &engine, bool explicitForceUpdate = false,
+	void refreshPropsIfDirty(CyberFlixEngine &engine, bool explicitForceUpdate = false,
 			bool present = true);
 
 	Common::Array<Common::SharedPtr<Shop> > &shops() { return _shops; }
@@ -125,6 +125,6 @@ private:
 	Common::Array<Common::Rect> _dirtyRects;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

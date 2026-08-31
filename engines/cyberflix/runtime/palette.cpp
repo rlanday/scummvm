@@ -23,7 +23,7 @@
 
 #include <math.h>
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 void PaletteRuntime::copyCurrent(Palette &rgb) const {
 	rgb = _currentClut;
@@ -50,4 +50,4 @@ void PaletteRuntime::updateGammaTable() {
 	_gammaTableDirty = false;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

@@ -29,9 +29,9 @@
 #include "cyberflix/image.h"
 #include "cyberflix/set.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-class CyberflixEngine;
+class CyberFlixEngine;
 struct Value;
 
 enum SetTransitionType {
@@ -79,29 +79,29 @@ public:
 	bool &screenUpdatePending() { return _screenUpdatePending; }
 	bool screenUpdatePending() const { return _screenUpdatePending; }
 
-	void openSetFile(CyberflixEngine &engine, const Common::String &name,
+	void openSetFile(CyberFlixEngine &engine, const Common::String &name,
 			const Common::String &scene = Common::String(),
 			const Common::String &view = Common::String());
-	void closeSetFile(CyberflixEngine &engine);
+	void closeSetFile(CyberFlixEngine &engine);
 	Common::String currentSet() const;
 	Common::String getCurrentView() const;
-	Common::String setCurrentView(CyberflixEngine &engine, const Common::String &target);
+	Common::String setCurrentView(CyberFlixEngine &engine, const Common::String &target);
 	int currentDeg() const;
 	int cameraXYZ(int selector) const;
 	int playerXYZ(int selector) const;
-	Common::String getCurrentScene(CyberflixEngine &engine) const;
-	Common::String setCurrentScene(CyberflixEngine &engine, const Common::String &target);
-	bool getSetVisible(CyberflixEngine &engine) const;
-	bool setSetVisible(CyberflixEngine &engine, bool visible);
+	Common::String getCurrentScene(CyberFlixEngine &engine) const;
+	Common::String setCurrentScene(CyberFlixEngine &engine, const Common::String &target);
+	bool getSetVisible(CyberFlixEngine &engine) const;
+	bool setSetVisible(CyberFlixEngine &engine, bool visible);
 
-	void sendToScene(CyberflixEngine &engine, const Common::String &scene,
+	void sendToScene(CyberFlixEngine &engine, const Common::String &scene,
 			const Common::String &message, const Common::Array<Value> &args);
-	Value sendToSceneFx(CyberflixEngine &engine, const Common::String &scene,
+	Value sendToSceneFx(CyberFlixEngine &engine, const Common::String &scene,
 			const Common::String &message, const Common::Array<Value> &args);
-	void sendToPainting(CyberflixEngine &engine, const Common::String &scene,
+	void sendToPainting(CyberFlixEngine &engine, const Common::String &scene,
 			const Common::String &view, const Common::String &painting,
 			const Common::String &message, const Common::Array<Value> &args);
-	Value sendToPaintingFx(CyberflixEngine &engine, const Common::String &scene,
+	Value sendToPaintingFx(CyberFlixEngine &engine, const Common::String &scene,
 			const Common::String &view, const Common::String &painting,
 			const Common::String &message, const Common::Array<Value> &args);
 	int countPaintings(const Common::String &scene, const Common::String &view) const;
@@ -109,18 +109,18 @@ public:
 			const Common::String &view, int index) const;
 	bool roadAhead(const Common::String &scene, const Common::String &view) const;
 
-	void navigateSet(CyberflixEngine &engine, const Common::String &action);
-	void advanceSetTransition(CyberflixEngine &engine);
+	void navigateSet(CyberFlixEngine &engine, const Common::String &action);
+	void advanceSetTransition(CyberFlixEngine &engine);
 	bool stableSettlePending() const { return _stableSettlePending; }
-	bool settleStableSetView(CyberflixEngine &engine);
+	bool settleStableSetView(CyberFlixEngine &engine);
 	void updateLastCameraHeading();
-	void renderSetScene(CyberflixEngine &engine, int scene, int table, int angle,
+	void renderSetScene(CyberFlixEngine &engine, int scene, int table, int angle,
 			const Common::String &view = Common::String());
-	void displaySetFrame(CyberflixEngine &engine, const FrameImage &frame);
-	void displaySetFrame(CyberflixEngine &engine, const FrameSequence &frame);
-	void displaySetFramePixels(CyberflixEngine &engine, const byte *pixels, uint16 width, uint16 height,
+	void displaySetFrame(CyberFlixEngine &engine, const FrameImage &frame);
+	void displaySetFrame(CyberFlixEngine &engine, const FrameSequence &frame);
+	void displaySetFramePixels(CyberFlixEngine &engine, const byte *pixels, uint16 width, uint16 height,
 			const FrameSequence *depthFrame = nullptr);
-	bool presentPendingScreenUpdate(CyberflixEngine &engine);
+	bool presentPendingScreenUpdate(CyberFlixEngine &engine);
 	Snapshot snapshot() const;
 	bool restoreSnapshot(const Snapshot &snapshot);
 
@@ -160,6 +160,6 @@ private:
 	bool _screenUpdatePending = false;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

@@ -38,13 +38,13 @@
 
 #include <math.h>
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 // Resolve a clut name the way TI.EXE's registry lookup does (FUN_004470b0):
 // the built-in names "black"/"current", and "set"/"stage"/"puppet" which alias
 // the palette embedded in the currently open file of that kind. Named cluts
 // registered by scripts land later.
-bool CyberflixEngine::resolveClut(const Common::String &name, Palette &rgb) {
+bool CyberFlixEngine::resolveClut(const Common::String &name, Palette &rgb) {
 	Common::String key = name;
 	key.toLowercase();
 	rgb.fill(0);
@@ -80,7 +80,7 @@ bool CyberflixEngine::resolveClut(const Common::String &name, Palette &rgb) {
 		}
 		return true;
 	}
-	warning("Cyberflix: clut '%s' not resolvable yet", name.c_str());
+	warning("CyberFlix: clut '%s' not resolvable yet", name.c_str());
 	return false;
 }
 
@@ -98,14 +98,14 @@ bool CyberflixEngine::resolveClut(const Common::String &name, Palette &rgb) {
 // renders noticeably lighter than the raw clut colors. The current CLUT stays
 // pre-gamma like DAT_0045f3c8 (fades interpolate raw cluts and re-apply the
 // curve every step, matching FUN_0041ba80 -> FUN_004010f0).
-void CyberflixEngine::updatePaletteGammaTable() {
+void CyberFlixEngine::updatePaletteGammaTable() {
 	// Fades call programPalette() once per 60 Hz step. Gamma changes only via
 	// F1-F9, so cache the expensive pow() lookup table and reuse it across fade
 	// steps instead of rebuilding it for every palette update.
 	_paletteRuntime.updateGammaTable();
 }
 
-void CyberflixEngine::programPalette(const Palette &rgb) {
+void CyberFlixEngine::programPalette(const Palette &rgb) {
 	_paletteRuntime.setCurrent(rgb);
 	updatePaletteGammaTable();
 
@@ -121,33 +121,33 @@ void CyberflixEngine::programPalette(const Palette &rgb) {
 // clut(name): snap the hardware palette to the named clut instantly
 // (FUN_00446500 -> FUN_0041ba80). Pixels are untouched, so clut('black')
 // makes whatever is (or gets) painted invisible until a fade reveals it.
-void CyberflixEngine::setClut(const Common::String &name) {
+void CyberFlixEngine::setClut(const Common::String &name) {
 	Palette rgb = {};
 	if (!resolveClut(name, rgb))
 		return;
 	programPalette(rgb);
 	_system->updateScreen();
-	debug(1, "Cyberflix: clut('%s')", name.c_str());
+	debug(1, "CyberFlix: clut('%s')", name.c_str());
 }
 
 // blackscreen() (FUN_00446b80): fill the window with black pixels via a GDI
 // rect fill in the original. The palette is not touched.
-void CyberflixEngine::blackScreen() {
+void CyberFlixEngine::blackScreen() {
 	Graphics::Surface *screen = _system->lockScreen();
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
 	_system->unlockScreen();
 	_system->updateScreen();
-	debug(1, "Cyberflix: blackscreen()");
+	debug(1, "CyberFlix: blackscreen()");
 }
 
-void CyberflixEngine::message(const Common::String &text) {
+void CyberFlixEngine::message(const Common::String &text) {
 	// TI.EXE message() (dispatch B FUN_00444c60 case 0 -> FUN_00446240) only
 	// evaluates its argument expression (FUN_00419cf0) and releases the
 	// resulting temporary string slot (FUN_00419c40); it never draws anything
 	// or opens a modal box. Several scripts (e.g. MAP.STG) leave debug
 	// message() calls like "Map 1" that the shipping game silently ignores, so
 	// mirror that by debug-logging only rather than popping a GUI dialog.
-	debug(1, "Cyberflix message: %s", text.c_str());
+	debug(1, "CyberFlix message: %s", text.c_str());
 }
 
 // TI.EXE notedialog() (dispatch B FUN_00444c60 case 0x4e -> FUN_004461e0)
@@ -157,19 +157,19 @@ void CyberflixEngine::message(const Common::String &text) {
 // button scripts call it (gated by `if (tour)`) to show the authored warnings
 // "Sorry, you can't save/open a saved game during the tour.", so mirror the
 // native single-OK modal with a GUI::MessageDialog.
-void CyberflixEngine::noteDialog(const Common::String &text) {
-	debug(1, "Cyberflix notedialog: %s", text.c_str());
+void CyberFlixEngine::noteDialog(const Common::String &text) {
+	debug(1, "CyberFlix notedialog: %s", text.c_str());
 	GUI::MessageDialog dialog(text);
 	dialog.runModal();
 }
 
-void CyberflixEngine::flushEvents() {
+void CyberFlixEngine::flushEvents() {
 	_deferredInputEvents.clear();
 	_eventMan->purgeMouseEvents();
 	_eventMan->purgeKeyboardEvents();
 }
 
-void CyberflixEngine::drawString(const Common::String &text, int32 packedPoint, int color, int size) {
+void CyberFlixEngine::drawString(const Common::String &text, int32 packedPoint, int color, int size) {
 	const Graphics::Font *font = puppetRuntime().textFont(size);
 	if (!font)
 		return;
@@ -208,7 +208,7 @@ void CyberflixEngine::drawString(const Common::String &text, int32 packedPoint, 
 	}
 }
 
-int CyberflixEngine::stringWidth(const Common::String &text, int fontId, int size) {
+int CyberFlixEngine::stringWidth(const Common::String &text, int fontId, int size) {
 	(void)fontId; // Titanic's recovered scripts use font selector 0 for this text path.
 
 	const Graphics::Font *font = puppetRuntime().textFont(size);
@@ -224,12 +224,12 @@ int CyberflixEngine::stringWidth(const Common::String &text, int fontId, int siz
 // Verified: TI.EXE's blacktoscreen (FUN_00446b00 -> FUN_004470b0 ->
 // FUN_0041b3f0) only resolves the target CLUT and interpolates the palette; it
 // does NOT re-render props. Scripts redraw first via visualeffect(plain, 0).
-void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool toBlack) {
+void CyberFlixEngine::fadePalette(const Common::String &target, int steps, bool toBlack) {
 	Palette to = {};
 	if (!resolveClut(target, to)) {
 		// A 'set'/'stage'/'puppet' clut that is not loaded resolves to nothing,
 		// and the fade is skipped: the transition simply does not happen.
-		debug(1, "Cyberflix: %s('%s', %d) skipped: clut unavailable",
+		debug(1, "CyberFlix: %s('%s', %d) skipped: clut unavailable",
 				toBlack ? "screentoblack" : "blacktoscreen", target.c_str(), steps);
 		return;
 	}
@@ -242,12 +242,12 @@ void CyberflixEngine::fadePalette(const Common::String &target, int steps, bool 
 		to.fill(0);
 	}
 
-	debug(1, "Cyberflix: %s('%s', %d)", toBlack ? "screentoblack" : "blacktoscreen",
+	debug(1, "CyberFlix: %s('%s', %d)", toBlack ? "screentoblack" : "blacktoscreen",
 			target.c_str(), steps);
 	fadePaletteSteps(from, to, steps);
 }
 
-bool CyberflixEngine::paletteIsBlack() const {
+bool CyberFlixEngine::paletteIsBlack() const {
 	return _paletteRuntime.isBlack();
 }
 
@@ -256,18 +256,18 @@ bool CyberflixEngine::paletteIsBlack() const {
 // clamped to 0..255), and program the mix as the current palette. A14.SET's
 // lights-out state uses ("set", "black", 0, 127, 240): the room's colors go
 // nearly black while the interface half of the palette stays untouched.
-void CyberflixEngine::mixClut(const Common::String &nameA, const Common::String &nameB,
+void CyberFlixEngine::mixClut(const Common::String &nameA, const Common::String &nameB,
 		int first, int last, int weight) {
 	Palette a = {};
 	Palette b = {};
 	if (!resolveClut(nameA, a) || !resolveClut(nameB, b)) {
-		warning("Cyberflix: mixclut('%s', '%s'): clut not found", nameA.c_str(), nameB.c_str());
+		warning("CyberFlix: mixclut('%s', '%s'): clut not found", nameA.c_str(), nameB.c_str());
 		return;
 	}
 	first = CLIP(first, 0, static_cast<int>(kPaletteLastColor));
 	last = CLIP(last, 0, static_cast<int>(kPaletteLastColor));
 	weight = CLIP(weight, 0, 255);
-	debug(1, "Cyberflix: mixclut('%s', '%s', %d, %d, %d)",
+	debug(1, "CyberFlix: mixclut('%s', '%s', %d, %d, %d)",
 			nameA.c_str(), nameB.c_str(), first, last, weight);
 	for (int i = first; i <= last; ++i) {
 		for (int c = 0; c < kPaletteChannelCount; ++c) {
@@ -279,7 +279,7 @@ void CyberflixEngine::mixClut(const Common::String &nameA, const Common::String 
 	programPalette(a);
 }
 
-void CyberflixEngine::fadePaletteSteps(const Palette &from, const Palette &to, int steps) {
+void CyberFlixEngine::fadePaletteSteps(const Palette &from, const Palette &to, int steps) {
 	if (steps < 1)
 		steps = 1;
 	uint32 startMs = _system->getMillis();
@@ -320,7 +320,7 @@ static bool isWipeEffect(uint16 effect) {
 }
 
 // Copy the visible screen into @p out, which the caller must free().
-bool CyberflixEngine::captureScreen(Graphics::Surface &out) {
+bool CyberFlixEngine::captureScreen(Graphics::Surface &out) {
 	Graphics::Surface *screen = _system->lockScreen();
 	if (!screen) {
 		_system->unlockScreen();
@@ -332,7 +332,7 @@ bool CyberflixEngine::captureScreen(Graphics::Surface &out) {
 }
 
 // Blit one band of @p image to the screen surface without presenting it.
-void CyberflixEngine::blitScreenBand(const Graphics::Surface &image, const Common::Rect &band) {
+void CyberFlixEngine::blitScreenBand(const Graphics::Surface &image, const Common::Rect &band) {
 	Graphics::Surface *screen = _system->lockScreen();
 	if (screen)
 		screen->copyRectToSurface(image, band.left, band.top, band);
@@ -351,7 +351,7 @@ void CyberflixEngine::blitScreenBand(const Graphics::Surface &image, const Commo
 // wipedown/wipeup step the y halves, wiperight/wipeleft the x halves; left and
 // up start at the far edge and count down, right and down start at the near
 // edge and count up.
-void CyberflixEngine::runWipe(const Graphics::Surface &incoming, uint16 effect, int steps) {
+void CyberFlixEngine::runWipe(const Graphics::Surface &incoming, uint16 effect, int steps) {
 	if (steps < 1)
 		steps = 1;
 	const bool horizontal = (effect == Script::kEffectWipeLeft || effect == Script::kEffectWipeRight);
@@ -399,7 +399,7 @@ void CyberflixEngine::runWipe(const Graphics::Surface &incoming, uint16 effect, 
 // visual transition to the full-screen backing buffer (FUN_004439c0). The boot
 // scripts use plain (0x5dce) before blacktoscreen('set'/'stage') so the pixels
 // are already redrawn while the palette is black.
-void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
+void CyberFlixEngine::setVisualEffect(uint16 effect, int duration) {
 	if (duration < 1)
 		duration = 1;
 	else if (duration > 1000)
@@ -485,8 +485,8 @@ void CyberflixEngine::setVisualEffect(uint16 effect, int duration) {
 		outgoing.free();
 
 	const char *effectName = Script::methodName(effect);
-	debug(1, "Cyberflix: visualeffect(%s, %d)%s", effectName ? effectName : "?", duration,
+	debug(1, "CyberFlix: visualeffect(%s, %d)%s", effectName ? effectName : "?", duration,
 			(effect != Script::kEffectPlain && !isWipeEffect(effect)) ? " [not implemented, presented plain]" : "");
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

@@ -24,7 +24,7 @@
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/runtime/loops.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 LoopRuntime::ScheduledLoop::Kind LoopRuntime::scheduledLoopKind(
 		const Common::String &kind) {
@@ -46,7 +46,7 @@ LoopRuntime::ScheduledLoop::Kind LoopRuntime::scheduledLoopKind(
 void LoopRuntime::makeLoop(const Common::String &kind, const Common::String &target,
 		const Common::String &message, int delay) {
 	if (kind.empty() || message.empty()) {
-		warning("Cyberflix: makeloop('%s', '%s', '%s', %d): invalid arguments",
+		warning("CyberFlix: makeloop('%s', '%s', '%s', %d): invalid arguments",
 				kind.c_str(), target.c_str(), message.c_str(), delay);
 		return;
 	}
@@ -62,7 +62,7 @@ void LoopRuntime::makeLoop(const Common::String &kind, const Common::String &tar
 	loop.remainingPasses = delay;
 	loop.createdPass = _scheduledLoopPass;
 	_scheduledLoops.push_back(loop);
-	debug(2, "Cyberflix: makeloop('%s', '%s', '%s', %d)",
+	debug(2, "CyberFlix: makeloop('%s', '%s', '%s', %d)",
 			kind.c_str(), target.c_str(), message.c_str(), delay);
 }
 
@@ -87,7 +87,7 @@ void LoopRuntime::pauseLoop(const Common::String &kind, bool paused) {
 		_loopsPaused = paused;
 }
 
-void LoopRuntime::makeCricket(CyberflixEngine &engine, const Common::String &name) {
+void LoopRuntime::makeCricket(CyberFlixEngine &engine, const Common::String &name) {
 	if (name.empty())
 		return;
 	for (uint i = 0; i < _crickets.size(); ++i) {
@@ -113,7 +113,7 @@ void LoopRuntime::stopCricket(const Common::String &name) {
 		if (_crickets[static_cast<uint>(i)].name.equalsIgnoreCase(name))
 			_crickets.remove_at(static_cast<uint>(i));
 	}
-	debug(2, "Cyberflix: stopcricket('%s')", name.c_str());
+	debug(2, "CyberFlix: stopcricket('%s')", name.c_str());
 }
 
 void LoopRuntime::pauseCricket(const Common::String &kind, bool paused) {
@@ -126,10 +126,10 @@ void LoopRuntime::pauseCricket(const Common::String &kind, bool paused) {
 			if (_crickets[i].name.equalsIgnoreCase(kind))
 				_crickets[i].paused = paused;
 	}
-	debug(2, "Cyberflix: pausecricket('%s', %d)", kind.c_str(), paused ? 1 : 0);
+	debug(2, "CyberFlix: pausecricket('%s', %d)", kind.c_str(), paused ? 1 : 0);
 }
 
-void LoopRuntime::processScheduledLoops(CyberflixEngine &engine) {
+void LoopRuntime::processScheduledLoops(CyberFlixEngine &engine) {
 	if (_loopsPaused || _scheduledLoops.empty() || _processingScheduledLoops)
 		return;
 
@@ -175,7 +175,7 @@ void LoopRuntime::processScheduledLoops(CyberflixEngine &engine) {
 			engine.sendToActor(loop.target, loop.message, noArgs);
 			break;
 		default:
-			debug(1, "Cyberflix: makeloop kind '%s' unhandled", loop.kind.c_str());
+			debug(1, "CyberFlix: makeloop kind '%s' unhandled", loop.kind.c_str());
 		}
 
 		// The callback may remove an earlier loop, shifting an unprocessed entry
@@ -186,4 +186,4 @@ void LoopRuntime::processScheduledLoops(CyberflixEngine &engine) {
 	_processingScheduledLoops = false;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

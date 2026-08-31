@@ -70,12 +70,12 @@
 
 #include <math.h>
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 static const uint32 kCursorPollIntervalMs = 2;
 static const int kNativeIdleDisplayTicks = 30;
 
-CyberflixEngine::CyberflixEngine(OSystem *syst, const CyberflixGameDescription *gameDesc) :
+CyberFlixEngine::CyberFlixEngine(OSystem *syst, const CyberFlixGameDescription *gameDesc) :
 		Engine(syst), _gameDescription(gameDesc),
 		_gameSupport(createGameSupport(gameDesc->gameType)),
 		_rnd("cyberflix"), _console(nullptr) {
@@ -85,28 +85,28 @@ CyberflixEngine::CyberflixEngine(OSystem *syst, const CyberflixGameDescription *
 	}
 }
 
-CyberflixEngine::~CyberflixEngine() {
+CyberFlixEngine::~CyberFlixEngine() {
 	// _console is owned by the debugger registered with the engine framework.
 	// SharedPtr values free themselves.
 }
 
-int CyberflixEngine::getGameType() const {
+int CyberFlixEngine::getGameType() const {
 	return _gameDescription->gameType;
 }
 
-const char *CyberflixEngine::getGameId() const {
+const char *CyberFlixEngine::getGameId() const {
 	return _gameDescription->desc.gameId;
 }
 
-Common::Language CyberflixEngine::getLanguage() const {
+Common::Language CyberFlixEngine::getLanguage() const {
 	return _gameDescription->desc.language;
 }
 
-Common::Platform CyberflixEngine::getPlatform() const {
+Common::Platform CyberFlixEngine::getPlatform() const {
 	return _gameDescription->desc.platform;
 }
 
-bool CyberflixEngine::hasFeature(EngineFeature f) const {
+bool CyberFlixEngine::hasFeature(EngineFeature f) const {
 	return (f == kSupportsReturnToLauncher) ||
 			(f == kSupportsLoadingDuringRuntime) ||
 			(f == kSupportsSavingDuringRuntime);
@@ -115,9 +115,9 @@ bool CyberflixEngine::hasFeature(EngineFeature f) const {
 // sendtoboot(message(...)): dispatch against [BOOTFILE res1, BOOTFILE res2].
 // CTL.STG's QUIT button reaches BOOTFILE res1 menuselect("quit") through this
 // path. Mirrors TI.EXE FUN_00439080 -> FUN_004390a0.
-void CyberflixEngine::sendToBoot(const Common::String &message, const Common::Array<Value> &args) {
+void CyberFlixEngine::sendToBoot(const Common::String &message, const Common::Array<Value> &args) {
 	if (!_bootScript) {
-		warning("Cyberflix: sendtoboot('%s') before BOOTFILE loaded", message.c_str());
+		warning("CyberFlix: sendtoboot('%s') before BOOTFILE loaded", message.c_str());
 		return;
 	}
 	dispatchWithScopes(_bootScript.get(), nullptr, "bootfile", Common::String(),
@@ -125,9 +125,9 @@ void CyberflixEngine::sendToBoot(const Common::String &message, const Common::Ar
 	propRuntime().refreshPropsIfDirty(*this);
 }
 
-Value CyberflixEngine::sendToBootFx(const Common::String &message, const Common::Array<Value> &args) {
+Value CyberFlixEngine::sendToBootFx(const Common::String &message, const Common::Array<Value> &args) {
 	if (!_bootScript) {
-		warning("Cyberflix: sendtobootfx('%s') before BOOTFILE loaded", message.c_str());
+		warning("CyberFlix: sendtobootfx('%s') before BOOTFILE loaded", message.c_str());
 		return Value();
 	}
 	return dispatchWithScopesValue(_bootScript.get(), nullptr, "bootfile",
@@ -151,7 +151,7 @@ Value CyberflixEngine::sendToBootFx(const Common::String &message, const Common:
 //     current node's name (node record +0x1e).
 //  4. Fallback: kind "None" (DAT_00457568 — capitalised in the EXE; script
 //     compares are case-insensitive), empty name (DAT_00459c98).
-Common::String CyberflixEngine::hitTest(int32 packedPoint) {
+Common::String CyberFlixEngine::hitTest(int32 packedPoint) {
 	const int16 x = static_cast<int16>(packedPoint >> 16);
 	const int16 y = static_cast<int16>(packedPoint & 0xffff);
 
@@ -279,12 +279,12 @@ Common::String CyberflixEngine::hitTest(int32 packedPoint) {
 	return Common::String();
 }
 
-bool CyberflixEngine::pointInButton(const Common::String &flat,
+bool CyberFlixEngine::pointInButton(const Common::String &flat,
 		const Common::String &button, int32 packedPoint) {
 	return _stageRuntime.pointInButton(flat, button, packedPoint);
 }
 
-bool CyberflixEngine::pointInPainting(const Common::String &scene,
+bool CyberFlixEngine::pointInPainting(const Common::String &scene,
 		const Common::String &view, const Common::String &painting, int32 packedPoint) {
 	if (!_setRuntime.set() || !_setRuntime.set()->isOpen())
 		return false;
@@ -294,50 +294,50 @@ bool CyberflixEngine::pointInPainting(const Common::String &scene,
 	const int16 x = static_cast<int16>(packedPoint >> 16);
 	const int16 y = static_cast<int16>(packedPoint & 0xffff);
 	bool hit = _setRuntime.set()->pointInPainting(static_cast<uint32>(sceneIdx), view, painting, x, y);
-	debug(1, "Cyberflix: pointinpainting('%s', '%s', '%s', %d,%d) -> %s",
+	debug(1, "CyberFlix: pointinpainting('%s', '%s', '%s', %d,%d) -> %s",
 			scene.c_str(), view.c_str(), painting.c_str(), x, y,
 			hit ? "true" : "false");
 	return hit;
 }
 
 // result() -> TI.EXE FUN_004366a0: the kind recorded by the last hittest.
-Common::String CyberflixEngine::hitTestResult() {
+Common::String CyberFlixEngine::hitTestResult() {
 	return _hitKind;
 }
 
 // mouse() -> TI.EXE FUN_004368b0: the current mouse point, packed like every
 // other point value ((x << 16) | y).
-int32 CyberflixEngine::mousePoint() {
+int32 CyberFlixEngine::mousePoint() {
 	const Common::Point m = _eventMan->getMousePos();
 	return packPoint(m.x, m.y);
 }
 
-int32 CyberflixEngine::makePoint(int x, int y) {
+int32 CyberFlixEngine::makePoint(int x, int y) {
 	return packPoint(x, y);
 }
 
-bool CyberflixEngine::buttonDown() {
+bool CyberFlixEngine::buttonDown() {
 	if (!pollInputStateEvents())
 		return false;
 	return (_eventMan->getButtonState() & Common::EventManager::LBUTTON) != 0;
 }
 
-bool CyberflixEngine::stillDown() {
+bool CyberFlixEngine::stillDown() {
 	if (!pollInputStateEvents())
 		return false;
 	return (_eventMan->getButtonState() &
 			(Common::EventManager::LBUTTON | Common::EventManager::RBUTTON)) != 0;
 }
 
-int CyberflixEngine::tick() {
+int CyberFlixEngine::tick() {
 	return static_cast<int>((static_cast<uint64>(_system->getMillis()) * 60 / 1000));
 }
 
-int CyberflixEngine::frameCounter() {
+int CyberFlixEngine::frameCounter() {
 	return _frameCounter;
 }
 
-int CyberflixEngine::calcDeg(int32 a, int32 b) {
+int CyberFlixEngine::calcDeg(int32 a, int32 b) {
 	const int16 ax = static_cast<int16>(a >> 16);
 	const int16 ay = static_cast<int16>(a & 0xffff);
 	const int16 bx = static_cast<int16>(b >> 16);
@@ -352,7 +352,7 @@ int CyberflixEngine::calcDeg(int32 a, int32 b) {
 	return deg;
 }
 
-int CyberflixEngine::calcVectX(int deg, int dist) {
+int CyberFlixEngine::calcVectX(int deg, int dist) {
 	// Native FUN_00437770 -> FUN_004432e0 indexes DAT_00486750 (the cos table,
 	// PE resource "TRIG2" whose first entry is 16384). The two TRIG resources
 	// are TRIG1=sin (starts 0) and TRIG2=cos (starts 16384); see FUN_00441d00,
@@ -360,13 +360,13 @@ int CyberflixEngine::calcVectX(int deg, int dist) {
 	return fixedShift14(nativeTrigCos(deg) * dist);
 }
 
-int CyberflixEngine::calcVectY(int deg, int dist) {
+int CyberFlixEngine::calcVectY(int deg, int dist) {
 	// Native FUN_004377f0 -> FUN_00443310 indexes DAT_00486780 (the sin table,
 	// PE resource "TRIG1" whose first entry is 0).
 	return fixedShift14(nativeTrigSin(deg) * dist);
 }
 
-int CyberflixEngine::calcDist(int32 a, int32 b) {
+int CyberFlixEngine::calcDist(int32 a, int32 b) {
 	const int16 ax = static_cast<int16>(a >> 16);
 	const int16 ay = static_cast<int16>(a & 0xffff);
 	const int16 bx = static_cast<int16>(b >> 16);
@@ -376,35 +376,35 @@ int CyberflixEngine::calcDist(int32 a, int32 b) {
 	return static_cast<int>(sqrt(static_cast<double>(dx * dx + dy * dy)));
 }
 
-int CyberflixEngine::calcMod(int a, int b) {
+int CyberFlixEngine::calcMod(int a, int b) {
 	return b != 0 ? a % b : 0;
 }
 
 // cursor(...) -> TI.EXE FUN_00446920, with the script name already resolved
-// to a PE resource name by the VM (see CyberflixEngine::setCursorResource).
-void CyberflixEngine::setCursorResource(const Common::String &resourceName) {
+// to a PE resource name by the VM (see CyberFlixEngine::setCursorResource).
+void CyberFlixEngine::setCursorResource(const Common::String &resourceName) {
 	if (setGameCursor(resourceName)) {
 		CursorMan.showMouse(true);
 	} else if (_cursorRuntime.haveCursorExe()) {
 		// The runtime was located but does not carry this resource: a genuinely
 		// missing cursor, not a layout problem.
-		warning("Cyberflix: cursor resource '%s' not found in the game executable",
+		warning("CyberFlix: cursor resource '%s' not found in the game executable",
 				resourceName.c_str());
 	} else {
 		// No executable at all; gameExe() already reported where it searched, so
 		// keep this to one line per cursor rather than repeating the paths.
-		warning("Cyberflix: cursor '%s' unavailable: no game executable with cursor "
+		warning("CyberFlix: cursor '%s' unavailable: no game executable with cursor "
 				"resources was found", resourceName.c_str());
 	}
 }
 
-bool CyberflixEngine::actionFrame(int n) {
+bool CyberFlixEngine::actionFrame(int n) {
 	if (n < 1 || n > 2)
 		return false;
 	return (_actionFrameMask & (1 << (n - 1))) != 0;
 }
 
-int CyberflixEngine::randomNumber(int n) {
+int CyberFlixEngine::randomNumber(int n) {
 	if (n < 1)
 		return 0;
 
@@ -417,33 +417,33 @@ int CyberflixEngine::randomNumber(int n) {
 	return static_cast<int>(_rnd.getRandomNumber(static_cast<uint>(n) - 1)) + 1;
 }
 
-int CyberflixEngine::getFrameRate() {
+int CyberFlixEngine::getFrameRate() {
 	return _framePacingRuntime.getFrameRate();
 }
 
-int CyberflixEngine::setFrameRate(int newRate) {
+int CyberFlixEngine::setFrameRate(int newRate) {
 	return _framePacingRuntime.setFrameRate(newRate);
 }
 
-bool CyberflixEngine::keyAborts(const Common::String *resource, const Common::String *key,
+bool CyberFlixEngine::keyAborts(const Common::String *resource, const Common::String *key,
 		const bool *enabled) {
 	if (enabled)
 		_keyAborts = *enabled;
 	return _keyAborts;
 }
 
-bool CyberflixEngine::optionKey() {
+bool CyberFlixEngine::optionKey() {
 	// Reading SHIFT here is not a bug: native optionkey (FUN_004376e0) and
 	// shiftkey (FUN_00437710) both read GetAsyncKeyState(VK_SHIFT).
 	return (_eventMan->getModifierState() & Common::KBD_SHIFT) != 0;
 }
 
-bool CyberflixEngine::shiftKey() {
+bool CyberFlixEngine::shiftKey() {
 	return optionKey();
 }
 
 // Deferred input queue:
-// ScummVM has several nested Cyberflix loops that pump backend events for a
+// ScummVM has several nested CyberFlix loops that pump backend events for a
 // narrower purpose than the main room loop. delayMillisWithCursorUpdates() and
 // pumpCursorMotionEvents() run during script delay(), forceupdate() pacing,
 // puppet speech, and puppetevent() choice waits so the software cursor keeps
@@ -460,15 +460,15 @@ bool CyberflixEngine::shiftKey() {
 // puppet speech playback, and puppetevent() bevel selection. flushEvents()
 // clears this queue along with backend mouse/keyboard events for native
 // flush-events script calls.
-void CyberflixEngine::noteDeferredInputEvent(const Common::Event &event) {
+void CyberFlixEngine::noteDeferredInputEvent(const Common::Event &event) {
 	if (event.type != Common::EVENT_LBUTTONDOWN && event.type != Common::EVENT_LBUTTONUP)
 		return;
-	debug(1, "Cyberflix: queued %s at (%d,%d) arrived t=%u",
+	debug(1, "CyberFlix: queued %s at (%d,%d) arrived t=%u",
 			event.type == Common::EVENT_LBUTTONDOWN ? "LBUTTONDOWN" : "LBUTTONUP",
 			event.mouse.x, event.mouse.y, _system->getMillis());
 }
 
-bool CyberflixEngine::pollScriptEvent(Common::Event &event) {
+bool CyberFlixEngine::pollScriptEvent(Common::Event &event) {
 	if (!_deferredInputEvents.empty()) {
 		event = _deferredInputEvents.pop();
 		_lastScriptEventWasDeferred = true;
@@ -479,7 +479,7 @@ bool CyberflixEngine::pollScriptEvent(Common::Event &event) {
 	return _eventMan->pollEvent(event);
 }
 
-bool CyberflixEngine::pollInputStateEvents() {
+bool CyberFlixEngine::pollInputStateEvents() {
 	const Common::Point oldMouse = _eventMan->getMousePos();
 	Common::Event event;
 	bool sawMouseButtonEvent = false;
@@ -523,7 +523,7 @@ bool CyberflixEngine::pollInputStateEvents() {
 	return !shouldQuit();
 }
 
-bool CyberflixEngine::pumpCursorMotionEvents() {
+bool CyberFlixEngine::pumpCursorMotionEvents() {
 	const Common::Point oldMouse = _eventMan->getMousePos();
 	Common::Event event;
 
@@ -553,7 +553,7 @@ bool CyberflixEngine::pumpCursorMotionEvents() {
 	return moved;
 }
 
-void CyberflixEngine::presentCursorIfDirty() {
+void CyberFlixEngine::presentCursorIfDirty() {
 	if (!_cursorPresentationDirty)
 		return;
 	reassertCursorVisibility();
@@ -561,7 +561,7 @@ void CyberflixEngine::presentCursorIfDirty() {
 	_cursorPresentationDirty = false;
 }
 
-void CyberflixEngine::reassertCursorVisibility() {
+void CyberFlixEngine::reassertCursorVisibility() {
 	// SDL may reveal the host cursor after focus/active-area transitions. Room
 	// gameplay presents cursor motion without changing the CyberFlix cursor
 	// resource, so explicitly reapply ScummVM's current software-cursor state.
@@ -569,7 +569,7 @@ void CyberflixEngine::reassertCursorVisibility() {
 	CursorMan.showMouse(visible);
 }
 
-bool CyberflixEngine::delayMillisWithCursorUpdates(uint32 delayMillis) {
+bool CyberFlixEngine::delayMillisWithCursorUpdates(uint32 delayMillis) {
 	bool presented = false;
 	const uint32 start = _system->getMillis();
 	while (!shouldQuit()) {
@@ -585,7 +585,7 @@ bool CyberflixEngine::delayMillisWithCursorUpdates(uint32 delayMillis) {
 	return presented;
 }
 
-void CyberflixEngine::delayTicks(int ticks) {
+void CyberFlixEngine::delayTicks(int ticks) {
 	if (ticks <= 0)
 		return;
 
@@ -601,36 +601,36 @@ void CyberflixEngine::delayTicks(int ticks) {
 	}
 }
 
-void CyberflixEngine::makeLoop(const Common::String &kind, const Common::String &target,
+void CyberFlixEngine::makeLoop(const Common::String &kind, const Common::String &target,
 		const Common::String &message, int delay) {
 	_loopRuntime.makeLoop(kind, target, message, delay);
 }
 
-void CyberflixEngine::stopLoop(const Common::String &kind, const Common::String &target) {
+void CyberFlixEngine::stopLoop(const Common::String &kind, const Common::String &target) {
 	_loopRuntime.stopLoop(kind, target);
 }
 
-void CyberflixEngine::pauseLoop(const Common::String &kind, bool paused) {
+void CyberFlixEngine::pauseLoop(const Common::String &kind, bool paused) {
 	_loopRuntime.pauseLoop(kind, paused);
 }
 
-void CyberflixEngine::makeCricket(const Common::String &name) {
+void CyberFlixEngine::makeCricket(const Common::String &name) {
 	_loopRuntime.makeCricket(*this, name);
 }
 
-void CyberflixEngine::stopCricket(const Common::String &name) {
+void CyberFlixEngine::stopCricket(const Common::String &name) {
 	_loopRuntime.stopCricket(name);
 }
 
-void CyberflixEngine::pauseCricket(const Common::String &kind, bool paused) {
+void CyberFlixEngine::pauseCricket(const Common::String &kind, bool paused) {
 	_loopRuntime.pauseCricket(kind, paused);
 }
 
-void CyberflixEngine::processScheduledLoops() {
+void CyberFlixEngine::processScheduledLoops() {
 	_loopRuntime.processScheduledLoops(*this);
 }
 
-void CyberflixEngine::forceUpdate() {
+void CyberFlixEngine::forceUpdate() {
 	// forceupdate() (TI.EXE 0x2f14 -> FUN_00446910 -> FUN_00423a60): rebuild the
 	// display list from LIVE prop visibility, step active SET transitions through
 	// FUN_004420b0, composite, and present.
@@ -690,10 +690,10 @@ void CyberflixEngine::forceUpdate() {
 			_framePacingRuntime.noteForceUpdatePresented(true);
 	}
 	_framePacingRuntime.noteFrameTick(tick());
-	debug(2, "Cyberflix: forceupdate()");
+	debug(2, "CyberFlix: forceupdate()");
 }
 
-Common::Error CyberflixEngine::run() {
+Common::Error CyberFlixEngine::run() {
 	if (!_gameSupport)
 		return Common::kUnsupportedGameidError;
 
@@ -728,13 +728,13 @@ Common::Error CyberflixEngine::run() {
 	// built by FUN_0040ad80.
 	Common::File bootFile;
 	if (!bootFile.open("BOOTFILE")) {
-		warning("Cyberflix: could not locate DATA/BOOTFILE");
+		warning("CyberFlix: could not locate DATA/BOOTFILE");
 		return Common::kNoGameDataFoundError;
 	}
 
 	Archive boot;
 	if (!boot.open(bootFile.readStream(bootFile.size()), "BOOTFILE")) {
-		warning("Cyberflix: BOOTFILE present but failed LPPALPPA validation");
+		warning("CyberFlix: BOOTFILE present but failed LPPALPPA validation");
 		return Common::kUnknownError;
 	}
 
@@ -746,7 +746,7 @@ Common::Error CyberflixEngine::run() {
 		Common::ScopedPtr<Script> script(new Script());
 		bool parsed = scriptStream && script->parse(scriptStream.get());
 		if (!parsed) {
-			warning("Cyberflix: failed to parse BOOTFILE script resource %u", i);
+			warning("CyberFlix: failed to parse BOOTFILE script resource %u", i);
 			continue;
 		}
 		if (!_bootScript)
@@ -755,12 +755,12 @@ Common::Error CyberflixEngine::run() {
 			_globalLib.reset(script.release());
 	}
 	if (!_bootScript) {
-		warning("Cyberflix: BOOTFILE has no script resource");
+		warning("CyberFlix: BOOTFILE has no script resource");
 		return Common::kUnknownError;
 	}
 
 	if (!_gameSupport->patchBootScript(*_bootScript))
-		warning("Cyberflix: boot script CD check not found; running unmodified");
+		warning("CyberFlix: boot script CD check not found; running unmodified");
 
 	_vm.setHost(this);
 	// Searched newest-first: boot res1 handlers shadow the global library,
@@ -794,11 +794,11 @@ Common::Error CyberflixEngine::run() {
 				// "queued" means the event waited in _deferredInputEvents while
 				// a script held the main loop, so its dispatch time here can be
 				// far later than the arrival time logged when it was queued.
-				debug(1, "Cyberflix: LBUTTONUP at (%d,%d) dispatch t=%u (%s)",
+				debug(1, "CyberFlix: LBUTTONUP at (%d,%d) dispatch t=%u (%s)",
 						event.mouse.x, event.mouse.y, _system->getMillis(),
 						_lastScriptEventWasDeferred ? "queued" : "fresh");
 			} else if (event.type == Common::EVENT_LBUTTONDOWN) {
-				debug(1, "Cyberflix: LBUTTONDOWN at (%d,%d) dispatch t=%u (%s)",
+				debug(1, "CyberFlix: LBUTTONDOWN at (%d,%d) dispatch t=%u (%s)",
 						event.mouse.x, event.mouse.y, _system->getMillis(),
 						_lastScriptEventWasDeferred ? "queued" : "fresh");
 				const int32 packed = packPoint(event.mouse.x, event.mouse.y);
@@ -808,7 +808,7 @@ Common::Error CyberflixEngine::run() {
 				_vm.callFunction("mousedown", args, &handled);
 				scriptEventHandled = true;
 				if (!handled)
-					warning("Cyberflix: boot script has no mousedown handler");
+					warning("CyberFlix: boot script has no mousedown handler");
 			} else if (event.type == Common::EVENT_KEYDOWN) {
 				if (handleGlobalKey(event))
 					continue;
@@ -842,7 +842,7 @@ Common::Error CyberflixEngine::run() {
 					_vm.callFunction(event.kbdRepeat ? "keyrepeat" : "keydown", args, &handled);
 					scriptEventHandled = true;
 					if (!handled)
-						warning("Cyberflix: boot script has no %s handler",
+						warning("CyberFlix: boot script has no %s handler",
 								event.kbdRepeat ? "keyrepeat" : "keydown");
 					propRuntime().refreshPropsIfDirty(*this);
 				}
@@ -890,4 +890,4 @@ Common::Error CyberflixEngine::run() {
 	return Common::kNoError;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

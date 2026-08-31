@@ -27,13 +27,13 @@
 #define GAMEOPTION_ENHANCED_PANORAMA_SETTLING GUIO_GAMEOPTIONS1
 #define CYBERFLIX_OPTION_ENHANCED_PANORAMA_SETTLING "enhanced_panorama_settling"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-enum CyberflixGameType {
+enum CyberFlixGameType {
 	GType_Titanic = 0
 };
 
-struct CyberflixGameDescription {
+struct CyberFlixGameDescription {
 	AD_GAME_DESCRIPTION_HELPERS(desc);
 
 	ADGameDescription desc;
@@ -41,6 +41,6 @@ struct CyberflixGameDescription {
 	int gameType;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_DETECTION_H

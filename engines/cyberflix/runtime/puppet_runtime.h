@@ -36,9 +36,9 @@ namespace Graphics {
 class Font;
 }
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-class CyberflixEngine;
+class CyberFlixEngine;
 
 class PuppetRuntime {
 public:
@@ -59,22 +59,22 @@ public:
 	const int16 *params() const { return _params; }
 
 	void openPuppetFile(const Common::String &name);
-	void closePuppetFile(CyberflixEngine &engine);
-	void sendToPuppet(CyberflixEngine &engine, const Common::String &puppetName,
+	void closePuppetFile(CyberFlixEngine &engine);
+	void sendToPuppet(CyberFlixEngine &engine, const Common::String &puppetName,
 			const Common::String &message, const Common::Array<Value> &args);
-	Value sendToPuppetFx(CyberflixEngine &engine, const Common::String &puppetName,
+	Value sendToPuppetFx(CyberFlixEngine &engine, const Common::String &puppetName,
 			const Common::String &message, const Common::Array<Value> &args);
 	void puppetScript(const Common::String &name);
-	void puppetClear(CyberflixEngine &engine);
-	void puppetSpeak(CyberflixEngine &engine, const Common::String &name, int mode);
-	void puppetBevel(CyberflixEngine &engine, const Common::String &name, int mode);
+	void puppetClear(CyberFlixEngine &engine);
+	void puppetSpeak(CyberFlixEngine &engine, const Common::String &name, int mode);
+	void puppetBevel(CyberFlixEngine &engine, const Common::String &name, int mode);
 	void puppetGrab(bool enabled);
-	int puppetEvent(CyberflixEngine &engine, int timeout);
+	int puppetEvent(CyberFlixEngine &engine, int timeout);
 	Common::String getPuppetBase() const;
 	Common::String setPuppetBase(const Common::String &newBase);
 	bool getPuppetVisible() const;
-	bool setPuppetVisible(CyberflixEngine &engine, bool visible);
-	bool renderCurrentFrame(CyberflixEngine &engine, bool present);
+	bool setPuppetVisible(CyberFlixEngine &engine, bool visible);
+	bool renderCurrentFrame(CyberFlixEngine &engine, bool present);
 	const Graphics::Font *textFont(int size);
 	int getPuppetParam(int selector) const;
 	int setPuppetParam(int selector, int newValue);
@@ -86,16 +86,16 @@ private:
 	void close(Audio::Mixer *mixer);
 
 	const Puppet::ActionEntry *currentActionEntry() const;
-	bool captureGrabBackdrop(CyberflixEngine &engine, Common::Array<byte> &backdrop);
-	bool paintGrabBackdrop(CyberflixEngine &engine, Graphics::Surface &screen,
+	bool captureGrabBackdrop(CyberFlixEngine &engine, Common::Array<byte> &backdrop);
+	bool paintGrabBackdrop(CyberFlixEngine &engine, Graphics::Surface &screen,
 			const Common::Array<byte> *cachedBackdrop);
-	bool renderFrame(CyberflixEngine &engine, const Puppet::ActionEntry &action,
+	bool renderFrame(CyberFlixEngine &engine, const Puppet::ActionEntry &action,
 			uint32 frameIndex, bool present,
 			const Common::Array<byte> *cachedBackdrop = nullptr);
-	void renderBevels(CyberflixEngine &engine, bool present);
-	void drawBevelHighlight(CyberflixEngine &engine, const Common::Rect &rect);
+	void renderBevels(CyberFlixEngine &engine, bool present);
+	void drawBevelHighlight(CyberFlixEngine &engine, const Common::Rect &rect);
 	void strokeBevelHighlight(Graphics::Surface &screen, const Common::Rect &rect) const;
-	void playAction(CyberflixEngine &engine, const Puppet::ActionEntry &action);
+	void playAction(CyberFlixEngine &engine, const Puppet::ActionEntry &action);
 
 	/**
 	 * Re-play the most recently spoken line, mirroring native FUN_00449e40's
@@ -103,7 +103,7 @@ private:
 	 * in the puppet display area re-runs the last puppetspeak action. Returns
 	 * true if a line was replayed (so the caller re-enters its input loop).
 	 */
-	bool replayLastSpokenAction(CyberflixEngine &engine);
+	bool replayLastSpokenAction(CyberFlixEngine &engine);
 
 	/** Currently open puppet archive (TI.EXE DAT_00461200 cluster). */
 	Common::SharedPtr<Puppet> _puppet;
@@ -141,6 +141,6 @@ private:
 	int _nativeTextFontSize = 0;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

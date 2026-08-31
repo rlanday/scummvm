@@ -31,7 +31,7 @@
 
 #include <math.h>
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /**
  * Master header resource tag (@c info==0x40000). Archive formats use this for
@@ -153,6 +153,6 @@ inline int nativePointAngle(int dx, int dy) {
 	return deg;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

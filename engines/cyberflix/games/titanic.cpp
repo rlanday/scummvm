@@ -35,7 +35,7 @@
 #include "cyberflix/script.h"
 #include "cyberflix/vm.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 static const int kCargoPaintingTimerFrames = 10000;
 static const int kCargoPaintingTimerLogSeconds = 10;
@@ -91,7 +91,7 @@ static bool findCaselessPathDir(const Common::FSNode &root,
 
 // Splits a colon-separated CyberFlix path such as "titanic1:data" into its
 // lowercased components.
-static Common::Array<Common::String> splitCyberflixPath(const Common::String &path) {
+static Common::Array<Common::String> splitCyberFlixPath(const Common::String &path) {
 	Common::Array<Common::String> components;
 	Common::String token;
 	for (uint i = 0; i < path.size(); ++i) {
@@ -255,7 +255,7 @@ static bool validateTitanicDiscLayout() {
 		message += "':";
 		message += missing;
 		GUIErrorMessage(message);
-		warning("Cyberflix: incomplete repackaged Titanic data:%s", missing.c_str());
+		warning("CyberFlix: incomplete repackaged Titanic data:%s", missing.c_str());
 		return false;
 	}
 
@@ -296,7 +296,7 @@ static bool validateTitanicDiscLayout() {
 	message += missing;
 
 	GUIErrorMessage(message);
-	warning("Cyberflix: missing Titanic two-disc data:%s", missing.c_str());
+	warning("CyberFlix: missing Titanic two-disc data:%s", missing.c_str());
 	return false;
 }
 
@@ -320,9 +320,8 @@ public:
 			Common::String &mountedLabel) const override;
 	bool resolvePathDirectory(const Common::String &path,
 			Common::FSNode &out) const override;
-	void onForceUpdate(CyberflixEngine &engine) override;
-	void restoreGameState(CyberflixEngine &engine, const ScriptVM &vm,
-			GameLoadContext &context) override;
+	void onForceUpdate(CyberFlixEngine &engine) override;
+	void onGameStateLoaded(const ScriptVM &vm) override;
 	bool shouldLogScriptVariable(const Common::String &name) const override;
 	bool shouldLogScriptDispatch(const Common::String &name,
 			const Common::String &self) const override;
@@ -395,7 +394,7 @@ bool TitanicGameSupport::patchBootScript(Script &script) const {
 		return false;
 
 	script.neutralizeRange(static_cast<uint32>(ifIndex), static_cast<uint32>(endIfIndex));
-	debug(0, "Cyberflix: excised Titanic boot CD check (instructions %d..%d)",
+	debug(0, "CyberFlix: excised Titanic boot CD check (instructions %d..%d)",
 			ifIndex, endIfIndex);
 	return true;
 }
@@ -427,7 +426,7 @@ bool TitanicGameSupport::resolveDisc(const Common::String &requested,
 // tried under the game dir and its two parents.
 bool TitanicGameSupport::resolvePathDirectory(const Common::String &path,
 		Common::FSNode &out) const {
-	Common::Array<Common::String> components = splitCyberflixPath(path);
+	Common::Array<Common::String> components = splitCyberFlixPath(path);
 	if (components.empty())
 		return false;
 
@@ -464,7 +463,7 @@ bool TitanicGameSupport::resolvePathDirectory(const Common::String &path,
 // Per-frame diagnostics for BINL.SET's cargo-painting timer: tracks when the
 // authored timer starts, expires, and how much time it has left. Kept here so
 // the shared scheduler stays unaware of Titanic story globals and props.
-void TitanicGameSupport::onForceUpdate(CyberflixEngine &engine) {
+void TitanicGameSupport::onForceUpdate(CyberFlixEngine &engine) {
 	// BINL.SET measures this authored timer in absolute script frames. Keep its
 	// diagnostics with the game policy so the shared scheduler remains unaware
 	// of Titanic story globals and props.
@@ -477,7 +476,7 @@ void TitanicGameSupport::onForceUpdate(CyberflixEngine &engine) {
 			(!painting || painting->owner.equalsIgnoreCase("none"));
 	if (!active) {
 		if (_cargoPaintingTimerStartFrame > 0) {
-			debug(1, "Cyberflix: cargo painting timer stopped at script frame %d "
+			debug(1, "CyberFlix: cargo painting timer stopped at script frame %d "
 					"(mission=%d phase=%d owner='%s')",
 					engine.frameCounter(), mission, phase,
 					painting ? painting->owner.c_str() : "unloaded");
@@ -492,7 +491,7 @@ void TitanicGameSupport::onForceUpdate(CyberflixEngine &engine) {
 		_cargoPaintingTimerStartFrame = paintFrame;
 		_lastCargoPaintingTimerLogBucket = -1;
 		_cargoPaintingTimerExpiredLogged = false;
-		debug(1, "Cyberflix: cargo painting timer started at script frame %d; "
+		debug(1, "CyberFlix: cargo painting timer started at script frame %d; "
 				"BINL.SET expires it when elapsed frames exceed %d",
 				paintFrame, kCargoPaintingTimerFrames);
 	}
@@ -501,7 +500,7 @@ void TitanicGameSupport::onForceUpdate(CyberflixEngine &engine) {
 	const int remainingFrames = kCargoPaintingTimerFrames - elapsedFrames;
 	if (remainingFrames < 0) {
 		if (!_cargoPaintingTimerExpiredLogged) {
-			debug(1, "Cyberflix: cargo painting timer expired after %d frames; "
+			debug(1, "CyberFlix: cargo painting timer expired after %d frames; "
 					"BINL.SET will give the painting to Hack on the cargo-bin click",
 					elapsedFrames);
 			_cargoPaintingTimerExpiredLogged = true;
@@ -519,59 +518,22 @@ void TitanicGameSupport::onForceUpdate(CyberflixEngine &engine) {
 		return;
 
 	_lastCargoPaintingTimerLogBucket = logBucket;
-	debug(1, "Cyberflix: cargo painting timer remaining about %d:%02d "
+	debug(1, "CyberFlix: cargo painting timer remaining about %d:%02d "
 			"(%d/%d script frames)", remainingSeconds / 60,
 			remainingSeconds % 60, remainingFrames, kCargoPaintingTimerFrames);
 }
 
-// Titanic-specific repairs after a save load: rebuilds the boot-time cast state
-// legacy saves lost, infers their missing dialogue counters, and resumes old
-// saves' cargo-painting timer at its recorded start frame.
-void TitanicGameSupport::restoreGameState(CyberflixEngine &engine,
-		const ScriptVM &vm, GameLoadContext &context) {
-	if (context.variablesSeen) {
-		debug(1, "Cyberflix: load story state: mission=%d phase=%d "
-				"smethphase=%d pennyphase=%d burnsphase=%d neckphase=%d "
-				"paintframe=%d savedeck=%s",
-				globalIntValue(vm, "mission"), globalIntValue(vm, "phase"),
-				globalIntValue(vm, "smethphase"), globalIntValue(vm, "pennyphase"),
-				globalIntValue(vm, "burnsphase"), globalIntValue(vm, "neckphase"),
-				globalIntValue(vm, "paintframe"),
-				vm.globalVars().contains("savedeck") ?
-						vm.globalVars()["savedeck"].toString().c_str() : "<unset>");
-	}
-
-	if (!context.castStatePresent) {
-		// Early CyberFlix saves wrote an empty CAST chunk. Titanic keeps GANG.CST
-		// open after boot and room scripts assume its global actors are available,
-		// so reconstruct that boot-time state only for those legacy saves.
-		engine.actorRuntime().openCastFile(engine, "gang.cst");
-		Common::Array<Value> noArgs;
-		engine.actorRuntime().sendToCast(engine, "gang.cst", "initactors", noArgs);
-
-		// Those saves also lost actor dialogue counters. A story state beyond the
-		// initial cabin encounter implies that Smethels has already been handled.
-		const int mission = globalIntValue(vm, "mission");
-		const int phase = globalIntValue(vm, "phase");
-		const int smethPhase = globalIntValue(vm, "smethphase");
-		if (mission > 1 || (mission == 1 && phase > 0) || smethPhase > 0)
-			engine.actorRuntime().setActorValue("smeth", 1);
-
-		if (engine.setRuntime().set() && engine.setRuntime().set()->isOpen())
-			engine.sendToSet("openset", noArgs);
-	}
-
-	const int paintFrame = globalIntValue(vm, "paintframe");
-	const int mission = globalIntValue(vm, "mission");
-	const int phase = globalIntValue(vm, "phase");
-	Shop::Prop *painting = engine.propRuntime().findProp("painting");
-	// Older saves lack the absolute frame base. Resume an active cargo timer at
-	// its recorded start instead of freezing it until frame() catches up.
-	if ((!context.frameCounterSeen || context.frameCounter < paintFrame) &&
-			mission == 2 && phase == 0 && paintFrame > 0 && painting &&
-			painting->owner.equalsIgnoreCase("none"))
-		context.frameCounter = paintFrame;
-
+// Logs durable Titanic story state and resets load-local timer diagnostics.
+void TitanicGameSupport::onGameStateLoaded(const ScriptVM &vm) {
+	debug(1, "CyberFlix: load story state: mission=%d phase=%d "
+			"smethphase=%d pennyphase=%d burnsphase=%d neckphase=%d "
+			"paintframe=%d savedeck=%s",
+			globalIntValue(vm, "mission"), globalIntValue(vm, "phase"),
+			globalIntValue(vm, "smethphase"), globalIntValue(vm, "pennyphase"),
+			globalIntValue(vm, "burnsphase"), globalIntValue(vm, "neckphase"),
+			globalIntValue(vm, "paintframe"),
+			vm.globalVars().contains("savedeck") ?
+					vm.globalVars()["savedeck"].toString().c_str() : "<unset>");
 	_cargoPaintingTimerStartFrame = 0;
 	_lastCargoPaintingTimerLogBucket = -1;
 	_cargoPaintingTimerExpiredLogged = false;
@@ -605,4 +567,4 @@ GameSupport *createTitanicGameSupport() {
 	return new TitanicGameSupport();
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

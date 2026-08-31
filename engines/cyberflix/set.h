@@ -30,7 +30,7 @@
 #include "cyberflix/image.h"
 #include "cyberflix/script.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /**
  * A CyberFlix "set" (a @c .SET room file under DATA/): one navigable room of
@@ -401,6 +401,6 @@ private:
 	int16 _viewTop = 0;   ///< Viewport origin y (master header +0x082).
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_SET_H

@@ -25,7 +25,7 @@
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/vm.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 bool ScriptVM::callAudioMethod(uint16 opcode, const Common::Array<Value> &args, Value &result) {
 	switch (opcode) {
@@ -621,7 +621,7 @@ bool ScriptVM::callInputMethod(uint16 opcode, const Common::Array<Value> &args, 
 		result = Value::makeInt(_host->mousePoint());
 		return true;
 	case Script::kMethodCursor: // cursor(id|name) -> FUN_00446920. Resource-name mapping
-	             // verified against TI.EXE (see CyberflixEngine::setCursorResource):
+	             // verified against TI.EXE (see CyberFlixEngine::setCursorResource):
 	             // int -> CURS<n>; "arrow" -> CURS.ARROW; "watch" ->
 	             // CURS2002; other names -> CURS.<NAME>.
 		if (!args.empty()) {
@@ -831,10 +831,10 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 			a += args[i].toString();
 		}
 		const char *builtin = Script::methodName(opcode);
-		debug(1, "Cyberflix: unimplemented builtin %s#%#06x(%s) -> 0",
+		debug(1, "CyberFlix: unimplemented builtin %s#%#06x(%s) -> 0",
 				builtin ? builtin : "?", opcode, a.c_str());
 	}
 	return Value();
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

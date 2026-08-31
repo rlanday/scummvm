@@ -32,7 +32,7 @@
 #include "cyberflix/cyberflix.h"
 #include "cyberflix/runtime/cursor.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 // The cursor bitmaps are copyrighted game art, so they are loaded at runtime
 // from the player's Bicycle executable rather than shipped with ScummVM. The
@@ -77,7 +77,7 @@ Common::PEResources *CursorRuntime::gameExe() {
 	if (scanForExe(gameDir, kProbeSearchDepth, false))
 		return _exe.get();
 
-	warning("Cyberflix: could not locate %s (or any executable holding the "
+	warning("CyberFlix: could not locate %s (or any executable holding the "
 			"CURS.* cursor resources) under '%s'", _executableName.c_str(),
 			gameDir.getPath().toString().c_str());
 	return nullptr;
@@ -102,7 +102,7 @@ bool CursorRuntime::tryLoadExe(const Common::FSNode &node, bool requireCursors) 
 		if (!probe || probe->cursors.empty())
 			return false;
 	}
-	debug(1, "Cyberflix: cursor resources loaded from '%s'", node.getPath().toString().c_str());
+	debug(1, "CyberFlix: cursor resources loaded from '%s'", node.getPath().toString().c_str());
 	_exe.reset(exe.release());
 	return true;
 }
@@ -151,7 +151,7 @@ bool CursorRuntime::setCursor(const Common::String &name) {
 		_cursorCache[name] = group; // cache even null to avoid re-parsing
 	}
 	if (!group || group->cursors.empty()) {
-		debug(1, "Cyberflix: cursor '%s' missing/empty in %s", name.c_str(),
+		debug(1, "CyberFlix: cursor '%s' missing/empty in %s", name.c_str(),
 				_executableName.c_str());
 		return false;
 	}
@@ -159,11 +159,11 @@ bool CursorRuntime::setCursor(const Common::String &name) {
 	CursorMan.replaceCursor(group->cursors[0].cursor);
 	_activeCursor = name;
 	_appliedCursor = name;
-	debug(1, "Cyberflix: cursor -> %s", name.c_str());
+	debug(1, "CyberFlix: cursor -> %s", name.c_str());
 	return true;
 }
 
-bool CyberflixEngine::setGameCursor(const Common::String &name) {
+bool CyberFlixEngine::setGameCursor(const Common::String &name) {
 	const Common::String oldCursor = _cursorRuntime.activeCursor();
 	const bool ok = _cursorRuntime.setCursor(name);
 	if (ok && (oldCursor != _cursorRuntime.activeCursor() || !CursorMan.isVisible()))
@@ -171,4 +171,4 @@ bool CyberflixEngine::setGameCursor(const Common::String &name) {
 	return ok;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

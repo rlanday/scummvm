@@ -27,7 +27,7 @@
 #include "cyberflix/image.h"
 #include "cyberflix/resource_helpers.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 const byte *Cast::engineBase(uint32 index) const {
 	if (index >= _archive.getResourceCount())
@@ -36,7 +36,7 @@ const byte *Cast::engineBase(uint32 index) const {
 }
 
 int Cast::resourceIndexById(uint32 id) const {
-	return Cyberflix::resourceIndexById(_archive, id);
+	return CyberFlix::resourceIndexById(_archive, id);
 }
 
 Common::String Cast::pascalString(const byte *p) const {
@@ -55,7 +55,7 @@ bool Cast::open(const Common::String &name) {
 
 	_master = findMasterHeaderIndex(_archive);
 	if (_master < 0) {
-		warning("Cyberflix: cast '%s' has no master header", name.c_str());
+		warning("CyberFlix: cast '%s' has no master header", name.c_str());
 		_archive.close();
 		_fileData.clear();
 		return false;
@@ -64,7 +64,7 @@ bool Cast::open(const Common::String &name) {
 	const byte *hdr = engineBase(static_cast<uint32>(_master));
 	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
 	if (!hdr || masterLen < kMasterActorTableOffset) {
-		warning("Cyberflix: cast '%s' master header truncated", name.c_str());
+		warning("CyberFlix: cast '%s' master header truncated", name.c_str());
 		_master = -1;
 		_archive.close();
 		_fileData.clear();
@@ -81,9 +81,9 @@ bool Cast::open(const Common::String &name) {
 			if (s && script->parse(s.get()))
 				_script.reset(script.release());
 			if (!_script)
-				warning("Cyberflix: cast '%s' script res %u failed to parse", name.c_str(), scriptRes);
+				warning("CyberFlix: cast '%s' script res %u failed to parse", name.c_str(), scriptRes);
 		} else {
-			warning("Cyberflix: cast '%s' script res %u missing", name.c_str(), scriptRes);
+			warning("CyberFlix: cast '%s' script res %u missing", name.c_str(), scriptRes);
 		}
 	}
 
@@ -103,7 +103,7 @@ bool Cast::open(const Common::String &name) {
 		const uint64 amLen = mIdx >= 0 ?
 				static_cast<uint64>(_archive.getResource(static_cast<uint32>(mIdx)).length) + 4 : 0;
 		if (!am || amLen < kActorShapeTableOffset) {
-			warning("Cyberflix: cast '%s' actor master %u missing", name.c_str(), masterId);
+			warning("CyberFlix: cast '%s' actor master %u missing", name.c_str(), masterId);
 			continue;
 		}
 
@@ -152,7 +152,7 @@ bool Cast::open(const Common::String &name) {
 		}
 	}
 
-	debug(1, "Cyberflix: opened cast '%s': %u actor(s)", name.c_str(), _actors.size());
+	debug(1, "CyberFlix: opened cast '%s': %u actor(s)", name.c_str(), _actors.size());
 	return true;
 }
 
@@ -229,7 +229,7 @@ Cast::ActorCellResult Cast::resolveActorCell(const Actor &actor, int angle) cons
 		}
 	}
 	if (!shape) {
-		debug(1, "Cyberflix: renderActor('%s'): shape '%s' not in master",
+		debug(1, "CyberFlix: renderActor('%s'): shape '%s' not in master",
 				actor.name.c_str(), actor.shapeName.c_str());
 		return result;
 	}
@@ -238,7 +238,7 @@ Cast::ActorCellResult Cast::resolveActorCell(const Actor &actor, int angle) cons
 	const uint64 shapeLen = shIdx >= 0 ?
 			static_cast<uint64>(_archive.getResource(static_cast<uint32>(shIdx)).length) + 4 : 0;
 	if (!sh || shapeLen < kShapeCellTableOffset) {
-		debug(1, "Cyberflix: renderActor('%s'): shape res %u missing",
+		debug(1, "CyberFlix: renderActor('%s'): shape res %u missing",
 				actor.name.c_str(), shape->resId);
 		return result;
 	}
@@ -269,7 +269,7 @@ Cast::ActorCellResult Cast::resolveActorCell(const Actor &actor, int angle) cons
 		}
 	}
 	if (!best) {
-		debug(1, "Cyberflix: renderActor('%s'): no cell for pose %u in shape '%s'",
+		debug(1, "CyberFlix: renderActor('%s'): no cell for pose %u in shape '%s'",
 				actor.name.c_str(), poseId, actor.shapeName.c_str());
 		return result;
 	}
@@ -377,7 +377,7 @@ Cast::ActorRenderResult Cast::renderWorldActor(const Actor &actor, const Shop::W
 		return result;
 	bool ok = decodeCel(*fs, w, h, result.cel);
 	if (!ok) {
-		debug(1, "Cyberflix: renderActor('%s'): cel res %u decode failed",
+		debug(1, "CyberFlix: renderActor('%s'): cel res %u decode failed",
 				actor.name.c_str(), projected.cell.frameRes);
 		return result;
 	}
@@ -389,4 +389,4 @@ Cast::ActorRenderResult Cast::renderWorldActor(const Actor &actor, const Shop::W
 	return result;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

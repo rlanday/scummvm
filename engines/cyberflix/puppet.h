@@ -36,7 +36,7 @@ namespace Graphics {
 struct Surface;
 }
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 struct CelImage;
 
@@ -171,6 +171,6 @@ private:
 	mutable Common::HashMap<uint32, Common::Array<RenderFrame> > _actionFrameCache;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_PUPPET_H

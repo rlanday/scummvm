@@ -52,7 +52,7 @@
 #include "cyberflix/shop.h"
 #include "cyberflix/vm.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 class Console;
 class GameSupport;
@@ -69,7 +69,7 @@ namespace Graphics {
 class Font;
 }
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 // The game renders into a 512x384, 8-bit palettised framebuffer (the menu and
 // in-game node images are full 512x384; the LOGO movie's frames are 512x264 and
@@ -79,10 +79,10 @@ enum {
 	kScreenHeight = 384
 };
 
-class CyberflixEngine : public Engine {
+class CyberFlixEngine : public Engine {
 public:
-	CyberflixEngine(OSystem *syst, const CyberflixGameDescription *gameDesc);
-	~CyberflixEngine() override;
+	CyberFlixEngine(OSystem *syst, const CyberFlixGameDescription *gameDesc);
+	~CyberFlixEngine() override;
 
 	Common::Error run() override;
 
@@ -540,7 +540,7 @@ private:
 	/** Handle the original's global WndProc key actions (F1-F9, F12). */
 	bool handleGlobalKey(const Common::Event &event);
 
-	const CyberflixGameDescription *_gameDescription;
+	const CyberFlixGameDescription *_gameDescription;
 	Common::ScopedPtr<GameSupport> _gameSupport;
 	Common::RandomSource _rnd;
 	Console *_console; ///< Owned by the engine framework's debugger, not by us.
@@ -665,6 +665,6 @@ private:
 	Common::String _pendingLoadSignature;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_CYBERFLIX_H

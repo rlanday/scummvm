@@ -26,7 +26,7 @@
 #include "common/str.h"
 #include "common/stream.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /**
  * Save-format constants and low-level readers shared between the engine's
@@ -36,10 +36,10 @@ namespace Cyberflix {
  * does not know, so a version bumped only in saveload.cpp would make every
  * new save vanish from the load chooser.
  */
-static const char kCyberflixSaveMagic[4] = {'C', 'F', 'X', 'S'};
+static const char kCyberFlixSaveMagic[4] = {'C', 'F', 'X', 'S'};
 
 enum {
-	kCyberflixSaveVersion = 1
+	kCyberFlixSaveVersion = 1
 };
 
 /** Read a uint32-length-prefixed string, bounded by @p end. */
@@ -72,6 +72,6 @@ inline bool readChunkHeader(Common::SeekableReadStream &in, char tag[5], int64 &
 	return end <= in.size();
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_SAVELOAD_H

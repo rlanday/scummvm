@@ -39,7 +39,7 @@
 
 #include <math.h>
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 static const uint32 kTrackMasterHeaderSize = 0x28;
 static const uint32 kThemePlaylistOffset = 6;
@@ -283,7 +283,7 @@ byte AudioRuntime::effectiveAudioVolume(int baseVolume) const {
 	return nativeDirectSoundVolumeToMixerVolume(baseVolume) * CLIP(_waveVolumeLevel, 0, 9) / 9;
 }
 
-void AudioRuntime::applyLiveAudioVolumes(CyberflixEngine &engine) {
+void AudioRuntime::applyLiveAudioVolumes(CyberFlixEngine &engine) {
 	if (!_themeTrackName.empty() && engine._mixer->isSoundHandleActive(_themeHandle)) {
 		ThemeTrack *track = findTrack(_themeTrackName);
 		engine._mixer->setChannelVolume(_themeHandle,
@@ -333,7 +333,7 @@ void AudioRuntime::prepareThemeSpans(const ThemeTrack &track) {
 	}
 }
 
-bool AudioRuntime::startThemeStream(CyberflixEngine &engine, const Common::SharedPtr<ThemeTrack> &track, uint32 startSample) {
+bool AudioRuntime::startThemeStream(CyberFlixEngine &engine, const Common::SharedPtr<ThemeTrack> &track, uint32 startSample) {
 	if (!track)
 		return false;
 	prepareThemeSpans(*track);
@@ -380,25 +380,25 @@ void AudioRuntime::openTrackFile(const Common::String &name) {
 
 	Common::File file;
 	if (!file.open(Common::Path(name))) {
-		warning("Cyberflix: could not open track file '%s'", name.c_str());
+		warning("CyberFlix: could not open track file '%s'", name.c_str());
 		return;
 	}
 	const int64 fileSize = file.size();
 	if (fileSize <= 0 || fileSize > 0xffffffffLL) {
-		warning("Cyberflix: invalid track file size for '%s'", name.c_str());
+		warning("CyberFlix: invalid track file size for '%s'", name.c_str());
 		return;
 	}
 	uint32 size = static_cast<uint32>(fileSize);
 	track->fileData.resize(size);
 	if (file.read(track->fileData.begin(), size) != size) {
-		warning("Cyberflix: could not read track file '%s'", name.c_str());
+		warning("CyberFlix: could not read track file '%s'", name.c_str());
 		return;
 	}
 	file.close();
 
 	Archive archive;
 	if (!archive.open(new Common::MemoryReadStream(track->fileData.begin(), size, DisposeAfterUse::NO), name)) {
-		warning("Cyberflix: '%s' is not a valid track container", name.c_str());
+		warning("CyberFlix: '%s' is not a valid track container", name.c_str());
 		return;
 	}
 
@@ -409,7 +409,7 @@ void AudioRuntime::openTrackFile(const Common::String &name) {
 	const uint64 masterSize = masterResource
 			? static_cast<uint64>(masterResource->length) + 4 : 0;
 	if (!master || masterSize < kTrackMasterHeaderSize) {
-		warning("Cyberflix: track '%s' has no master header", name.c_str());
+		warning("CyberFlix: track '%s' has no master header", name.c_str());
 		return;
 	}
 	Common::String logicalName = readPascalString(master + 0x24, track->fileData, true);
@@ -426,7 +426,7 @@ void AudioRuntime::openTrackFile(const Common::String &name) {
 	const uint64 themeTableSize = themeTableResource
 			? static_cast<uint64>(themeTableResource->length) + 4 : 0;
 	if (!tt || themeTableSize < kThemeCueTableOffset) {
-		warning("Cyberflix: track '%s' has no theme table", name.c_str());
+		warning("CyberFlix: track '%s' has no theme table", name.c_str());
 		return;
 	}
 
@@ -478,7 +478,7 @@ void AudioRuntime::openTrackFile(const Common::String &name) {
 	}
 
 	_tracks.push_back(track);
-	debug(1, "Cyberflix: track '%s' open as '%s' (%u theme cues, %u sfx cues, playlist %u, loop @%u)",
+	debug(1, "CyberFlix: track '%s' open as '%s' (%u theme cues, %u sfx cues, playlist %u, loop @%u)",
 			name.c_str(), track->name.c_str(), static_cast<uint32>(track->cues.size()),
 			static_cast<uint32>(track->sfxCues.size()), static_cast<uint32>(track->playlist.size()), track->loopIdx);
 }
@@ -504,10 +504,10 @@ void AudioRuntime::closeTrackFile(const Common::String &name) {
 // locked each theme cue resource with FUN_00430330; playtheme() just installs
 // that cue chain on the DirectSound theme channel. FUN_0042f960 primes the ring
 // once, and FUN_0042ebb0 keeps decoding later cbx blocks as playback advances.
-void AudioRuntime::playTheme(CyberflixEngine &engine, const Common::String &name) {
+void AudioRuntime::playTheme(CyberFlixEngine &engine, const Common::String &name) {
 	Common::SharedPtr<ThemeTrack> track = findTrackRef(name);
 	if (!track) {
-		warning("Cyberflix: playtheme('%s'): track not open", name.c_str());
+		warning("CyberFlix: playtheme('%s'): track not open", name.c_str());
 		return;
 	}
 
@@ -521,12 +521,12 @@ void AudioRuntime::playTheme(CyberflixEngine &engine, const Common::String &name
 
 	if (!startThemeStream(engine, track, 0))
 		return;
-	debug(1, "Cyberflix: playtheme '%s' (intro %u + loop %u samples, vol %d)",
+	debug(1, "CyberFlix: playtheme '%s' (intro %u + loop %u samples, vol %d)",
 			name.c_str(), _themeIntroSamples, _themeLoopSamples, track->volume);
 }
 
 // halttheme(): stop the theme channel (TI.EXE FUN_00412410 -> FUN_0042f690).
-void AudioRuntime::haltTheme(CyberflixEngine &engine) {
+void AudioRuntime::haltTheme(CyberFlixEngine &engine) {
 	engine._mixer->stopHandle(_themeHandle);
 	_themeTrackName.clear();
 	_themeSpans.clear();
@@ -534,13 +534,13 @@ void AudioRuntime::haltTheme(CyberflixEngine &engine) {
 	_themeStartSample = 0;
 }
 
-bool AudioRuntime::playSoundCue(CyberflixEngine &engine, const Common::String &name, Audio::SoundHandle &handle,
+bool AudioRuntime::playSoundCue(CyberFlixEngine &engine, const Common::String &name, Audio::SoundHandle &handle,
 		Common::String &currentCue, uint32 &currentResId) {
 	ThemeTrack *track = nullptr;
 	const ThemeTrack::Cue *cue = findSfxCue(name, &track);
 	if (!cue || !track || cue->length == 0 ||
 			!hasRange(track->fileData.size(), cue->dataOffset, cue->length)) {
-		warning("Cyberflix: sound cue '%s' not found", name.c_str());
+		warning("CyberFlix: sound cue '%s' not found", name.c_str());
 		return false;
 	}
 
@@ -564,10 +564,10 @@ bool AudioRuntime::playSoundCue(CyberflixEngine &engine, const Common::String &n
 // two normal sound slots. Slot selection follows FUN_0042fa80/FUN_0042fb20/
 // FUN_0042fbc0/FUN_0042fc30, using the cue resource id as the native priority
 // key when both slots are occupied.
-void AudioRuntime::playSound(CyberflixEngine &engine, const Common::String &name, int mode) {
+void AudioRuntime::playSound(CyberFlixEngine &engine, const Common::String &name, int mode) {
 	const ThemeTrack::Cue *cue = findSfxCue(name);
 	if (!cue) {
-		warning("Cyberflix: sound cue '%s' not found", name.c_str());
+		warning("CyberFlix: sound cue '%s' not found", name.c_str());
 		return;
 	}
 
@@ -630,14 +630,14 @@ void AudioRuntime::playSound(CyberflixEngine &engine, const Common::String &name
 }
 
 // voicesound(name): play a named SFX cue on the dedicated voice slot.
-void AudioRuntime::playVoice(CyberflixEngine &engine, const Common::String &name) {
+void AudioRuntime::playVoice(CyberFlixEngine &engine, const Common::String &name) {
 	playSoundCue(engine, name, _voiceSlot.handle, _voiceSlot.cueName, _voiceSlot.resId);
 }
 
 // haltsound(which): which==1 stops slot 1, 2 stops slot 2, 3 stops both.
-void AudioRuntime::haltSound(CyberflixEngine &engine, int which) {
+void AudioRuntime::haltSound(CyberFlixEngine &engine, int which) {
 	if (which < 1 || which > 3) {
-		warning("Cyberflix: haltsound(%d): invalid slot", which);
+		warning("CyberFlix: haltsound(%d): invalid slot", which);
 		return;
 	}
 	if (which == 1 || which == 3) {
@@ -652,7 +652,7 @@ void AudioRuntime::haltSound(CyberflixEngine &engine, int which) {
 	}
 }
 
-void AudioRuntime::haltVoice(CyberflixEngine &engine) {
+void AudioRuntime::haltVoice(CyberFlixEngine &engine) {
 	engine._mixer->stopHandle(_voiceSlot.handle);
 	_voiceSlot.cueName.clear();
 	_voiceSlot.resId = 0;
@@ -661,7 +661,7 @@ void AudioRuntime::haltVoice(CyberflixEngine &engine) {
 // themevol('name.trk', 0-255): set the volume of every cue of the named track
 // and apply it live to a playing cue (TI.EXE FUN_004125c0 -> FUN_004300c0 ->
 // IDirectSoundBuffer::SetVolume). The 0-255 scale matches the mixer's.
-void AudioRuntime::themeVolume(CyberflixEngine &engine, const Common::String &name, int volume) {
+void AudioRuntime::themeVolume(CyberFlixEngine &engine, const Common::String &name, int volume) {
 	ThemeTrack *track = findTrack(name);
 	if (track)
 		track->volume = CLIP(volume, 0, 255);
@@ -671,30 +671,30 @@ void AudioRuntime::themeVolume(CyberflixEngine &engine, const Common::String &na
 		engine._mixer->setChannelVolume(_themeHandle, effectiveAudioVolume(volume));
 }
 
-int AudioRuntime::getWaveVolume(CyberflixEngine &) {
+int AudioRuntime::getWaveVolume(CyberFlixEngine &) {
 	return _waveVolumeLevel;
 }
 
-int AudioRuntime::setWaveVolume(CyberflixEngine &engine, int newLevel) {
+int AudioRuntime::setWaveVolume(CyberFlixEngine &engine, int newLevel) {
 	_waveVolumeLevel = CLIP(newLevel, 0, 9);
 	applyLiveAudioVolumes(engine);
 	return _waveVolumeLevel;
 }
 
-int AudioRuntime::getSoundVolume(CyberflixEngine &, const Common::String &name) {
+int AudioRuntime::getSoundVolume(CyberFlixEngine &, const Common::String &name) {
 	ThemeTrack::Cue *cue = findMutableSfxCue(name);
 	if (!cue) {
 		ThemeTrack *track = findTrack(name);
 		if (track)
 			return track->sfxCues.empty() ? track->volume : track->sfxCues[0].volume;
-		warning("Cyberflix: soundvol('%s'): cue/track not found", name.c_str());
+		warning("CyberFlix: soundvol('%s'): cue/track not found", name.c_str());
 		return 0;
 	}
 
 	return cue->volume;
 }
 
-int AudioRuntime::setSoundVolume(CyberflixEngine &engine, const Common::String &name, int newVolume) {
+int AudioRuntime::setSoundVolume(CyberFlixEngine &engine, const Common::String &name, int newVolume) {
 	ThemeTrack::Cue *cue = findMutableSfxCue(name);
 	if (!cue) {
 		ThemeTrack *track = findTrack(name);
@@ -704,7 +704,7 @@ int AudioRuntime::setSoundVolume(CyberflixEngine &engine, const Common::String &
 			applyLiveAudioVolumes(engine);
 			return track->sfxCues.empty() ? track->volume : track->sfxCues[0].volume;
 		}
-		warning("Cyberflix: soundvol('%s'): cue/track not found", name.c_str());
+		warning("CyberFlix: soundvol('%s'): cue/track not found", name.c_str());
 		return 0;
 	}
 
@@ -725,7 +725,7 @@ int AudioRuntime::setSoundVolume(CyberflixEngine &engine, const Common::String &
 // theme channel, which==2 -> its track file's name; 'none' when silent
 // (TI.EXE FUN_00412f20). We map the channel's elapsed time onto the decoded
 // cue spans, folding positions past the intro into the loop region.
-Common::String AudioRuntime::currentTheme(CyberflixEngine &engine, int which) {
+Common::String AudioRuntime::currentTheme(CyberFlixEngine &engine, int which) {
 	if (_themeTrackName.empty() || !engine._mixer->isSoundHandleActive(_themeHandle))
 		return "none";
 	if (which == 2)
@@ -747,7 +747,7 @@ Common::String AudioRuntime::currentTheme(CyberflixEngine &engine, int which) {
 
 // currentsound(which): query the two normal SFX slots. which==1/2 returns that
 // slot; which==3 returns the active slot with the higher native cue resource id.
-Common::String AudioRuntime::currentSound(CyberflixEngine &engine, int which) {
+Common::String AudioRuntime::currentSound(CyberFlixEngine &engine, int which) {
 	bool active0 = engine._mixer->isSoundHandleActive(_soundSlots[0].handle);
 	bool active1 = engine._mixer->isSoundHandleActive(_soundSlots[1].handle);
 	if (!active0) {
@@ -774,7 +774,7 @@ Common::String AudioRuntime::currentSound(CyberflixEngine &engine, int which) {
 	return "None";
 }
 
-Common::String AudioRuntime::currentVoice(CyberflixEngine &engine) {
+Common::String AudioRuntime::currentVoice(CyberFlixEngine &engine) {
 	if (engine._mixer->isSoundHandleActive(_voiceSlot.handle) && !_voiceSlot.cueName.empty())
 		return _voiceSlot.cueName;
 	_voiceSlot.cueName.clear();
@@ -789,7 +789,7 @@ Common::String AudioRuntime::currentVoice(CyberflixEngine &engine) {
 // engine here while it is still active: this lets the sound finish and keeps the
 // software cursor responsive instead of spinning the VM to its step cap (which
 // would abandon the rest of the handler and skip the conversation).
-bool AudioRuntime::voiceDone(CyberflixEngine &engine) {
+bool AudioRuntime::voiceDone(CyberFlixEngine &engine) {
 	if (engine._mixer->isSoundHandleActive(_voiceSlot.handle)) {
 		engine.delayMillisWithCursorUpdates(10);
 		if (engine._mixer->isSoundHandleActive(_voiceSlot.handle))
@@ -799,4 +799,4 @@ bool AudioRuntime::voiceDone(CyberflixEngine &engine) {
 }
 
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

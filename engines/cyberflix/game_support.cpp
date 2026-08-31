@@ -23,7 +23,7 @@
 #include "cyberflix/game_support.h"
 #include "cyberflix/games/titanic.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 GameSupport *createGameSupport(int gameType) {
 	switch (gameType) {
@@ -34,4 +34,4 @@ GameSupport *createGameSupport(int gameType) {
 	}
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

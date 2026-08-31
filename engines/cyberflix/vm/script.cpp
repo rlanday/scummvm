@@ -24,7 +24,7 @@
 
 #include "cyberflix/script.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 Script::Script() : _valid(false), _terminated(false), _poolOffset(0), _defsScanned(false) {
 }
@@ -733,4 +733,4 @@ const Script::Definition *Script::findDefinition(const Common::String &name) con
 	return nullptr;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

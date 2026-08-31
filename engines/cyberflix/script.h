@@ -31,7 +31,7 @@ namespace Common {
 class SeekableReadStream;
 }
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /**
  * Parser for CyberFlix script resources, found in BOOTFILE and in the .STG /
@@ -516,6 +516,6 @@ private:
 	mutable Common::HashMap<Common::String, uint32> _defIndexByName;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_SCRIPT_H

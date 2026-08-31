@@ -26,9 +26,9 @@
 #include "common/scummsys.h"
 #include "common/str.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-class CyberflixEngine;
+class CyberFlixEngine;
 
 class LoopRuntime {
 public:
@@ -62,10 +62,10 @@ public:
 			const Common::String &message, int delay);
 	void stopLoop(const Common::String &kind, const Common::String &target);
 	void pauseLoop(const Common::String &kind, bool paused);
-	void makeCricket(CyberflixEngine &engine, const Common::String &name);
+	void makeCricket(CyberFlixEngine &engine, const Common::String &name);
 	void stopCricket(const Common::String &name);
 	void pauseCricket(const Common::String &kind, bool paused);
-	void processScheduledLoops(CyberflixEngine &engine);
+	void processScheduledLoops(CyberFlixEngine &engine);
 
 	void clear() {
 		_scheduledLoops.clear();
@@ -96,6 +96,6 @@ private:
 	bool _cricketsPaused = false;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif

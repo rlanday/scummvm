@@ -26,7 +26,7 @@
 #include "cyberflix/game_support.h"
 #include "cyberflix/vm.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 Common::String Value::toString() const {
 	switch (type) {
@@ -164,17 +164,17 @@ Value ScriptVM::getVar(const Common::String &name, const Common::String &key) co
 	if (!_locals.empty() && _locals.back().contains(key)) {
 		Value v = _locals.back()[key];
 		if (gDebugLevel > 0 && key == "tour")
-			debug(1, "Cyberflix: var tour local -> %s", v.toString().c_str());
+			debug(1, "CyberFlix: var tour local -> %s", v.toString().c_str());
 		return v;
 	}
 	if (_vars.contains(key)) {
 		Value v = _vars[key];
 		if (gDebugLevel > 0 && key == "tour")
-			debug(1, "Cyberflix: var tour global -> %s", v.toString().c_str());
+			debug(1, "CyberFlix: var tour global -> %s", v.toString().c_str());
 		return v;
 	}
 	if (gDebugLevel > 0 && key == "tour")
-		debug(1, "Cyberflix: var tour unbound");
+		debug(1, "CyberFlix: var tour unbound");
 	return Value::makeSymbol(name);
 }
 
@@ -189,14 +189,14 @@ void ScriptVM::setVar(const Common::String &name, const Value &v) {
 			_host->gameSupport().shouldLogScriptVariable(key);
 	if (!_locals.empty() && _locals.back().contains(key)) {
 		if (logGameVariable)
-			debug(1, "Cyberflix: game var %s local %s -> %s",
+			debug(1, "CyberFlix: game var %s local %s -> %s",
 					key.c_str(), _locals.back()[key].toString().c_str(), v.toString().c_str());
 		_locals.back()[key] = v;
 		return;
 	}
 	if (logGameVariable) {
 		Common::String oldValue = _vars.contains(key) ? _vars[key].toString() : Common::String("<unset>");
-		debug(1, "Cyberflix: game var %s global %s -> %s",
+		debug(1, "CyberFlix: game var %s global %s -> %s",
 				key.c_str(), oldValue.c_str(), v.toString().c_str());
 	}
 	_vars[key] = v;
@@ -323,7 +323,7 @@ Value ScriptVM::decodeAtom(const Script &script, uint32 &pc) {
 	// Bound kOpNot / unary-minus / parenthesis recursion so a corrupt script
 	// cannot overflow the C stack (callFunction has the same guard at 64).
 	if (_exprDepth >= 64) {
-		debug(1, "Cyberflix: expression nesting too deep, abandoning atom");
+		debug(1, "CyberFlix: expression nesting too deep, abandoning atom");
 		return Value();
 	}
 	_exprDepth++;
@@ -853,12 +853,12 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 				gameArgText += ", ";
 			gameArgText += args[i].toString();
 		}
-		debug(1, "Cyberflix: game script %s(%s) ctx self='%s' prop='%s'",
+		debug(1, "CyberFlix: game script %s(%s) ctx self='%s' prop='%s'",
 				name.c_str(), gameArgText.c_str(), _ctxSelf.c_str(), _ctxProp.c_str());
 	}
 
 	if (_callDepth >= 64) { // TI.EXE has no explicit guard; protect the engine
-		warning("Cyberflix: script call depth overflow at '%s'", name.c_str());
+		warning("CyberFlix: script call depth overflow at '%s'", name.c_str());
 		return result;
 	}
 
@@ -868,7 +868,7 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 		if (!def)
 			continue;
 		if (logTransitionDispatch)
-			debug(1, "Cyberflix: script '%s' matched scope %d/%u body %u (%u args)",
+			debug(1, "CyberFlix: script '%s' matched scope %d/%u body %u (%u args)",
 					name.c_str(), li, _libraries.size(), def->bodyStart, args.size());
 
 		Common::String prevSelf = _ctxSelf;
@@ -908,10 +908,10 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 		if (handled)
 			*handled = true;
 		if (logTransitionDispatch)
-			debug(1, "Cyberflix: script '%s' handled by scope %d -> %s",
+			debug(1, "CyberFlix: script '%s' handled by scope %d -> %s",
 					name.c_str(), li, result.toString().c_str());
 		if (logGameDispatch)
-			debug(1, "Cyberflix: game script %s(%s) -> %s",
+			debug(1, "CyberFlix: game script %s(%s) -> %s",
 					name.c_str(), gameArgText.c_str(), result.toString().c_str());
 		if (_trace)
 			debug(0, "  dispatch %s(%u args) -> %s", name.c_str(), args.size(),
@@ -920,7 +920,7 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 	}
 
 	if (logTransitionDispatch)
-		debug(1, "Cyberflix: script '%s' had no matching definition (%u scopes)",
+		debug(1, "CyberFlix: script '%s' had no matching definition (%u scopes)",
 				name.c_str(), _libraries.size());
 	if (_trace)
 		debug(0, "  dispatch %s: no matching definition", name.c_str());
@@ -1281,8 +1281,8 @@ done:
 	_whileStack.resize(whileBase);
 	_forStack.resize(forBase);
 	if (pc < count && maxSteps != 0 && executed >= maxSteps)
-		warning("Cyberflix: script body stopped after %u statements at pc %u", maxSteps, pc);
+		warning("CyberFlix: script body stopped after %u statements at pc %u", maxSteps, pc);
 	return kRunDone;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

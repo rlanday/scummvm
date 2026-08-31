@@ -32,7 +32,7 @@
 #include "cyberflix/image.h"
 #include "cyberflix/script.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /**
  * A CyberFlix "shop" (a @c .SHP file under DATA/): a container of PROPS —
@@ -227,6 +227,6 @@ private:
 	mutable Common::HashMap<uint32, Common::SharedPtr<CelImage> > _celCache;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_SHOP_H

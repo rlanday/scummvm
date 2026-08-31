@@ -31,7 +31,7 @@ namespace Common {
 class SeekableReadStream;
 }
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /**
  * A decoded CyberFlix "cel": an 8-bit palettised image with per-pixel
@@ -250,6 +250,6 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
  */
 bool loadPalette(const byte *fileData, uint32 fileSize, Palette &rgb);
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_IMAGE_H

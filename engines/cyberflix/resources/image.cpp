@@ -24,7 +24,7 @@
 
 #include "cyberflix/image.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 // Per-scanline RLE control opcodes (low two bits of each control byte).
 enum {
@@ -633,4 +633,4 @@ bool loadPalette(const byte *fileData, uint32 fileSize, Palette &rgb) {
 	return false;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

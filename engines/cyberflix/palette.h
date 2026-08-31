@@ -24,7 +24,7 @@
 
 #include "common/scummsys.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 enum {
 	kPaletteColorCount = 256,
@@ -59,6 +59,6 @@ private:
 	byte _data[kPaletteByteCount] = {};
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_PALETTE_H

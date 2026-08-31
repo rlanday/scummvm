@@ -22,9 +22,9 @@
 #ifndef CYBERFLIX_DETECTION_TABLES_H
 #define CYBERFLIX_DETECTION_TABLES_H
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-static const CyberflixGameDescription gameDescriptions[] = {
+static const CyberFlixGameDescription gameDescriptions[] = {
 	// Titanic: Adventure Out of Time - English Windows (2-CD retail)
 	// Detected via DATA/BOOTFILE; the engine validates the extracted
 	// TITANIC1/TITANIC2 sibling-disc layout at startup.
@@ -64,6 +64,6 @@ static const CyberflixGameDescription gameDescriptions[] = {
 	{ AD_TABLE_END_MARKER, 0 }
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_DETECTION_TABLES_H

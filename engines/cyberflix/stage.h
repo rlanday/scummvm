@@ -30,7 +30,7 @@
 #include "cyberflix/image.h"
 #include "cyberflix/script.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /**
  * A CyberFlix "stage" (a @c .STG deck under DATA/): the navigable world of a
@@ -184,6 +184,6 @@ inline bool isReplacementStage(const Common::SharedPtr<Stage> &stage) {
 	return stage && stage->isOpen() && !stage->name().equalsIgnoreCase("main.stg");
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_STAGE_H

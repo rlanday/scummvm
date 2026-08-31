@@ -33,7 +33,7 @@
 #include "cyberflix/script.h"
 #include "cyberflix/shop.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 /**
  * A CyberFlix cast file (.CST under DATA/): the global actor list and shared
@@ -179,6 +179,6 @@ private:
 	Common::HashMap<Common::String, uint32> _actorIndexByName;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif // CYBERFLIX_CAST_H

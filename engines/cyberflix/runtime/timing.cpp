@@ -23,7 +23,7 @@
 
 #include "cyberflix/runtime/timing.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
 int FramePacingRuntime::setFrameRate(int newRate) {
 	_frameRate = CLIP(newRate, 0, 60);
@@ -44,4 +44,4 @@ uint32 FramePacingRuntime::delayMillisUntilDeadline(int currentTick) const {
 	return delay;
 }
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix

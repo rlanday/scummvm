@@ -29,9 +29,9 @@
 #include "cyberflix/cast.h"
 #include "cyberflix/shop.h"
 
-namespace Cyberflix {
+namespace CyberFlix {
 
-class CyberflixEngine;
+class CyberFlixEngine;
 struct Value;
 
 class ActorRuntime {
@@ -41,55 +41,53 @@ public:
 		Common::SharedPtr<Cast::Actor> actor;
 	};
 
-	static bool isGeneratedExtraActorName(const Common::String &name);
-
 	Common::SharedPtr<Cast> findCastShared(const Common::String &name) const;
 	ActorRef findActorRef(const Common::String &name) const;
-	bool resolveActorStar(CyberflixEngine &engine, Cast::Actor &actor);
-	void refreshActorStarPositions(CyberflixEngine &engine);
-	void collectWorldActors(CyberflixEngine &engine, Common::Array<const Cast::Actor *> &draw,
+	bool resolveActorStar(CyberFlixEngine &engine, Cast::Actor &actor);
+	void refreshActorStarPositions(CyberFlixEngine &engine);
+	void collectWorldActors(CyberFlixEngine &engine, Common::Array<const Cast::Actor *> &draw,
 			Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
 			const Shop::WorldCamera &camera) const;
-	void openCastFile(CyberflixEngine &engine, const Common::String &name);
-	void closeCastFile(CyberflixEngine &engine, const Common::String &name);
-	void actorInstance(CyberflixEngine &engine, const Common::String &source, const Common::String &newName);
-	void sendToCast(CyberflixEngine &engine, const Common::String &castName,
+	void openCastFile(CyberFlixEngine &engine, const Common::String &name);
+	void closeCastFile(CyberFlixEngine &engine, const Common::String &name);
+	void actorInstance(CyberFlixEngine &engine, const Common::String &source, const Common::String &newName);
+	void sendToCast(CyberFlixEngine &engine, const Common::String &castName,
 			const Common::String &message, const Common::Array<Value> &args);
-	Value sendToCastFx(CyberflixEngine &engine, const Common::String &castName,
+	Value sendToCastFx(CyberFlixEngine &engine, const Common::String &castName,
 			const Common::String &message, const Common::Array<Value> &args);
-	void sendToActor(CyberflixEngine &engine, const Common::String &actorName,
+	void sendToActor(CyberFlixEngine &engine, const Common::String &actorName,
 			const Common::String &message, const Common::Array<Value> &args);
-	Value sendToActorFx(CyberflixEngine &engine, const Common::String &actorName,
+	Value sendToActorFx(CyberFlixEngine &engine, const Common::String &actorName,
 			const Common::String &message, const Common::Array<Value> &args);
 	int countActors() const;
 	Common::String indexToActor(int index) const;
 	bool getActorVisible(const Common::String &name) const;
-	bool setActorVisible(CyberflixEngine &engine, const Common::String &name, bool visible);
+	bool setActorVisible(CyberFlixEngine &engine, const Common::String &name, bool visible);
 	Common::String getActorSet(const Common::String &name) const;
-	Common::String setActorSet(CyberflixEngine &engine, const Common::String &name, const Common::String &newSet);
+	Common::String setActorSet(CyberFlixEngine &engine, const Common::String &name, const Common::String &newSet);
 	Common::String getActorStar(const Common::String &name) const;
-	Common::String setActorStar(CyberflixEngine &engine, const Common::String &name, const Common::String &newStar);
+	Common::String setActorStar(CyberFlixEngine &engine, const Common::String &name, const Common::String &newStar);
 	Common::String getActorPose(const Common::String &name) const;
-	Common::String setActorPose(CyberflixEngine &engine, const Common::String &name, const Common::String &newPose);
-	void actorXYZ(CyberflixEngine &engine, const Common::String &name, int x, int y, int z);
-	int actorXYZ(CyberflixEngine &engine, const Common::String &name, int selector) const;
+	Common::String setActorPose(CyberFlixEngine &engine, const Common::String &name, const Common::String &newPose);
+	void actorXYZ(CyberFlixEngine &engine, const Common::String &name, int x, int y, int z);
+	int actorXYZ(CyberFlixEngine &engine, const Common::String &name, int selector) const;
 	int getActorDeg(const Common::String &name) const;
-	int setActorDeg(CyberflixEngine &engine, const Common::String &name, int newDeg);
-	int getActorDist(CyberflixEngine &engine, const Common::String &name) const;
-	void setActorDist(CyberflixEngine &engine, const Common::String &name, int newDist);
+	int setActorDeg(CyberFlixEngine &engine, const Common::String &name, int newDeg);
+	int getActorDist(CyberFlixEngine &engine, const Common::String &name) const;
+	void setActorDist(CyberFlixEngine &engine, const Common::String &name, int newDist);
 	int getActorValue(const Common::String &name) const;
 	int setActorValue(const Common::String &name, int newValue);
 	Common::String getActorOwner(const Common::String &name) const;
 	Common::String setActorOwner(const Common::String &name, const Common::String &newOwner);
-	void actorZClip(CyberflixEngine &engine, const Common::String &name, int zClip);
+	void actorZClip(CyberFlixEngine &engine, const Common::String &name, int zClip);
 	void actorSpeed(const Common::String &name, int speed);
-	void actorScale(CyberflixEngine &engine, const Common::String &name, int scale);
+	void actorScale(CyberFlixEngine &engine, const Common::String &name, int scale);
 	void actorTurn(const Common::String &name, int turn);
-	void turnToDeg(CyberflixEngine &engine, const Common::String &name, int deg);
-	void walkToStar(CyberflixEngine &engine, const Common::String &name, const Common::String &star);
-	void walkOnPath(CyberflixEngine &engine, const Common::String &name, const Common::String &path,
+	void turnToDeg(CyberFlixEngine &engine, const Common::String &name, int deg);
+	void walkToStar(CyberFlixEngine &engine, const Common::String &name, const Common::String &star);
+	void walkOnPath(CyberFlixEngine &engine, const Common::String &name, const Common::String &path,
 			const Common::String &dest);
-	void walkToXYZ(CyberflixEngine &engine, const Common::String &name, int x, int y, int z);
+	void walkToXYZ(CyberFlixEngine &engine, const Common::String &name, int x, int y, int z);
 	void stopWalk(const Common::String &name);
 	void pauseWalk(const Common::String &name, int flag);
 	bool isWalk(const Common::String &name) const;
@@ -100,13 +98,13 @@ public:
 	 * actor faces its target), then linear motion by the actor's speed until
 	 * the total distance is covered (destination star + endwalk()).
 	 */
-	void advanceWalks(CyberflixEngine &engine);
+	void advanceWalks(CyberFlixEngine &engine);
 
 	/** Step every actor's pose frame; run once per compositor pass like
 	 *  PropRuntime::advancePropPoses. */
 	void advanceActorPoses();
 	Common::String walkDest(const Common::String &name) const;
-	int starXYZ(CyberflixEngine &engine, const Common::String &name, int selector) const;
+	int starXYZ(CyberFlixEngine &engine, const Common::String &name, int selector) const;
 
 	Common::Array<Common::SharedPtr<Cast> > &casts() { return _casts; }
 	const Common::Array<Common::SharedPtr<Cast> > &casts() const { return _casts; }
@@ -135,20 +133,20 @@ private:
 	};
 
 	int findWalkRecord(const Common::String &name) const;
-	void queueAnimatedWalk(CyberflixEngine &engine, Cast::Actor &actor,
+	void queueAnimatedWalk(CyberFlixEngine &engine, Cast::Actor &actor,
 			const Common::String &name, const Common::String &dest,
 			int16 destX, int16 destY, int16 destZ);
-	void dispatchTurnComplete(CyberflixEngine &engine, const Common::String &name);
+	void dispatchTurnComplete(CyberFlixEngine &engine, const Common::String &name);
 	void clearWalkRecord(const Common::String &name);
-	void dispatchWalkComplete(CyberflixEngine &engine, const Common::String &name);
-	bool recoverExtraBaseActor(CyberflixEngine &engine, const Common::String &name);
-	bool recoverGeneratedExtraActor(CyberflixEngine &engine, const Common::String &name);
+	void dispatchWalkComplete(CyberFlixEngine &engine, const Common::String &name);
+	bool recoverExtraBaseActor(CyberFlixEngine &engine, const Common::String &name);
+	bool recoverGeneratedExtraActor(CyberFlixEngine &engine, const Common::String &name);
 
 	/** Open cast files and the global actor list they contribute. */
 	Common::Array<Common::SharedPtr<Cast> > _casts;
 	Common::Array<WalkRecord> _walks;
 };
 
-} // End of namespace Cyberflix
+} // End of namespace CyberFlix
 
 #endif
