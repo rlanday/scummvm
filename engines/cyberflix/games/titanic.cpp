@@ -40,6 +40,35 @@ namespace CyberFlix {
 static const int kCargoPaintingTimerFrames = 10000;
 static const int kCargoPaintingTimerLogSeconds = 10;
 
+class TitanicGameSupport : public GameSupport {
+public:
+	const GameProfile &profile() const override;
+	Common::Error initializePaths(PathRuntime &paths) const override;
+	bool patchBootScript(Script &script) const override;
+	Common::String canonicalDiscLabel(const Common::String &label) const override;
+	bool resolveDisc(const Common::String &requested,
+			Common::String &mountedLabel) const override;
+	bool resolvePathDirectory(const Common::String &path,
+			Common::FSNode &out) const override;
+	void onForceUpdate(CyberFlixEngine &engine) override;
+	void onGameStateLoaded(const ScriptVM &vm) override;
+	bool shouldLogScriptVariable(const Common::String &name) const override;
+	bool shouldLogScriptDispatch(const Common::String &name,
+			const Common::String &self) const override;
+
+private:
+	bool findRepackagedDataRoot(Common::FSNode &out) const;
+	bool validateDiscLayout() const;
+
+	mutable bool _repackagedDataRootChecked = false;
+	mutable bool _repackagedDataRootValid = false;
+	mutable Common::FSNode _repackagedDataRoot;
+
+	int _cargoPaintingTimerStartFrame = 0;
+	int _lastCargoPaintingTimerLogBucket = -1;
+	bool _cargoPaintingTimerExpiredLogged = false;
+};
+
 // Finds a child directory of @p root whose name matches @p name case-insensitively.
 static bool findCaselessChildDir(const Common::FSNode &root, const Common::String &name,
 		Common::FSNode &out) {
@@ -140,32 +169,24 @@ static bool isRepackagedDataDir(const Common::FSNode &dir) {
 
 // The Steam re-release ships an already-installed tree with every asset
 // flattened into one LOCAL directory instead of the retail two-CD layout.
-static bool findRepackagedDataRoot(Common::FSNode &out) {
-	static Common::String cachedFor;
-	static Common::FSNode cachedRoot;
-	static bool cachedValid = false;
-
-	const Common::Path gamePath = ConfMan.getPath("path");
-	const Common::String key = gamePath.toString();
-	if (key != cachedFor) {
-		cachedFor = key;
-		cachedValid = false;
-
-		const Common::FSNode gameDir(gamePath);
+bool TitanicGameSupport::findRepackagedDataRoot(Common::FSNode &out) const {
+	if (!_repackagedDataRootChecked) {
+		_repackagedDataRootChecked = true;
+		const Common::FSNode gameDir(ConfMan.getPath("path"));
 		Common::FSNode local;
 		if (isRepackagedDataDir(gameDir)) {
-			cachedRoot = gameDir;
-			cachedValid = true;
+			_repackagedDataRoot = gameDir;
+			_repackagedDataRootValid = true;
 		} else if (findCaselessChildDir(gameDir, "LOCAL", local) &&
 				isRepackagedDataDir(local)) {
-			cachedRoot = local;
-			cachedValid = true;
+			_repackagedDataRoot = local;
+			_repackagedDataRootValid = true;
 		}
 	}
 
-	if (cachedValid)
-		out = cachedRoot;
-	return cachedValid;
+	if (_repackagedDataRootValid)
+		out = _repackagedDataRoot;
+	return _repackagedDataRootValid;
 }
 
 // Locates an extracted disc root named @p label near the game directory: the
@@ -232,7 +253,7 @@ static void addMissingTitanicFile(Common::String &missing, const char *path) {
 // Checks that either the repackaged single-folder install or the extracted
 // TITANIC1/TITANIC2 two-disc layout holds the files the engine needs, showing
 // an error dialog that lists whatever is missing.
-static bool validateTitanicDiscLayout() {
+bool TitanicGameSupport::validateDiscLayout() const {
 	Common::String missing;
 	Common::FSNode cd1Root, cd2Root;
 
@@ -310,28 +331,6 @@ static int globalIntValue(const ScriptVM &vm, const char *name) {
 	return it->_value.intValue;
 }
 
-class TitanicGameSupport : public GameSupport {
-public:
-	const GameProfile &profile() const override;
-	Common::Error initializePaths(PathRuntime &paths) const override;
-	bool patchBootScript(Script &script) const override;
-	Common::String canonicalDiscLabel(const Common::String &label) const override;
-	bool resolveDisc(const Common::String &requested,
-			Common::String &mountedLabel) const override;
-	bool resolvePathDirectory(const Common::String &path,
-			Common::FSNode &out) const override;
-	void onForceUpdate(CyberFlixEngine &engine) override;
-	void onGameStateLoaded(const ScriptVM &vm) override;
-	bool shouldLogScriptVariable(const Common::String &name) const override;
-	bool shouldLogScriptDispatch(const Common::String &name,
-			const Common::String &self) const override;
-
-private:
-	int _cargoPaintingTimerStartFrame = 0;
-	int _lastCargoPaintingTimerLogBucket = -1;
-	bool _cargoPaintingTimerExpiredLogged = false;
-};
-
 // The TI.EXE runtime executable name and Titanic's default save signature.
 const GameProfile &TitanicGameSupport::profile() const {
 	static const GameProfile profile = { "TI.EXE", "Titanic 1.0" };
@@ -351,7 +350,7 @@ Common::Error TitanicGameSupport::initializePaths(PathRuntime &paths) const {
 		paths.setCurrentDiscRootName(cd1Root.getName());
 	}
 
-	return validateTitanicDiscLayout() ? Common::kNoError : Common::kNoGameDataFoundError;
+	return validateDiscLayout() ? Common::kNoError : Common::kNoGameDataFoundError;
 }
 
 // Repairs the authored BOOTFILE boot script: finds the instruction pushing the
