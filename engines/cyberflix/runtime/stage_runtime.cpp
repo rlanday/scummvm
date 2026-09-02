@@ -328,23 +328,17 @@ void StageRuntime::sendToButton(CyberFlixEngine &engine, const Common::String &f
 				dispatchStage->name().c_str(), flat.c_str(), button.c_str());
 		return;
 	}
-	Common::Array<const Script *> scopes;
-	scopes.push_back(dispatchStage->buttonScript(static_cast<uint32>(dispatchNode), button));
-	scopes.push_back(dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)));
-	scopes.push_back(dispatchStage->stageScript());
 	Common::String flatName = dispatchStage->nodeName(static_cast<uint32>(dispatchNode));
-	Common::Array<Common::String> scopeSelf;
-	scopeSelf.push_back(button);
-	scopeSelf.push_back(flatName);
-	scopeSelf.push_back(dispatchStage->name());
-	Common::Array<Common::String> scopeProp;
-	scopeProp.push_back(button);
-	scopeProp.push_back(button);
-	scopeProp.push_back(button);
+	Common::Array<ScriptVM::LibraryScope> scopes;
+	scopes.push_back(ScriptVM::LibraryScope(
+			dispatchStage->buttonScript(static_cast<uint32>(dispatchNode), button), button, button));
+	scopes.push_back(ScriptVM::LibraryScope(
+			dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)), flatName, button));
+	scopes.push_back(ScriptVM::LibraryScope(dispatchStage->stageScript(), dispatchStage->name(), button));
 	debug(1, "CyberFlix: sendtobutton('%s', '%s') -> %s(%u args)",
 			flatName.c_str(), button.c_str(),
 			message.c_str(), args.size());
-	engine.dispatchWithScopeChainContextsValue(scopes, scopeSelf, scopeProp,
+	engine.dispatchWithScopeChainContextsValue(scopes,
 			button, button, message, args, "button");
 	engine.propRuntime().refreshPropsIfDirty(engine);
 }
@@ -367,20 +361,14 @@ Value StageRuntime::sendToButtonFx(CyberFlixEngine &engine, const Common::String
 				dispatchStage->name().c_str(), flat.c_str(), button.c_str());
 		return Value();
 	}
-	Common::Array<const Script *> scopes;
-	scopes.push_back(dispatchStage->buttonScript(static_cast<uint32>(dispatchNode), button));
-	scopes.push_back(dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)));
-	scopes.push_back(dispatchStage->stageScript());
 	Common::String flatName = dispatchStage->nodeName(static_cast<uint32>(dispatchNode));
-	Common::Array<Common::String> scopeSelf;
-	scopeSelf.push_back(button);
-	scopeSelf.push_back(flatName);
-	scopeSelf.push_back(dispatchStage->name());
-	Common::Array<Common::String> scopeProp;
-	scopeProp.push_back(button);
-	scopeProp.push_back(button);
-	scopeProp.push_back(button);
-	return engine.dispatchWithScopeChainContextsValue(scopes, scopeSelf, scopeProp,
+	Common::Array<ScriptVM::LibraryScope> scopes;
+	scopes.push_back(ScriptVM::LibraryScope(
+			dispatchStage->buttonScript(static_cast<uint32>(dispatchNode), button), button, button));
+	scopes.push_back(ScriptVM::LibraryScope(
+			dispatchStage->nodeScript(static_cast<uint32>(dispatchNode)), flatName, button));
+	scopes.push_back(ScriptVM::LibraryScope(dispatchStage->stageScript(), dispatchStage->name(), button));
+	return engine.dispatchWithScopeChainContextsValue(scopes,
 			button, button, message, args, "buttonfx");
 }
 
@@ -412,14 +400,15 @@ void StageRuntime::renderStageNode(CyberFlixEngine &engine, int targetNode, bool
 	// the native compositor never programs it during a node repaint, and
 	// animation poses step in PropRuntime::advanceAnimationFrame(), not here.
 	Graphics::Surface *screen = engine._system->lockScreen();
+	if (!screen)
+		return;
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
 	copyFrameToScreen(*screen, frame, 0, 0);
 
-	Common::Array<const Shop::Prop *> draw;
-	Common::Array<const Shop *> drawShop;
-	engine.propRuntime().collectScreenProps(draw, drawShop);
-	for (uint32 i = 0; i < draw.size(); ++i) {
-		Shop::PropRenderResult rendered = drawShop[i]->renderProp(*draw[i]);
+	Common::Array<PropRuntime::DrawEntry> draw;
+	engine.propRuntime().collectScreenProps(draw);
+	for (const PropRuntime::DrawEntry &entry : draw) {
+		Shop::PropRenderResult rendered = entry.shop->renderProp(*entry.prop);
 		if (!rendered.valid)
 			continue;
 		drawCel(*screen, *rendered.cel, rendered.rect, Common::Rect(kScreenWidth, kScreenHeight));
@@ -459,13 +448,14 @@ void StageRuntime::repaintDirtyStageRects(CyberFlixEngine &engine, bool present)
 	// frame is a full 512x384 buffer (~196 KB).
 	const FrameImage &frame = _nodeFrame;
 
-	Common::Array<const Shop::Prop *> draw;
-	Common::Array<const Shop *> drawShop;
-	engine.propRuntime().collectScreenProps(draw, drawShop);
+	Common::Array<PropRuntime::DrawEntry> draw;
+	engine.propRuntime().collectScreenProps(draw);
 
 	Graphics::Surface *screen = engine._system->lockScreen();
-	for (uint32 r = 0; r < engine.propRuntime().dirtyRects().size(); ++r) {
-		Common::Rect dirty = engine.propRuntime().dirtyRects()[r];
+	if (!screen)
+		return;
+	for (const Common::Rect &pendingRect : engine.propRuntime().dirtyRects()) {
+		Common::Rect dirty = pendingRect;
 		dirty.clip(Common::Rect(kScreenWidth, kScreenHeight));
 		if (dirty.isEmpty())
 			continue;
@@ -479,8 +469,8 @@ void StageRuntime::repaintDirtyStageRects(CyberFlixEngine &engine, bool present)
 			}
 		}
 
-		for (uint32 i = 0; i < draw.size(); ++i) {
-			Shop::PropRenderResult rendered = drawShop[i]->renderProp(*draw[i]);
+		for (const PropRuntime::DrawEntry &entry : draw) {
+			Shop::PropRenderResult rendered = entry.shop->renderProp(*entry.prop);
 			if (!rendered.valid)
 				continue;
 			if (!dirty.intersects(rendered.rect))

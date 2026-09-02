@@ -30,6 +30,7 @@
 #include "common/str.h"
 
 #include "cyberflix/archive.h"
+#include "cyberflix/resource_helpers.h"
 #include "cyberflix/script.h"
 #include "cyberflix/shop.h"
 
@@ -162,9 +163,8 @@ public:
 			const Common::String &setName) const;
 
 private:
-	const byte *engineBase(uint32 index) const;
+	ResourceView engineView(uint32 index) const;
 	int resourceIndexById(uint32 id) const;
-	Common::String pascalString(const byte *p) const;
 	ActorCellResult resolveActorCell(const Actor &actor, int angle) const;
 	uint16 shapePoseCountFor(const Actor &actor) const;
 

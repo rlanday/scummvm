@@ -36,14 +36,26 @@ class CyberFlixEngine;
 
 class PropRuntime {
 public:
+	struct DrawEntry {
+		DrawEntry(const Shop::Prop *prop_, const Shop *shop_, int16 depth_) :
+				prop(prop_), shop(shop_), depth(depth_) {}
+
+		const Shop::Prop *prop;
+		const Shop *shop;
+		int16 depth;
+	};
+	struct PropRef {
+		Common::SharedPtr<Shop> shop;
+		Shop::Prop *prop = nullptr;
+	};
+
 	Shop *findShop(const Common::String &name);
 	Common::SharedPtr<Shop> findShopShared(const Common::String &name);
-	Shop::Prop *findProp(const Common::String &name, Shop **shopOut = nullptr);
-	Common::SharedPtr<Shop> findPropOwnerShared(const Common::String &name, Shop::Prop **propOut);
+	Shop::Prop *findProp(const Common::String &name);
+	PropRef findPropRef(const Common::String &name);
 	bool resolvePropStar(CyberFlixEngine &engine, Shop::Prop &prop);
 
-	void collectScreenProps(Common::Array<const Shop::Prop *> &draw,
-			Common::Array<const Shop *> &drawShop) const;
+	void collectScreenProps(Common::Array<DrawEntry> &draw) const;
 	/** Step every prop and actor one animation frame and queue the dirty rects
 	 *  the change implies.
 	 *
@@ -55,8 +67,7 @@ public:
 	 *  (which a single script dispatch can reach several times) wraps the pose
 	 *  index past the last frame and the fuse visibly flips back. */
 	void advanceAnimationFrame(CyberFlixEngine &engine);
-	void collectWorldProps(CyberFlixEngine &engine, Common::Array<const Shop::Prop *> &draw,
-			Common::Array<const Shop *> &drawShop, Common::Array<int16> &depths,
+	void collectWorldProps(CyberFlixEngine &engine, Common::Array<DrawEntry> &draw,
 			const Shop::WorldCamera &camera) const;
 	bool screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const;
 	void queueDirtyRect(const Common::Rect &rect);

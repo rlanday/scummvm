@@ -109,6 +109,17 @@ public:
 	 */
 	uint32 runProgram(const Script &script, uint32 maxSteps = 100000);
 
+	struct LibraryScope {
+		LibraryScope(const Script *script_ = nullptr,
+				const Common::String &self_ = Common::String(),
+				const Common::String &prop_ = Common::String()) :
+				script(script_), self(self_), prop(prop_) {}
+
+		const Script *script;
+		Common::String self;
+		Common::String prop;
+	};
+
 	/**
 	 * Register @p script as a function library on the dispatch scope chain
 	 * (later additions are searched FIRST, mirroring the 2-entry chain built by
@@ -116,14 +127,10 @@ public:
 	 * @p script is retained, not owned, and must outlive the VM's use.
 	 */
 	void addLibrary(const Script *script) {
-		_libraries.push_back(script);
-		_librarySelf.push_back(Common::String());
-		_libraryProp.push_back(Common::String());
+		_libraries.push_back(LibraryScope(script));
 	}
 	struct LibraryState {
-		Common::Array<const Script *> libraries;
-		Common::Array<Common::String> self;
-		Common::Array<Common::String> prop;
+		Common::Array<LibraryScope> libraries;
 	};
 
 	/**
@@ -134,18 +141,10 @@ public:
 	 * and boot messages (FUN_004390a0) exactly [BOOTFILE res1, BOOTFILE res2]
 	 * — so inner dispatches REPLACE the outer chain rather than stack on it.
 	 */
-	LibraryState swapLibrariesWithContexts(const Common::Array<const Script *> &libs,
-			const Common::Array<Common::String> &self,
-			const Common::Array<Common::String> &prop) {
+	LibraryState swapLibraries(Common::Array<LibraryScope> &libraries) {
 		LibraryState prev;
 		prev.libraries.swap(_libraries);
-		prev.self.swap(_librarySelf);
-		prev.prop.swap(_libraryProp);
-		_libraries = libs;
-		_librarySelf = self;
-		_libraryProp = prop;
-		_librarySelf.resize(_libraries.size());
-		_libraryProp.resize(_libraries.size());
+		_libraries.swap(libraries);
 		return prev;
 	}
 
@@ -159,28 +158,20 @@ public:
 			const Script *scope2, const Script *scope3, const Script *tail) {
 		LibraryState prev;
 		prev.libraries.swap(_libraries);
-		prev.self.swap(_librarySelf);
-		prev.prop.swap(_libraryProp);
 		_libraries.reserve(4);
-		_librarySelf.reserve(4);
-		_libraryProp.reserve(4);
 		if (tail)
-			_libraries.push_back(tail);
+			_libraries.push_back(LibraryScope(tail));
 		if (scope3)
-			_libraries.push_back(scope3);
+			_libraries.push_back(LibraryScope(scope3));
 		if (scope2)
-			_libraries.push_back(scope2);
+			_libraries.push_back(LibraryScope(scope2));
 		if (scope1)
-			_libraries.push_back(scope1);
-		_librarySelf.resize(_libraries.size());
-		_libraryProp.resize(_libraries.size());
+			_libraries.push_back(LibraryScope(scope1));
 		return prev;
 	}
 
 	void restoreLibraries(LibraryState &state) {
 		_libraries.swap(state.libraries);
-		_librarySelf.swap(state.self);
-		_libraryProp.swap(state.prop);
 	}
 
 	/**
@@ -334,9 +325,7 @@ private:
 	Common::Array<Common::HashMap<Common::String, Value> > _locals;
 
 	/// Function-library scope chain for callFunction (latest searched first).
-	Common::Array<const Script *> _libraries;
-	Common::Array<Common::String> _librarySelf;
-	Common::Array<Common::String> _libraryProp;
+	Common::Array<LibraryScope> _libraries;
 	uint32 _callDepth; ///< Recursion guard for script-to-script calls.
 	uint32 _exprDepth; ///< Recursion guard for nested expression atoms.
 	uint32 _bodyDepth; ///< Active runBody() nesting (see executing()).

@@ -30,6 +30,7 @@
 
 #include "cyberflix/archive.h"
 #include "cyberflix/image.h"
+#include "cyberflix/resource_helpers.h"
 #include "cyberflix/script.h"
 
 namespace CyberFlix {
@@ -211,10 +212,8 @@ public:
 			const Common::String &setName) const;
 
 private:
-	const byte *engineBase(uint32 index) const;
+	ResourceView engineView(uint32 index) const;
 	int resourceIndexById(uint32 id) const;
-	/** Read the Pascal string at @p p (bounded by the file buffer). */
-	Common::String pascalString(const byte *p) const;
 	Common::SharedPtr<CelImage> celResource(uint32 resId) const;
 	PropCellResult resolvePropCel(const Prop &prop, int angle) const;
 

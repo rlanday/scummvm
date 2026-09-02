@@ -132,6 +132,10 @@ static void blitCenteredWithPalette(Console &console, const byte *pixels,
 		}
 
 	Graphics::Surface *screen = g_system->lockScreen();
+	if (!screen) {
+		console.debugPrintf("Could not lock the screen.\n");
+		return;
+	}
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
 	int x0 = (kScreenWidth - w) / 2;
 	int y0 = (kScreenHeight - h) / 2;

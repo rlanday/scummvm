@@ -120,10 +120,10 @@ bool decodeCel(Common::SeekableReadStream &stream, uint16 width, uint16 height, 
 	out.originY = originY;
 	out.pixels.resize(pixelCount);
 	out.opaque.resize(pixelCount);
-	for (uint i = 0; i < out.pixels.size(); ++i) {
-		out.pixels[i] = 0;
-		out.opaque[i] = 0;
-	}
+	for (byte &pixel : out.pixels)
+		pixel = 0;
+	for (byte &opaque : out.opaque)
+		opaque = 0;
 
 	uint32 p = 0;
 	for (uint16 y = 0; y < height; ++y) {
@@ -488,7 +488,7 @@ private:
 };
 
 uint32 FrameSequence::applyFrame(const byte *src, uint32 srcSize) {
-	if (srcSize < 4)
+	if (!src || srcSize < 4)
 		return 0;
 	const int height = src[0] | (src[1] << 8);
 	const int width = src[2] | (src[3] << 8);
@@ -591,14 +591,14 @@ uint32 decodeFrame(const byte *src, uint32 srcSize, FrameImage &out) {
 
 bool loadPalette(const byte *fileData, uint32 fileSize, Palette &rgb) {
 	static const uint32 kColorSpecByteCount = 8;
-	if (fileSize < kColorSpecByteCount + kPaletteColorCount * kColorSpecByteCount)
+	if (!fileData || fileSize < kColorSpecByteCount + kPaletteColorCount * kColorSpecByteCount)
 		return false;
 
 	// The clut is embedded (not a top-level resource). Identify it by its
 	// ColorSpec array: 256 eight-byte entries whose leading uint16 value field
 	// counts 0, 1, 2, ... A 64-entry run is a reliable, cheap signature.
 	const uint32 limit = fileSize - kPaletteColorCount * kColorSpecByteCount;
-	for (uint32 o = 0; o + 64 * kColorSpecByteCount <= fileSize; o += 2) {
+	for (uint32 o = 0; o <= limit; o += 2) {
 		bool match = true;
 		for (uint32 k = 0; k < 64; ++k) {
 			const uint32 b = o + k * kColorSpecByteCount;

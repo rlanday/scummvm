@@ -23,6 +23,7 @@
 #define CYBERFLIX_RESOURCE_HELPERS_H
 
 #include "common/array.h"
+#include "common/endian.h"
 #include "common/scummsys.h"
 #include "common/str.h"
 #include "common/util.h"
@@ -41,11 +42,126 @@ namespace CyberFlix {
  */
 static const uint32 kMasterHeaderInfoTag = 0x00040000;
 
-inline const byte *resourceEngineBase(const Common::Array<byte> &fileData,
+/** A recoverably bounds-checked view of bytes in one archive resource. */
+class ResourceView {
+public:
+	ResourceView() : _data(nullptr), _size(0) {}
+	ResourceView(const byte *data, uint64 size) : _data(data), _size(data ? size : 0) {}
+
+	bool valid() const { return _data != nullptr; }
+	uint64 size() const { return _size; }
+
+	bool contains(uint64 offset, uint64 length = 1) const {
+		return valid() && offset <= _size && length <= _size - offset;
+	}
+
+	const byte *dataAt(uint64 offset, uint64 length = 1) const {
+		return contains(offset, length) ? _data + offset : nullptr;
+	}
+
+	ResourceView subview(uint64 offset, uint64 length) const {
+		return contains(offset, length) ? ResourceView(_data + offset, length) : ResourceView();
+	}
+
+	ResourceView recordAt(uint64 offset, uint32 index, uint32 stride) const {
+		if (stride == 0 || offset > _size)
+			return ResourceView();
+		const uint64 recordCount = (_size - offset) / stride;
+		if (index >= recordCount)
+			return ResourceView();
+		return ResourceView(_data + offset + static_cast<uint64>(index) * stride, stride);
+	}
+
+	bool readUint16LE(uint64 offset, uint16 &value) const {
+		const byte *p = dataAt(offset, sizeof(value));
+		if (!p)
+			return false;
+		value = READ_LE_UINT16(p);
+		return true;
+	}
+
+	bool readUint32LE(uint64 offset, uint32 &value) const {
+		const byte *p = dataAt(offset, sizeof(value));
+		if (!p)
+			return false;
+		value = READ_LE_UINT32(p);
+		return true;
+	}
+
+	Common::String readPascalString(uint64 offset, bool allowTruncated = false) const {
+		const byte *p = dataAt(offset);
+		if (!p)
+			return Common::String();
+		uint length = *p;
+		if (!contains(offset + 1, length)) {
+			if (!allowTruncated)
+				return Common::String();
+			length = static_cast<uint>(_size - offset - 1);
+		}
+		return Common::String(reinterpret_cast<const char *>(p + 1), length);
+	}
+
+	bool pascalEqualsIgnoreCase(uint64 offset, const Common::String &name) const {
+		const byte *p = dataAt(offset);
+		if (!p)
+			return false;
+		const uint length = *p;
+		if (length != name.size() || !contains(offset + 1, length))
+			return false;
+		for (uint i = 0; i < length; ++i)
+			if (tolower(static_cast<unsigned char>(p[i + 1])) !=
+						tolower(static_cast<unsigned char>(name[i])))
+				return false;
+		return true;
+	}
+
+private:
+	const byte *_data;
+	uint64 _size;
+};
+
+/** A validated sequence of fixed-size records within a ResourceView. */
+class RecordRange {
+public:
+	RecordRange() : _offset(0), _count(0), _stride(0), _valid(false) {}
+	RecordRange(const ResourceView &view, uint64 offset, uint32 count, uint32 stride) :
+			_view(view), _offset(offset), _count(count), _stride(stride), _valid(false) {
+		if (stride == 0 || offset > view.size())
+			return;
+		if (count > (view.size() - offset) / stride)
+			return;
+		_valid = view.valid();
+	}
+
+	bool valid() const { return _valid; }
+	uint32 size() const { return _valid ? _count : 0; }
+	const ResourceView &view() const { return _view; }
+	ResourceView record(uint32 index) const {
+		return _valid && index < _count ? _view.recordAt(_offset, index, _stride) : ResourceView();
+	}
+
+private:
+	ResourceView _view;
+	uint64 _offset;
+	uint32 _count;
+	uint32 _stride;
+	bool _valid;
+};
+
+inline ResourceView resourcePayloadView(const Common::Array<byte> &fileData,
 		const Archive::Resource &res) {
-	if (res.empty || res.dataOffset < 4 || res.dataOffset > fileData.size())
-		return nullptr;
-	return fileData.begin() + res.dataOffset - 4;
+	if (res.empty || res.dataOffset > fileData.size() ||
+			res.length > fileData.size() - res.dataOffset)
+		return ResourceView();
+	return ResourceView(fileData.begin() + res.dataOffset, res.length);
+}
+
+inline ResourceView resourceEngineView(const Common::Array<byte> &fileData,
+		const Archive::Resource &res) {
+	if (res.empty || res.dataOffset < 4 || res.dataOffset - 4 > fileData.size() ||
+			static_cast<uint64>(res.length) + 4 > fileData.size() - (res.dataOffset - 4))
+		return ResourceView();
+	return ResourceView(fileData.begin() + res.dataOffset - 4, static_cast<uint64>(res.length) + 4);
 }
 
 bool openArchiveFile(const Common::String &name, const char *kind,
@@ -70,11 +186,6 @@ inline int findMasterHeaderIndex(const Archive &archive) {
 	return -1;
 }
 
-/** True when @p p points to at least @p length bytes before @p end. */
-inline bool hasBytes(const byte *p, const byte *end, uint64 length) {
-	return p && p <= end && length <= static_cast<uint64>(end - p);
-}
-
 /**
  * True when the half-open range [@p offset, @p offset + @p length) fits in
  * @p size.
@@ -93,37 +204,6 @@ inline uint32 boundedRecordCount(uint32 count, uint64 size, uint64 offset, uint3
 
 inline bool fitsInt16(int64 value) {
 	return value >= -32768 && value <= 32767;
-}
-
-/**
- * Compare @p name against the Pascal string at @p p in place, case-insensitively,
- * without constructing a temporary Common::String. These lookups sit on
- * idle/mouse hit-test hot paths (scene/view/painting/button table records).
- */
-inline bool pascalEqualsIgnoreCase(const byte *p, const byte *end, const Common::String &name) {
-	if (!hasBytes(p, end, 1))
-		return false;
-	const uint len = *p;
-	if (!hasBytes(p, end, static_cast<uint64>(len) + 1) || len != name.size())
-		return false;
-	for (uint i = 0; i < len; ++i)
-		if (tolower((unsigned char)p[1 + i]) != tolower((unsigned char)name[i]))
-			return false;
-	return true;
-}
-
-inline Common::String readPascalString(const byte *p,
-		const Common::Array<byte> &fileData, bool allowTruncated = false) {
-	if (!p || p < fileData.begin() || !hasBytes(p, fileData.end(), 1))
-		return Common::String();
-	uint len = *p;
-	const byte *s = p + 1;
-	if (!hasBytes(s, fileData.end(), len)) {
-		if (!allowTruncated)
-			return Common::String();
-		len = static_cast<uint>((fileData.end() - s));
-	}
-	return Common::String(reinterpret_cast<const char *>(s), len);
 }
 
 inline int nativeAngleDistance(int a, int b) {

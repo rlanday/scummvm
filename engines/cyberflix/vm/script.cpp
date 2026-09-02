@@ -714,7 +714,7 @@ const Script::Definition *Script::findDefinition(const Common::String &name) con
 	// definition in every idle/mouse sendto* dispatch.
 	Common::String folded;
 	const Common::String *key = &name;
-	for (uint32 i = 0; i < name.size(); ++i) {
+	for (uint i = 0; i < name.size(); ++i) {
 		char c = name[i];
 		if (c >= 'A' && c <= 'Z') {
 			folded = name;

@@ -67,6 +67,7 @@ class SoundHandle;
 
 namespace Graphics {
 class Font;
+class ManagedSurface;
 }
 
 namespace CyberFlix {
@@ -153,8 +154,8 @@ public:
 			int first, int last, int weight);
 	void setVisualEffect(uint16 effect, int duration);
 
-	/** Copy the visible screen into @p out; the caller must free() it. */
-	bool captureScreen(Graphics::Surface &out);
+	/** Copy the visible screen into @p out. */
+	bool captureScreen(Graphics::ManagedSurface &out);
 
 	/** Blit one band of @p image into the screen surface without presenting. */
 	void blitScreenBand(const Graphics::Surface &image, const Common::Rect &band);
@@ -589,9 +590,7 @@ private:
 			const Common::String &self, const Common::String &targetProp,
 			const Common::String &message, const Common::Array<Value> &args,
 			const char *debugContext);
-	Value dispatchWithScopeChainContextsValue(const Common::Array<const Script *> &scopes,
-			const Common::Array<Common::String> &scopeSelf,
-			const Common::Array<Common::String> &scopeProp,
+	Value dispatchWithScopeChainContextsValue(const Common::Array<ScriptVM::LibraryScope> &scopes,
 			const Common::String &self, const Common::String &targetProp,
 			const Common::String &message, const Common::Array<Value> &args,
 			const char *debugContext);

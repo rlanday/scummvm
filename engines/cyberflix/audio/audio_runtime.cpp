@@ -56,9 +56,9 @@ AudioRuntime::ThemeTrack *AudioRuntime::findTrack(const Common::String &name) {
 Common::SharedPtr<AudioRuntime::ThemeTrack> AudioRuntime::findTrackRef(const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
-	for (uint i = 0; i < _tracks.size(); ++i)
-		if (_tracks[i]->name == key)
-			return _tracks[i];
+	for (const Common::SharedPtr<ThemeTrack> &track : _tracks)
+		if (track->name == key)
+			return track;
 	return Common::SharedPtr<ThemeTrack>();
 }
 
@@ -181,11 +181,10 @@ private:
 			return;
 		}
 
-		// Skip zero-sample cues (missing/corrupt resources), wrapping through
-		// the loop point exactly like normal advancement — a looping theme
-		// whose FINAL playlist entry is empty must wrap, not finish. Bound the
-		// walk to one full pass so an all-empty playlist still terminates.
-		for (uint32 stepped = 0; stepped <= _cues.size(); ++stepped) {
+		// Find the next playable cue. At the end of a looping theme, continue
+		// from loopIdx even when the final cue is empty. Try at most the number
+		// of playlist entries so a loop made entirely of empty cues terminates.
+		for (uint32 remaining = _cues.size(); remaining > 0; --remaining) {
 			if (_cueIndex + 1 >= _cues.size()) {
 				if (_loopSamples == 0) {
 					_finished = true;
@@ -243,25 +242,18 @@ private:
 	bool _finished = false;
 };
 
-const AudioRuntime::ThemeTrack::Cue *AudioRuntime::findSfxCue(const Common::String &name,
-		ThemeTrack **trackOut) const {
-	for (uint i = 0; i < _tracks.size(); ++i) {
-		for (uint j = 0; j < _tracks[i]->sfxCues.size(); ++j) {
-			if (_tracks[i]->sfxCues[j].name.equalsIgnoreCase(name)) {
-				if (trackOut)
-					*trackOut = _tracks[i].get();
-				return &_tracks[i]->sfxCues[j];
+AudioRuntime::SfxCueMatch AudioRuntime::findSfxCue(const Common::String &name) {
+	for (Common::SharedPtr<ThemeTrack> &track : _tracks) {
+		for (uint cueIndex = 0; cueIndex < track->sfxCues.size(); ++cueIndex) {
+			if (track->sfxCues[cueIndex].name.equalsIgnoreCase(name)) {
+				SfxCueMatch match;
+				match.track = track;
+				match.cueIndex = cueIndex;
+				return match;
 			}
 		}
 	}
-	return nullptr;
-}
-
-AudioRuntime::ThemeTrack::Cue *AudioRuntime::findMutableSfxCue(const Common::String &name,
-		ThemeTrack **trackOut) {
-	// Cue storage is owned by heap-allocated ThemeTracks, so the const lookup's
-	// result can safely be handed back mutable for the setter paths.
-	return const_cast<ThemeTrack::Cue *>(findSfxCue(name, trackOut));
+	return SfxCueMatch();
 }
 
 static byte nativeDirectSoundVolumeToMixerVolume(int volume) {
@@ -290,17 +282,17 @@ void AudioRuntime::applyLiveAudioVolumes(CyberFlixEngine &engine) {
 				effectiveAudioVolume(track ? track->volume : 255));
 	}
 
-	for (uint i = 0; i < ARRAYSIZE(_soundSlots); ++i) {
-		if (engine._mixer->isSoundHandleActive(_soundSlots[i].handle)) {
-			const ThemeTrack::Cue *cue = findSfxCue(_soundSlots[i].cueName);
-			engine._mixer->setChannelVolume(_soundSlots[i].handle,
-					effectiveAudioVolume(cue ? cue->volume : 255));
+	for (SoundSlot &slot : _soundSlots) {
+		if (engine._mixer->isSoundHandleActive(slot.handle)) {
+			const SfxCueMatch match = findSfxCue(slot.cueName);
+			engine._mixer->setChannelVolume(slot.handle,
+					effectiveAudioVolume(match.track ? match.track->sfxCues[match.cueIndex].volume : 255));
 		}
 	}
 	if (engine._mixer->isSoundHandleActive(_voiceSlot.handle)) {
-		const ThemeTrack::Cue *cue = findSfxCue(_voiceSlot.cueName);
+		const SfxCueMatch match = findSfxCue(_voiceSlot.cueName);
 		engine._mixer->setChannelVolume(_voiceSlot.handle,
-				effectiveAudioVolume(cue ? cue->volume : 255));
+				effectiveAudioVolume(match.track ? match.track->sfxCues[match.cueIndex].volume : 255));
 	}
 }
 
@@ -404,74 +396,88 @@ void AudioRuntime::openTrackFile(const Common::String &name) {
 
 	const Archive::Resource *masterResource = archive.getResourceCount()
 			? &archive.getResource(0) : nullptr;
-	const byte *master = masterResource
-			? resourceEngineBase(track->fileData, *masterResource) : nullptr;
-	const uint64 masterSize = masterResource
-			? static_cast<uint64>(masterResource->length) + 4 : 0;
-	if (!master || masterSize < kTrackMasterHeaderSize) {
+	const ResourceView master = masterResource
+			? resourceEngineView(track->fileData, *masterResource) : ResourceView();
+	const byte *masterData = master.dataAt(0, kTrackMasterHeaderSize);
+	if (!masterData) {
 		warning("CyberFlix: track '%s' has no master header", name.c_str());
 		return;
 	}
-	Common::String logicalName = readPascalString(master + 0x24, track->fileData, true);
+	Common::String logicalName = master.readPascalString(0x24, true);
 	if (!logicalName.empty()) {
 		track->name = logicalName;
 		track->name.toLowercase();
 	}
-	uint32 themeTableId = READ_LE_UINT32(master + 0x1c);
-	uint32 sfxTableId = READ_LE_UINT32(master + 0x20);
+	uint32 themeTableId = READ_LE_UINT32(masterData + 0x1c);
+	uint32 sfxTableId = READ_LE_UINT32(masterData + 0x20);
 	const Archive::Resource *themeTableResource = themeTableId < archive.getResourceCount()
 			? &archive.getResource(themeTableId) : nullptr;
-	const byte *tt = themeTableResource
-			? resourceEngineBase(track->fileData, *themeTableResource) : nullptr;
-	const uint64 themeTableSize = themeTableResource
-			? static_cast<uint64>(themeTableResource->length) + 4 : 0;
-	if (!tt || themeTableSize < kThemeCueTableOffset) {
+	const ResourceView themeTable = themeTableResource
+			? resourceEngineView(track->fileData, *themeTableResource) : ResourceView();
+	const byte *themeHeader = themeTable.dataAt(0, kThemeCueTableOffset);
+	if (!themeHeader) {
 		warning("CyberFlix: track '%s' has no theme table", name.c_str());
 		return;
 	}
 
-	track->loopIdx = READ_LE_UINT32(tt);
-	uint32 playlistLen = boundedRecordCount(READ_LE_UINT16(tt + 4),
+	track->loopIdx = READ_LE_UINT32(themeHeader);
+	const uint32 playlistLen = boundedRecordCount(READ_LE_UINT16(themeHeader + 4),
 			kThemeCueCountOffset, kThemePlaylistOffset, 2);
-	for (uint32 i = 0; i < playlistLen; ++i)
-		track->playlist.push_back(READ_LE_UINT16(tt + kThemePlaylistOffset + 2 * i));
+	const RecordRange playlist(themeTable, kThemePlaylistOffset, playlistLen, 2);
+	for (uint32 i = 0; i < playlist.size(); ++i) {
+		uint16 cueIndex;
+		if (playlist.record(i).readUint16LE(0, cueIndex))
+			track->playlist.push_back(cueIndex);
+	}
 	// FUN_00411cc0 clamps the loop target into the playlist.
 	if (!track->playlist.empty() && track->loopIdx >= track->playlist.size())
 		track->loopIdx = track->playlist.size() - 1;
 
-	uint32 themeCueCount = boundedRecordCount(READ_LE_UINT32(tt + kThemeCueCountOffset),
-			themeTableSize, kThemeCueTableOffset, kCueRecordSize);
-	for (uint32 i = 0; i < themeCueCount; ++i) {
-		const byte *rec = tt + kThemeCueTableOffset + kCueRecordSize * i;
+	const uint32 themeCueCount = boundedRecordCount(READ_LE_UINT32(themeHeader + kThemeCueCountOffset),
+			themeTable.size(), kThemeCueTableOffset, kCueRecordSize);
+	const RecordRange themeCues(themeTable, kThemeCueTableOffset, themeCueCount, kCueRecordSize);
+	for (uint32 i = 0; i < themeCues.size(); ++i) {
+		const ResourceView cueRecord = themeCues.record(i);
+		const byte *cueData = cueRecord.dataAt(0, kCueRecordSize);
+		if (!cueData)
+			continue;
 		ThemeTrack::Cue cue;
-		uint32 resId = READ_LE_UINT32(rec + 4);
-		cue.resId = resId;
-		cue.name = readPascalString(rec + 0xa, track->fileData, true);
-		if (resId < archive.getResourceCount() && !archive.getResource(resId).empty) {
-			cue.dataOffset = archive.getResource(resId).dataOffset;
-			cue.length = archive.getResource(resId).length;
+		cue.resId = READ_LE_UINT32(cueData + 4);
+		cue.name = cueRecord.readPascalString(0xa, true);
+		if (cue.resId < archive.getResourceCount()) {
+			const Archive::Resource &resource = archive.getResource(cue.resId);
+			if (resourcePayloadView(track->fileData, resource).valid()) {
+				cue.dataOffset = resource.dataOffset;
+				cue.length = resource.length;
+			}
 		}
 		track->cues.push_back(cue);
 	}
 
 	const Archive::Resource *sfxTableResource = sfxTableId < archive.getResourceCount()
 			? &archive.getResource(sfxTableId) : nullptr;
-	const byte *st = sfxTableResource
-			? resourceEngineBase(track->fileData, *sfxTableResource) : nullptr;
-	const uint64 sfxTableSize = sfxTableResource
-			? static_cast<uint64>(sfxTableResource->length) + 4 : 0;
-	if (st && sfxTableSize >= kSfxCueTableOffset) {
-		uint32 sfxCueCount = boundedRecordCount(READ_LE_UINT32(st + 4),
-				sfxTableSize, kSfxCueTableOffset, kCueRecordSize);
-		for (uint32 i = 0; i < sfxCueCount; ++i) {
-			const byte *rec = st + kSfxCueTableOffset + kCueRecordSize * i;
+	const ResourceView sfxTable = sfxTableResource
+			? resourceEngineView(track->fileData, *sfxTableResource) : ResourceView();
+	const byte *sfxHeader = sfxTable.dataAt(0, kSfxCueTableOffset);
+	if (sfxHeader) {
+		const uint32 sfxCueCount = boundedRecordCount(READ_LE_UINT32(sfxHeader + 4),
+				sfxTable.size(), kSfxCueTableOffset, kCueRecordSize);
+		const RecordRange sfxCues(sfxTable, kSfxCueTableOffset, sfxCueCount, kCueRecordSize);
+		for (uint32 i = 0; i < sfxCues.size(); ++i) {
+			const ResourceView cueRecord = sfxCues.record(i);
+			const byte *cueData = cueRecord.dataAt(0, kCueRecordSize);
+			if (!cueData)
+				continue;
 			ThemeTrack::Cue cue;
-			cue.flags = rec[0];
-			cue.resId = READ_LE_UINT32(rec + 4);
-			cue.name = readPascalString(rec + 0xa, track->fileData, true);
-			if (cue.resId < archive.getResourceCount() && !archive.getResource(cue.resId).empty) {
-				cue.dataOffset = archive.getResource(cue.resId).dataOffset;
-				cue.length = archive.getResource(cue.resId).length;
+			cue.flags = cueData[0];
+			cue.resId = READ_LE_UINT32(cueData + 4);
+			cue.name = cueRecord.readPascalString(0xa, true);
+			if (cue.resId < archive.getResourceCount()) {
+				const Archive::Resource &resource = archive.getResource(cue.resId);
+				if (resourcePayloadView(track->fileData, resource).valid()) {
+					cue.dataOffset = resource.dataOffset;
+					cue.length = resource.length;
+				}
 			}
 			track->sfxCues.push_back(cue);
 		}
@@ -536,16 +542,19 @@ void AudioRuntime::haltTheme(CyberFlixEngine &engine) {
 
 bool AudioRuntime::playSoundCue(CyberFlixEngine &engine, const Common::String &name, Audio::SoundHandle &handle,
 		Common::String &currentCue, uint32 &currentResId) {
-	ThemeTrack *track = nullptr;
-	const ThemeTrack::Cue *cue = findSfxCue(name, &track);
-	if (!cue || !track || cue->length == 0 ||
-			!hasRange(track->fileData.size(), cue->dataOffset, cue->length)) {
+	const SfxCueMatch match = findSfxCue(name);
+	if (!match.track) {
 		warning("CyberFlix: sound cue '%s' not found", name.c_str());
+		return false;
+	}
+	const ThemeTrack::Cue &cue = match.track->sfxCues[match.cueIndex];
+	if (cue.length == 0 || !hasRange(match.track->fileData.size(), cue.dataOffset, cue.length)) {
+		warning("CyberFlix: sound cue '%s' has invalid audio data", name.c_str());
 		return false;
 	}
 
 	Common::Array<byte> pcm;
-	decodeCbxAudio(track->fileData.begin() + cue->dataOffset, cue->length, pcm);
+	decodeCbxAudio(match.track->fileData.begin() + cue.dataOffset, cue.length, pcm);
 	if (pcm.empty())
 		return false;
 
@@ -554,9 +563,9 @@ bool AudioRuntime::playSoundCue(CyberFlixEngine &engine, const Common::String &n
 		return false;
 	engine._mixer->stopHandle(handle);
 	engine._mixer->playStream(Audio::Mixer::kSFXSoundType, &handle, stream);
-	engine._mixer->setChannelVolume(handle, effectiveAudioVolume(cue->volume));
-	currentCue = cue->name;
-	currentResId = cue->resId;
+	engine._mixer->setChannelVolume(handle, effectiveAudioVolume(cue.volume));
+	currentCue = cue.name;
+	currentResId = cue.resId;
 	return true;
 }
 
@@ -565,11 +574,12 @@ bool AudioRuntime::playSoundCue(CyberFlixEngine &engine, const Common::String &n
 // FUN_0042fbc0/FUN_0042fc30, using the cue resource id as the native priority
 // key when both slots are occupied.
 void AudioRuntime::playSound(CyberFlixEngine &engine, const Common::String &name, int mode) {
-	const ThemeTrack::Cue *cue = findSfxCue(name);
-	if (!cue) {
+	const SfxCueMatch match = findSfxCue(name);
+	if (!match.track) {
 		warning("CyberFlix: sound cue '%s' not found", name.c_str());
 		return;
 	}
+	const ThemeTrack::Cue &cue = match.track->sfxCues[match.cueIndex];
 
 	bool active0 = engine._mixer->isSoundHandleActive(_soundSlots[0].handle);
 	bool active1 = engine._mixer->isSoundHandleActive(_soundSlots[1].handle);
@@ -588,38 +598,38 @@ void AudioRuntime::playSound(CyberFlixEngine &engine, const Common::String &name
 
 	switch (mode) {
 	case 0: // singlesound
-		if ((active0 && _soundSlots[0].resId == cue->resId) ||
-				(active1 && _soundSlots[1].resId == cue->resId))
+		if ((active0 && _soundSlots[0].resId == cue.resId) ||
+				(active1 && _soundSlots[1].resId == cue.resId))
 			return;
 		if (!active0)
 			playSlot(0);
 		else if (!active1)
 			playSlot(1);
-		else if (_soundSlots[0].resId < cue->resId)
+		else if (_soundSlots[0].resId < cue.resId)
 			playSlot(0);
-		else if (_soundSlots[1].resId < cue->resId)
+		else if (_soundSlots[1].resId < cue.resId)
 			playSlot(1);
 		break;
 	case 1: // multiplesound
-		if (active0 && _soundSlots[0].resId == cue->resId)
+		if (active0 && _soundSlots[0].resId == cue.resId)
 			playSlot(0);
-		else if (active1 && _soundSlots[1].resId == cue->resId)
+		else if (active1 && _soundSlots[1].resId == cue.resId)
 			playSlot(1);
 		else if (!active0)
 			playSlot(0);
 		else if (!active1)
 			playSlot(1);
 		else if (_soundSlots[0].resId < _soundSlots[1].resId) {
-			if (_soundSlots[0].resId < cue->resId)
+			if (_soundSlots[0].resId < cue.resId)
 				playSlot(0);
-		} else if (_soundSlots[1].resId < cue->resId) {
+		} else if (_soundSlots[1].resId < cue.resId) {
 			playSlot(1);
 		}
 		break;
 	case 2: // dualsound
-		if (!active0 || _soundSlots[0].resId < cue->resId)
+		if (!active0 || _soundSlots[0].resId < cue.resId)
 			playSlot(0);
-		if (!active1 || _soundSlots[1].resId < cue->resId)
+		if (!active1 || _soundSlots[1].resId < cue.resId)
 			playSlot(1);
 		break;
 	case 3: // bothsound
@@ -682,8 +692,8 @@ int AudioRuntime::setWaveVolume(CyberFlixEngine &engine, int newLevel) {
 }
 
 int AudioRuntime::getSoundVolume(CyberFlixEngine &, const Common::String &name) {
-	ThemeTrack::Cue *cue = findMutableSfxCue(name);
-	if (!cue) {
+	const SfxCueMatch match = findSfxCue(name);
+	if (!match.track) {
 		ThemeTrack *track = findTrack(name);
 		if (track)
 			return track->sfxCues.empty() ? track->volume : track->sfxCues[0].volume;
@@ -691,16 +701,16 @@ int AudioRuntime::getSoundVolume(CyberFlixEngine &, const Common::String &name) 
 		return 0;
 	}
 
-	return cue->volume;
+	return match.track->sfxCues[match.cueIndex].volume;
 }
 
 int AudioRuntime::setSoundVolume(CyberFlixEngine &engine, const Common::String &name, int newVolume) {
-	ThemeTrack::Cue *cue = findMutableSfxCue(name);
-	if (!cue) {
+	const SfxCueMatch match = findSfxCue(name);
+	if (!match.track) {
 		ThemeTrack *track = findTrack(name);
 		if (track) {
-			for (uint i = 0; i < track->sfxCues.size(); ++i)
-				track->sfxCues[i].volume = CLIP(newVolume, 0, 255);
+			for (ThemeTrack::Cue &cue : track->sfxCues)
+				cue.volume = CLIP(newVolume, 0, 255);
 			applyLiveAudioVolumes(engine);
 			return track->sfxCues.empty() ? track->volume : track->sfxCues[0].volume;
 		}
@@ -708,17 +718,18 @@ int AudioRuntime::setSoundVolume(CyberFlixEngine &engine, const Common::String &
 		return 0;
 	}
 
-	cue->volume = CLIP(newVolume, 0, 255);
-	for (uint i = 0; i < ARRAYSIZE(_soundSlots); ++i)
-		if (_soundSlots[i].cueName.equalsIgnoreCase(cue->name) &&
-				engine._mixer->isSoundHandleActive(_soundSlots[i].handle))
-			engine._mixer->setChannelVolume(_soundSlots[i].handle,
-					effectiveAudioVolume(cue->volume));
-	if (_voiceSlot.cueName.equalsIgnoreCase(cue->name) &&
+	ThemeTrack::Cue &cue = match.track->sfxCues[match.cueIndex];
+	cue.volume = CLIP(newVolume, 0, 255);
+	for (SoundSlot &slot : _soundSlots)
+		if (slot.cueName.equalsIgnoreCase(cue.name) &&
+				engine._mixer->isSoundHandleActive(slot.handle))
+			engine._mixer->setChannelVolume(slot.handle,
+					effectiveAudioVolume(cue.volume));
+	if (_voiceSlot.cueName.equalsIgnoreCase(cue.name) &&
 			engine._mixer->isSoundHandleActive(_voiceSlot.handle))
 		engine._mixer->setChannelVolume(_voiceSlot.handle,
-				effectiveAudioVolume(cue->volume));
-	return cue->volume;
+				effectiveAudioVolume(cue.volume));
+	return cue.volume;
 }
 
 // currenttheme(which): which==1 -> the name of the cue now playing on the

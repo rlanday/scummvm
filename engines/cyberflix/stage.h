@@ -28,6 +28,7 @@
 
 #include "cyberflix/archive.h"
 #include "cyberflix/image.h"
+#include "cyberflix/resource_helpers.h"
 #include "cyberflix/script.h"
 
 namespace CyberFlix {
@@ -143,20 +144,13 @@ public:
 
 private:
 	void reset();
-	/** Engine-base pointer (record+8) of resource @p index, or nullptr. */
-	const byte *engineBase(uint32 index) const;
-	/** Payload pointer (record+12) of resource @p index, or nullptr. */
-	const byte *payload(uint32 index) const;
+	ResourceView engineView(uint32 index) const;
+	ResourceView payloadView(uint32 index) const;
 	/** Archive index of the resource whose id is @p id, or -1. */
 	int resourceIndexById(uint32 id) const;
-	/** Node record pointer for @p node, or nullptr if out of range. */
-	const byte *nodeRecord(uint32 node) const;
-	/** Button table payload pointer for @p node, or nullptr if unavailable. */
-	const byte *buttonTable(uint32 node, uint32 &count, uint32 &length) const;
-	/** Button record for @p button in @p node, or nullptr if missing. */
-	const byte *buttonRecord(uint32 node, const Common::String &button) const;
-	/** Read the Pascal string at @p p (bounded by the file buffer). */
-	Common::String pascalString(const byte *p) const;
+	ResourceView nodeRecord(uint32 node) const;
+	RecordRange buttonTable(uint32 node) const;
+	ResourceView buttonRecord(uint32 node, const Common::String &button) const;
 	/** Parse script resource @p id if it is referenced by stage metadata. */
 	bool parseScriptResource(uint32 id);
 	/** Parsed script resource @p id, or null if missing/not a script. */

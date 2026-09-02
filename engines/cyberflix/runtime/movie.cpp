@@ -52,14 +52,13 @@ namespace CyberFlix {
 static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, uint64 atSample) {
 	if (sfx.empty())
 		return;
-	const uint64 end64 = atSample + sfx.size();
-	if (atSample > 0xffffffffU || end64 > 0xffffffffU)
+	if (atSample > 0xffffffffU || sfx.size() > 0xffffffffU - atSample)
 		return;
 	const uint32 start = static_cast<uint32>(atSample);
-	const uint32 end = static_cast<uint32>(end64);
+	const uint32 end = start + static_cast<uint32>(sfx.size());
 	if (track.size() < end)
 		track.resize(end, 0x80);
-	for (uint32 i = 0; i < sfx.size(); ++i) {
+	for (uint i = 0; i < sfx.size(); ++i) {
 		int v = (static_cast<int>(track[start + i]) - 0x80) + (static_cast<int>(sfx[i]) - 0x80);
 		v = CLIP(v, -128, 127);
 		track[start + i] = static_cast<byte>(v + 0x80);
@@ -72,21 +71,21 @@ static void mixSfx(Common::Array<byte> &track, const Common::Array<byte> &sfx, u
 // the previous frame started. Letting them overlap instead stacks every cue in
 // the movie on top of itself -- TOUR9.MOV alone would play sixteen narration
 // lines at once.
-static void playMovieFrameSfx(Audio::Mixer *mixer, Common::Array<Audio::SoundHandle> &handles,
+static void playMovieFrameSfx(Audio::Mixer &mixer, Common::Array<Audio::SoundHandle> &handles,
 		const Common::Array<byte> &pcm, byte volume) {
-	if (!mixer || pcm.empty())
+	if (pcm.empty())
 		return;
 
-	for (uint i = 0; i < handles.size(); ++i)
-		mixer->stopHandle(handles[i]);
+	for (Audio::SoundHandle &handle : handles)
+		mixer.stopHandle(handle);
 	handles.clear();
 
 	Audio::SoundHandle handle;
 	Audio::SeekableAudioStream *stream = makeOwnedRawPcmStream(pcm);
 	if (!stream)
 		return;
-	mixer->playStream(Audio::Mixer::kSFXSoundType, &handle, stream);
-	mixer->setChannelVolume(handle, volume);
+	mixer.playStream(Audio::Mixer::kSFXSoundType, &handle, stream);
+	mixer.setChannelVolume(handle, volume);
 	handles.push_back(handle);
 }
 
@@ -181,6 +180,26 @@ struct MovieButton {
 	}
 };
 
+// Metadata for one entry in the movie's authored frame table.
+struct MovieFrame {
+	uint64 startMs = 0;
+	uint32 videoResource = 0;
+	MovieCommand navigation = MovieCommand::kNext;
+	Common::String name;
+	Common::String navigationMovie;
+	Common::String navigationTarget;
+	Common::Array<MovieButton> buttons;
+	Common::SharedPtr<Common::Array<byte> > sfx;
+	uint32 holdMs = 0;
+	uint16 drawOp = kMovieDrawBlit;
+	bool waitForCue = false;
+};
+
+struct MovieSegment {
+	uint startFrame = 0;
+	Palette palette;
+};
+
 struct MovieReturnFrame {
 	Common::String name;
 	int frame;
@@ -198,6 +217,8 @@ void MovieRuntime::blitMovieBand(CyberFlixEngine &engine, const byte *pixels, in
 		return;
 
 	Graphics::Surface *screen = engine._system->lockScreen();
+	if (!screen)
+		return;
 	for (int y = top; y < bottom; ++y) {
 		const int dstY = y0 + y;
 		if (dstY < 0 || dstY >= screen->h)
@@ -301,6 +322,8 @@ void MovieRuntime::runMovieTransition(CyberFlixEngine &engine, uint16 op, const 
 
 	// Trailing full-rect blit (every handler ends with FUN_00410660(rect, rect)).
 	Graphics::Surface *screen = engine._system->lockScreen();
+	if (!screen)
+		return;
 	copyFramePixelsToScreen(*screen, pixels, w, h, x0, y0);
 	engine._system->unlockScreen();
 	engine._system->updateScreen();
@@ -308,9 +331,9 @@ void MovieRuntime::runMovieTransition(CyberFlixEngine &engine, uint16 op, const 
 
 // Resolve a frame name (as used by GOTO buttons) to its index in the per-frame
 // table, mirroring FUN_0040e050. Returns -1 if not found.
-static int resolveFrameName(const Common::Array<Common::String> &names, const Common::String &target) {
-	for (uint i = 0; i < names.size(); ++i)
-		if (names[i].equalsIgnoreCase(target))
+static int resolveFrameName(const Common::Array<MovieFrame> &frames, const Common::String &target) {
+	for (uint i = 0; i < frames.size(); ++i)
+		if (frames[i].name.equalsIgnoreCase(target))
 			return static_cast<int>(i);
 	return -1;
 }
@@ -322,7 +345,7 @@ static int resolveFrameName(const Common::Array<Common::String> &names, const Co
 static bool runMovieCommand(MovieCommand command, const Common::String &currentMovieName,
 		int currentFrame, int frameCount, const Common::String &movieName,
 		const Common::String &targetFrameName,
-		const Common::Array<Common::String> &frameNames,
+		const Common::Array<MovieFrame> &frames,
 		Common::Array<MovieReturnFrame> &returnStack, int gotoFallbackFrame,
 		int &nextFrame, Common::String &nextMovieName,
 		int &nextMovieStartFrame, const char *source) {
@@ -330,7 +353,7 @@ static bool runMovieCommand(MovieCommand command, const Common::String &currentM
 	case MovieCommand::kEnd:
 		return true;
 	case MovieCommand::kGoto: {
-		int idx = resolveFrameName(frameNames, targetFrameName);
+		int idx = resolveFrameName(frames, targetFrameName);
 		nextFrame = (idx >= 0) ? idx : gotoFallbackFrame;
 		return false;
 	}
@@ -346,7 +369,7 @@ static bool runMovieCommand(MovieCommand command, const Common::String &currentM
 		}
 		return true;
 	case MovieCommand::kGosub: {
-		int idx = resolveFrameName(frameNames, targetFrameName);
+		int idx = resolveFrameName(frames, targetFrameName);
 		if (!movieName.empty() && idx >= 0 && returnStack.size() < kMovieReturnStackLimit) {
 			MovieReturnFrame ret;
 			ret.name = currentMovieName;
@@ -390,8 +413,8 @@ static bool runMovieCommand(MovieCommand command, const Common::String &currentM
 // event chunk +6 bit 0.
 bool MovieRuntime::cueStillPlaying(CyberFlixEngine &engine,
 		const Common::Array<Audio::SoundHandle> &handles) {
-	for (uint i = 0; i < handles.size(); ++i) {
-		if (engine._mixer->isSoundHandleActive(handles[i]))
+	for (const Audio::SoundHandle &handle : handles) {
+		if (engine._mixer->isSoundHandleActive(handle))
 			return true;
 	}
 	return false;
@@ -445,11 +468,11 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 	// the decoder source begins four bytes before the payload (see image.h). This
 	// linear scan is only a fallback frame order; when the movie has a master
 	// header we drive playback from its authoritative per-frame table below.
-	Common::Array<uint32> frames;
+	Common::Array<uint32> fallbackFrameResources;
 	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
 		const Archive::Resource &res = archive.getResource(i);
 		if (!res.empty && (res.info >> 16) == kFrameInfoHigh && res.dataOffset >= 4)
-			frames.push_back(i);
+			fallbackFrameResources.push_back(i);
 	}
 
 	// Build the soundtrack. A linear movie's master header (info==0x40000)
@@ -466,44 +489,10 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 	// lengthened the track (so frames played too slowly) and made the effects
 	// sound at their concatenation offset instead of their trigger frame.
 	Common::Array<byte> pcmBuf;
-	// Cumulative start time (ms) of each video frame; last entry is the total
-	// duration. Built from the per-frame event chunks below. Empty => no usable
-	// master header, in which case the frame loop falls back to a fixed cadence.
-	Common::Array<uint64> frameStartMs;
-	// Per-frame table, captured from the master header: the video resource id to
-	// composite (event record +0xc) and the navigation command of its event
-	// chunk. When populated this is the authoritative playback order; the
-	// kFrameInfoHigh scan above is the fallback.
-	Common::Array<uint32> pfVideoRes;
-	Common::Array<MovieCommand> pfNavCmd;
-	// Per-frame name (event record +0x1a, Pascal) used to resolve GOTO targets,
-	// and the per-frame interactive button table (empty => non-interactive frame
-	// that obeys its nav command; non-empty => the player holds the frame and
-	// waits for a click, as the main menu does).
-	Common::Array<Common::String> pfName;
-	Common::Array<Common::String> pfNavMovie;
-	Common::Array<Common::String> pfNavTarget;
-	Common::Array<Common::Array<MovieButton> > pfButtons;
-	// Decoded SFX named by each frame's event chunk. Linear movies with a music
-	// buffer premix these at frame start; interactive or otherwise-silent movies
-	// play them live when the frame is reached.
-	Common::Array<Common::SharedPtr<Common::Array<byte> > > pfFrameSfx;
+	// The master header's frame table is authoritative when present. Otherwise
+	// playback uses fallbackFrameResources at a fixed cadence.
+	Common::Array<MovieFrame> movieFrames;
 	Common::HashMap<uint32, Common::SharedPtr<Common::Array<byte> > > decodedFrameSfx;
-	// Per-frame hold duration in ms (event chunk +2 in scaled timer units,
-	// floored by masterHdr[+0x1c]). Used to pace interactive movies frame by
-	// frame (the menu and its pressed-button frames), independent of the audio
-	// timeline that paces linear movies.
-	Common::Array<uint32> pfHoldMs;
-	// Per-frame draw command (MovieDrawOp). These author the menu fade-out
-	// (PLAYMODE 'GAME 2' 0x11) and the movie fade-ins (frame 0 0x12).
-	Common::Array<uint16> pfDrawOp;
-	// Event chunk byte +6 bit 0: after this frame's authored hold, block until
-	// the cue channel goes idle (TI.EXE FUN_0040e0b0 spins on FUN_0042fcc0,
-	// which is "DAT_00460aac == 0", the cue channel's active flag). This is how
-	// narration-driven movies pace themselves: TOUR9.MOV sets it on frames 1-15,
-	// the ones carrying Smethells' lines, so each line finishes before the
-	// picture moves on. BEDMEM.MOV leaves it clear on all 39 frames.
-	Common::Array<bool> pfWaitForCue;
 
 	// Whether the movie may be skipped by the user. The original input handler
 	// (TI.EXE FUN_0040e430) only honours the '.'/'Q'/'q' skip keys when the
@@ -539,9 +528,8 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 	// RELATIVE to that segment's base. The native player (FUN_0040ca80) walks
 	// this chain after each segment reaches its natural end (status 3). We
 	// follow the same chain up front, concatenating every segment's frames into
-	// the arrays below so the frame loop plays them in order.
-	Common::Array<uint32> segmentStartFrame; // frame index where each segment begins
-	Common::Array<Palette> segmentPalette;   // each segment's palette from its master header +0x6c
+	// the tables below so the frame loop plays them in order.
+	Common::Array<MovieSegment> movieSegments;
 
 	int masterIdx = findMasterHeaderIndex(archive);
 	if (masterIdx < 0) {
@@ -554,9 +542,9 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 		while (segBase < archive.getResourceCount() && !visited.contains(segBase)) {
 			visited.setVal(segBase, true);
 			const Archive::Resource &segmentResource = archive.getResource(segBase);
-			const byte *hdr = resourceEngineBase(fileData, segmentResource);
-			const uint64 segmentSize = static_cast<uint64>(segmentResource.length) + 4;
-			if (!hdr || segmentSize < kMovieFrameTableOffset)
+			const ResourceView segment = resourceEngineView(fileData, segmentResource);
+			const byte *hdr = segment.dataAt(0, kMovieFrameTableOffset);
+			if (!hdr)
 				break;
 			// Display/cursor properties come from the first segment only.
 			if (segBase == static_cast<uint32>(masterIdx)) {
@@ -572,10 +560,12 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			uint32 musicTableIdx = segBase + READ_LE_UINT32(hdr + 0x64);
 			uint32 sfxTableIdx   = segBase + READ_LE_UINT32(hdr + 0x60);
 			uint32 pfCount = boundedRecordCount(READ_LE_UINT32(hdr + 0x878),
-					segmentSize, kMovieFrameTableOffset, kMovieFrameRecordSize);
-			const byte *pfTable = hdr + kMovieFrameTableOffset;
+					segment.size(), kMovieFrameTableOffset, kMovieFrameRecordSize);
+			const RecordRange frameRecords(segment, kMovieFrameTableOffset,
+					pfCount, kMovieFrameRecordSize);
 
-			segmentStartFrame.push_back(pfVideoRes.size());
+			MovieSegment movieSegment;
+			movieSegment.startFrame = movieFrames.size();
 
 			// Extract this segment's palette from the master header (+0x6c..+0x86c,
 			// 0x800 bytes = 256 ColorSpec entries x 8 bytes). The native player
@@ -583,7 +573,7 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			// segment load. Multi-segment movies (SINK1-6, LEAVE) have different
 			// palettes per segment; using segment 0's palette for all segments
 			// corrupts the colours of every subsequent segment.
-			if (hasBytes(hdr, fileData.end(), 0x86c)) {
+			if (segment.contains(0, 0x86c)) {
 				Palette segPal = {};
 				const byte *clut = hdr + 0x6c;
 				for (uint32 k = 0; k < kPaletteColorCount; ++k) {
@@ -596,10 +586,9 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 				segPal[0] = segPal[1] = segPal[2] = 0;
 				const uint32 lastColor = Palette::colorOffset(kPaletteLastColor);
 				segPal[lastColor + 0] = segPal[lastColor + 1] = segPal[lastColor + 2] = 0xff;
-				segmentPalette.push_back(segPal);
-			} else {
-				segmentPalette.push_back(Palette());
+				movieSegment.palette = segPal;
 			}
+			movieSegments.push_back(movieSegment);
 			// Minimum per-frame hold, in the scaled timer's units (FUN_00405130
 			// returns timeGetTime * 0.06, so 1 unit == 1000/60 ms). For LOGO this
 			// floor is 3 units == 50 ms == 20 fps.
@@ -611,13 +600,15 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			//    order. (Skip non-22050 cues such as the silent 11025 Hz pad.)
 			if (musicTableIdx < archive.getResourceCount()) {
 				const Archive::Resource &musicTableResource = archive.getResource(musicTableIdx);
-				const byte *mt = resourceEngineBase(fileData, musicTableResource);
-				const uint64 musicTableSize = static_cast<uint64>(musicTableResource.length) + 4;
-				if (mt && musicTableSize >= kMusicCueTableOffset) {
+				const ResourceView musicTable = resourceEngineView(fileData, musicTableResource);
+				const byte *mt = musicTable.dataAt(0, kMusicCueTableOffset);
+				if (mt) {
 					uint32 mc = boundedRecordCount(READ_LE_UINT32(mt + kMusicCueCountOffset),
-							musicTableSize, kMusicCueTableOffset, kMusicCueRecordSize);
+							musicTable.size(), kMusicCueTableOffset, kMusicCueRecordSize);
+					const RecordRange musicCues(musicTable, kMusicCueTableOffset,
+							mc, kMusicCueRecordSize);
 					for (uint32 e = 0; e < mc; ++e) {
-						const byte *ent = mt + kMusicCueTableOffset + e * kMusicCueRecordSize;
+						const byte *ent = musicCues.record(e).dataAt(0, kMusicCueRecordSize);
 						uint32 rid = segBase + READ_LE_UINT32(ent + 4);
 						if (rid >= archive.getResourceCount())
 							continue;
@@ -627,10 +618,13 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 						if (r.empty || r.info != kAudioResourceInfoTag || r.dataOffset < 4 ||
 								r.length < 0x1c)
 							continue;
-						const byte *payload = fileData.begin() + r.dataOffset;
-						if (READ_LE_UINT32(payload + 0x18) != kAudioRate22050)
+						const ResourceView payload = resourcePayloadView(fileData, r);
+						const byte *payloadData = payload.dataAt(0, 0x1c);
+						if (!payloadData)
 							continue;
-						decodeCbxAudio(payload, r.length, pcmBuf);
+						if (READ_LE_UINT32(payloadData + 0x18) != kAudioRate22050)
+							continue;
+						decodeCbxAudio(payloadData, static_cast<uint32>(payload.size()), pcmBuf);
 					}
 				}
 			}
@@ -645,56 +639,56 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			//    the video timeline (~16.6 s) slightly longer than the music
 			//    (~15.9 s); the trailing fade plays over silence, as in the
 			//    original.
-			const Archive::Resource *sfxTableResource = sfxTableIdx < archive.getResourceCount()
-					? &archive.getResource(sfxTableIdx) : nullptr;
-			const byte *st = sfxTableResource
-					? resourceEngineBase(fileData, *sfxTableResource) : nullptr;
-			const uint64 sfxTableSize = sfxTableResource
-					? static_cast<uint64>(sfxTableResource->length) + 4 : 0;
-			uint32 sfxCount = st && sfxTableSize >= kMovieSfxTableOffset
-					? boundedRecordCount(READ_LE_UINT32(st + 4), sfxTableSize,
+			const ResourceView sfxTable = sfxTableIdx < archive.getResourceCount()
+					? resourceEngineView(fileData, archive.getResource(sfxTableIdx)) : ResourceView();
+			const byte *st = sfxTable.dataAt(0, kMovieSfxTableOffset);
+			uint32 sfxCount = st
+					? boundedRecordCount(READ_LE_UINT32(st + 4), sfxTable.size(),
 							kMovieSfxTableOffset, kMovieSfxRecordSize)
 					: 0;
+			const RecordRange sfxRecords(sfxTable, kMovieSfxTableOffset,
+					sfxCount, kMovieSfxRecordSize);
 			for (uint32 f = 0; f < pfCount; ++f) {
-				const byte *rec = pfTable + f * kMovieFrameRecordSize;
-				const byte *eb = nullptr;
+				const ResourceView frameRecord = frameRecords.record(f);
+				const byte *rec = frameRecord.dataAt(0, kMovieFrameRecordSize);
 				uint32 eventId = segBase + READ_LE_UINT32(rec + 0x10);
-				uint64 eventSize = 0;
+				ResourceView eventData;
 				if (eventId < archive.getResourceCount()) {
 					const Archive::Resource &eventResource = archive.getResource(eventId);
-					eb = resourceEngineBase(fileData, eventResource);
-					eventSize = static_cast<uint64>(eventResource.length) + 4;
+					eventData = resourceEngineView(fileData, eventResource);
 				}
+				const byte *eb = eventData.dataAt(0, 0);
 
-				frameStartMs.push_back(cumMs);
-				pfVideoRes.push_back(segBase + READ_LE_UINT32(rec + 0xc));
-				pfNavCmd.push_back(static_cast<MovieCommand>((eb && eventSize >= 2)
-						? READ_LE_UINT16(eb) : static_cast<uint16>(MovieCommand::kNext)));
-				pfWaitForCue.push_back(eb && eventSize >= 7 && (eb[6] & 1) != 0);
-				pfDrawOp.push_back((eb && eventSize >= 0xe)
-						? READ_LE_UINT16(eb + 0xc) : static_cast<uint16>(kMovieDrawBlit));
-				pfName.push_back(readPascalString(rec + 0x1a, fileData, true));
+				MovieFrame frame;
+				frame.startMs = cumMs;
+				frame.videoResource = segBase + READ_LE_UINT32(rec + 0xc);
+				frame.navigation = static_cast<MovieCommand>(eventData.contains(0, 2)
+						? READ_LE_UINT16(eb) : static_cast<uint16>(MovieCommand::kNext));
+				frame.waitForCue = eventData.contains(6) && (eb[6] & 1) != 0;
+				frame.drawOp = eventData.contains(0, 0xe)
+						? READ_LE_UINT16(eb + 0xc) : static_cast<uint16>(kMovieDrawBlit);
+				frame.name = frameRecord.readPascalString(0x1a, true);
 				// FUN_0040d710 commands 3/4 use a Pascal movie name at event
 				// chunk +0x22; commands 2/4 use a Pascal frame target at +0x32.
 				// The decompile's +0x19 target is word-indexed; in the raw
 				// record+8 event frame used here it is byte offset +0x32.
-				pfNavMovie.push_back((eb && eventSize >= 0x23)
-						? readPascalString(eb + 0x22, fileData, true) : Common::String());
-				pfNavTarget.push_back((eb && eventSize >= 0x33)
-						? readPascalString(eb + 0x32, fileData, true) : Common::String());
+				frame.navigationMovie = eventData.readPascalString(0x22, true);
+				frame.navigationTarget = eventData.readPascalString(0x32, true);
 
 				// Interactive buttons: raw event chunks store a u32 count at
 				// +0x442 and 0x40-byte button records at +0x446. Ghidra's
 				// FUN_0040d710 decompile reports +0x221 because of a widened
 				// pointer type; FUN_0040e5b0 and HELP*.MOV raw dumps verify the
 				// byte offsets.
-				Common::Array<MovieButton> buttons;
-				uint32 btnCount = eb && eventSize >= kMovieButtonTableOffset
-						? boundedRecordCount(READ_LE_UINT32(eb + kMovieButtonCountOffset),
-								eventSize, kMovieButtonTableOffset, kMovieButtonRecordSize)
-						: 0;
+				uint32 declaredButtonCount = 0;
+				eventData.readUint32LE(kMovieButtonCountOffset, declaredButtonCount);
+				uint32 btnCount = boundedRecordCount(declaredButtonCount,
+						eventData.size(), kMovieButtonTableOffset, kMovieButtonRecordSize);
+				const RecordRange buttons(eventData, kMovieButtonTableOffset,
+						btnCount, kMovieButtonRecordSize);
 				for (uint32 b = 0; b < btnCount; ++b) {
-					const byte *br = eb + kMovieButtonTableOffset + b * kMovieButtonRecordSize;
+					const ResourceView button = buttons.record(b);
+					const byte *br = button.dataAt(0, kMovieButtonRecordSize);
 					MovieButton mb;
 					mb.action = static_cast<MovieCommand>(READ_LE_UINT16(br));
 					mb.flags  = br[2];
@@ -703,20 +697,19 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 					mb.left   = static_cast<int16>(READ_LE_UINT16(br + 10));
 					mb.bottom = static_cast<int16>(READ_LE_UINT16(br + 12));
 					mb.right  = static_cast<int16>(READ_LE_UINT16(br + 14));
-					mb.marker = readPascalString(br + 0x20, fileData, true);
-					mb.target = readPascalString(br + 0x30, fileData, true);
-					buttons.push_back(mb);
+					mb.marker = button.readPascalString(0x20, true);
+					mb.target = button.readPascalString(0x30, true);
+					frame.buttons.push_back(mb);
 				}
-				pfButtons.push_back(buttons);
 
-				Common::SharedPtr<Common::Array<byte> > frameSfx;
-				if (eb) {
-					Common::String cue = readPascalString(eb + 0x12, fileData, true);
+				if (eventData.valid()) {
+					Common::String cue = eventData.readPascalString(0x12, true);
 					if (!cue.empty()) {
 						uint32 sfxResId = static_cast<uint32>(-1);
 						for (uint32 e = 0; e < sfxCount; ++e) {
-							const byte *ent = st + kMovieSfxTableOffset + e * kMovieSfxRecordSize;
-							if (readPascalString(ent + 0xa, fileData, true) == cue) {
+							const ResourceView sfxRecord = sfxRecords.record(e);
+							const byte *ent = sfxRecord.dataAt(0, kMovieSfxRecordSize);
+							if (sfxRecord.readPascalString(0xa, true) == cue) {
 								sfxResId = segBase + READ_LE_UINT32(ent + 4);
 								break;
 							}
@@ -725,28 +718,28 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 							Common::HashMap<uint32, Common::SharedPtr<Common::Array<byte> > >::const_iterator cached =
 									decodedFrameSfx.find(sfxResId);
 							if (cached != decodedFrameSfx.end()) {
-								frameSfx = cached->_value;
+								frame.sfx = cached->_value;
 							} else {
 								Common::SharedPtr<Common::Array<byte> > decoded(new Common::Array<byte>());
 								const Archive::Resource &sr = archive.getResource(sfxResId);
-								if (!sr.empty && sr.info == kAudioResourceInfoTag && sr.dataOffset >= 4) {
+								const ResourceView audioData = resourcePayloadView(fileData, sr);
+								if (sr.info == kAudioResourceInfoTag && audioData.valid()) {
 									// Frame-event cue resources are sometimes referenced more than
 									// once in a movie. Cache them only for this playMovie() call:
 									// most movies play once, so a persistent decoded-audio cache would
 									// just retain large one-shot PCM buffers.
-									decodeCbxAudio(fileData.begin() + sr.dataOffset, sr.length, *decoded);
+									decodeCbxAudio(audioData.dataAt(0, audioData.size()),
+											static_cast<uint32>(audioData.size()), *decoded);
 								}
 								decodedFrameSfx[sfxResId] = decoded;
-								frameSfx = decoded;
+								frame.sfx = decoded;
 							}
 						}
 					}
 				}
-				pfFrameSfx.push_back(frameSfx);
-
 				// Advance the timeline by this frame's hold (scaled units -> ms).
 				uint32 units = frameFloorUnits;
-				if (eb && eventSize >= 6) {
+				if (eventData.contains(0, 6)) {
 					uint32 d = READ_LE_UINT32(eb + 2);
 					if (d > units)
 						units = d;
@@ -754,7 +747,8 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 				uint64 holdMs = static_cast<uint64>(units) * 1000 / 60;
 				if (holdMs > 0xffffffffU)
 					holdMs = 0xffffffffU;
-				pfHoldMs.push_back(static_cast<uint32>(holdMs));
+				frame.holdMs = static_cast<uint32>(holdMs);
+				movieFrames.push_back(frame);
 				cumMs += holdMs;
 			}
 
@@ -763,8 +757,8 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			//    FUN_0040ca80). Missing names resolve to -1 (never matched).
 			// Only the first segment's action cues are used.
 			if (segBase == static_cast<uint32>(masterIdx)) {
-				actionCue1 = resolveFrameName(pfName, readPascalString(hdr + 0x40, fileData, true));
-				actionCue2 = resolveFrameName(pfName, readPascalString(hdr + 0x50, fileData, true));
+				actionCue1 = resolveFrameName(movieFrames, segment.readPascalString(0x40, true));
+				actionCue2 = resolveFrameName(movieFrames, segment.readPascalString(0x50, true));
 			}
 
 			// Follow the segment chain: master header dword at byte +0x2c gives
@@ -773,30 +767,31 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			if (segBase == 0)
 				break; // 0 = last segment; never treat resource 0 as a segment
 		}
-		frameStartMs.push_back(cumMs); // total movie duration (all segments)
 	}
 
 	// A movie is interactive if any frame carries buttons (the main menu,
 	// BEDCARDS, BEDCAB, ...). Such movies loop their soundtrack while they wait
 	// for the user; linear movies (the logo) play their track once.
 	bool hasInteractive = false;
-	for (uint i = 0; i < pfButtons.size(); ++i)
-		if (!pfButtons[i].empty()) {
+	for (const MovieFrame &frame : movieFrames) {
+		if (!frame.buttons.empty()) {
 			hasInteractive = true;
 			break;
 		}
+	}
 	const bool playFrameSfxLive = hasInteractive || pcmBuf.empty();
-	uint32 frameSfxBytes = 0;
-	for (uint i = 0; i < pfFrameSfx.size(); ++i)
-		if (pfFrameSfx[i])
-			frameSfxBytes += pfFrameSfx[i]->size();
+	uint64 frameSfxBytes = 0;
+	for (const MovieFrame &frame : movieFrames)
+		if (frame.sfx)
+			frameSfxBytes += frame.sfx->size();
 	if (!playFrameSfxLive) {
-		for (uint i = 0; i < pfFrameSfx.size(); ++i) {
-			if (!pfFrameSfx[i] || pfFrameSfx[i]->empty())
+		for (const MovieFrame &frame : movieFrames) {
+			if (!frame.sfx || frame.sfx->empty())
 				continue;
-			uint64 atMs = (i < frameStartMs.size()) ? frameStartMs[i] : 0;
-			uint64 atSample = atMs * kAudioSampleRate / 1000;
-			mixSfx(pcmBuf, *pfFrameSfx[i], atSample);
+			if (frame.startMs > 0xffffffffU * static_cast<uint64>(1000) / kAudioSampleRate)
+				continue;
+			const uint64 atSample = frame.startMs * kAudioSampleRate / 1000;
+			mixSfx(pcmBuf, *frame.sfx, atSample);
 		}
 	}
 
@@ -851,8 +846,9 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 		}
 	}
 
-	debug(0, "CyberFlix: movie '%s' frames=%u audioBytes=%u frameSfxBytes=%u audioMs=%u",
-			currentMovieName.c_str(), pfVideoRes.empty() ? frames.size() : pfVideoRes.size(), pcmBuf.size(), frameSfxBytes,
+	debug(0, "CyberFlix: movie '%s' frames=%u audioBytes=%u frameSfxBytes=%llu audioMs=%u",
+			currentMovieName.c_str(), movieFrames.empty() ? fallbackFrameResources.size() : movieFrames.size(),
+			pcmBuf.size(), static_cast<unsigned long long>(frameSfxBytes),
 			static_cast<uint32>((static_cast<uint64>(pcmBuf.size()) * 1000 / kAudioSampleRate)));
 
 
@@ -863,7 +859,7 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 	// hold time in its event chunk (offset +2, floored by masterHdr[+0x1c]),
 	// expressed in the scaled-timer units returned by TI.EXE FUN_00405130
 	// (timeGetTime * 0.06, i.e. 1 unit == 1000/60 ms). We precompute the
-	// cumulative start time of every frame into frameStartMs above.
+	// start and hold time of every frame into movieFrames above.
 	//
 	// SYNC: linear-movie SFX (e.g. LOGO.MOV's gunshots) are mixed into the
 	// soundtrack at their exact frame time, so they are locked to the music
@@ -875,52 +871,54 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 	// frame-drop in FUN_0040e8b0. Once the music ends (the video timeline can run
 	// ~0.75 s longer than the music, e.g. LOGO's trailing fade) we continue on the
 	// wall clock so the fade still plays out.
-	const bool usePF = !pfVideoRes.empty();
-	const int frameCount = usePF ? static_cast<int>(pfVideoRes.size()) : static_cast<int>(frames.size());
+	const bool hasFrameTable = !movieFrames.empty();
+	const int frameCount = hasFrameTable ? static_cast<int>(movieFrames.size())
+			: static_cast<int>(fallbackFrameResources.size());
 	if (frameCount == 0)
 		warning("CyberFlix: movie '%s' has no frames to show", currentMovieName.c_str());
 
 	uint32 wallStartMs = engine._system->getMillis();
 	int fi = (initialFrame >= 0 && initialFrame < frameCount) ? initialFrame : 0;
 	debug(0, "CyberFlix: movie '%s' start frame=%d/%d segments=%d usePF=%d interactive=%d audio=%d skippable=%d cue1=%d cue2=%d",
-			currentMovieName.c_str(), fi, frameCount, static_cast<int>(segmentStartFrame.size()),
-			usePF ? 1 : 0, hasInteractive ? 1 : 0,
+			currentMovieName.c_str(), fi, frameCount, static_cast<int>(movieSegments.size()),
+			hasFrameTable ? 1 : 0, hasInteractive ? 1 : 0,
 			hasMovieAudio ? 1 : 0, movieSkippable ? 1 : 0, actionCue1, actionCue2);
 	while (fi >= 0 && fi < frameCount && !engine.shouldQuit() && !skip) {
 		const uint frameIndex = static_cast<uint>(fi);
+		const MovieFrame *movieFrame = hasFrameTable ? &movieFrames[frameIndex] : nullptr;
 		// Multi-segment movies code each segment independently. The native
 		// player (FUN_0040ca80) re-enters the segment-load path (LAB_0040cad3)
 		// for each segment, reinitializing the decode context. Resetting the
 		// frame decoder here prevents the new segment's delta frames from
 		// coding against the stale content of the previous segment's last frame.
-		for (uint s = 1; s < segmentStartFrame.size(); ++s) {
-			if (segmentStartFrame[s] == frameIndex) {
+		for (uint s = 1; s < movieSegments.size(); ++s) {
+			if (movieSegments[s].startFrame == frameIndex) {
 				seq.clear();
 				// Switch to this segment's palette and force it to be
 				// re-programmed (each segment fades in from black via drawOp
 				// 0x12, which sets moviePalApplied itself; for plain-blit
 				// segments the dirty-flag path handles it).
-				if (s < segmentPalette.size()) {
-					moviePal = segmentPalette[s];
-					moviePalApplied = false;
-				}
+				moviePal = movieSegments[s].palette;
+				moviePalApplied = false;
 				break;
 			}
 		}
-		uint32 resIdx = usePF ? pfVideoRes[frameIndex] : frames[frameIndex];
+		uint32 resIdx = movieFrame ? movieFrame->videoResource : fallbackFrameResources[frameIndex];
 		if (resIdx >= archive.getResourceCount()) {
 			warning("CyberFlix: movie '%s' frame %d: resIdx %u out of range (%u resources)",
 					currentMovieName.c_str(), fi, resIdx, archive.getResourceCount());
 			break;
 		}
 		const Archive::Resource &res = archive.getResource(resIdx);
-		if (res.empty || res.dataOffset < 4 ||
-				seq.applyFrame(fileData.begin() + res.dataOffset - 4, res.length + 4) == 0) {
+		const ResourceView encodedFrame = resourceEngineView(fileData, res);
+		if (!encodedFrame.valid() ||
+				seq.applyFrame(encodedFrame.dataAt(0, encodedFrame.size()),
+						static_cast<uint32>(encodedFrame.size())) == 0) {
 			warning("CyberFlix: movie '%s' frame %d failed to decode", currentMovieName.c_str(), fi);
 			break;
 		}
 
-		const bool interactive = usePF && frameIndex < pfButtons.size() && !pfButtons[frameIndex].empty();
+		const bool interactive = movieFrame && !movieFrame->buttons.empty();
 
 		// Record action-cue hits for the actionframe() builtin. The original
 		// ORs the bits after decoding every frame it iterates (FUN_0043b800
@@ -929,16 +927,17 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			engine._actionFrameMask |= 1;
 		if (fi == actionCue2)
 			engine._actionFrameMask |= 2;
-		if (playFrameSfxLive && frameIndex < pfFrameSfx.size() && pfFrameSfx[frameIndex])
-			playMovieFrameSfx(engine._mixer, frameSfxHandles, *pfFrameSfx[frameIndex], engine.audioRuntime().effectiveAudioVolume(255));
+		if (playFrameSfxLive && movieFrame && movieFrame->sfx)
+			playMovieFrameSfx(*engine._mixer, frameSfxHandles, *movieFrame->sfx,
+					engine.audioRuntime().effectiveAudioVolume(255));
 
 		// Current playback clock: real audio position while the track plays,
 		// else elapsed wall time (covers the post-music fade and silent movies).
 		uint32 nowMs = (hasMovieAudio && engine._mixer->isSoundHandleActive(audioHandle))
 				? engine._mixer->getSoundElapsedTime(audioHandle)
 				: (engine._system->getMillis() - wallStartMs);
-		uint64 frameEndMs = (frameIndex + 1 < frameStartMs.size())
-				? frameStartMs[frameIndex + 1] : static_cast<uint64>(frameIndex + 1) * kFallbackFrameDelayMs;
+		uint64 frameEndMs = movieFrame ? movieFrame->startMs + movieFrame->holdMs
+				: static_cast<uint64>(frameIndex + 1) * kFallbackFrameDelayMs;
 
 		// Drop the present of a late linear frame to let the picture catch up to
 		// the audio; always present in interactive movies. The original player
@@ -959,7 +958,7 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 		// fade-out/fade-in frames; anything else is a plain blit that snaps
 		// the movie palette on if it is not up yet (the original's
 		// palette-dirty preamble in FUN_0040eef0).
-		uint16 drawOp = (usePF && frameIndex < pfDrawOp.size()) ? pfDrawOp[frameIndex] : static_cast<uint16>(kMovieDrawBlit);
+		uint16 drawOp = movieFrame ? movieFrame->drawOp : static_cast<uint16>(kMovieDrawBlit);
 		bool fadedThisFrame = false;
 		if (present) {
 			if (haveMoviePal && !moviePalApplied && drawOp != kMovieDrawFadeOut && drawOp != kMovieDrawFadeIn) {
@@ -971,14 +970,18 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 				// straight blit. It runs over the frame's authored hold, one band
 				// per 60 Hz tick, so the frame loop's own wait afterwards is
 				// already (or nearly) satisfied.
-				uint32 holdMs = (usePF && frameIndex < pfHoldMs.size()) ? pfHoldMs[frameIndex]
-						: kFallbackFrameDelayMs;
+				uint32 holdMs = movieFrame ? movieFrame->holdMs : kFallbackFrameDelayMs;
 				int steps = static_cast<int>(holdMs * 60 / 1000);
 				debug(1, "CyberFlix: movie '%s' frame %d transition op %#04x over %d step(s)",
 						currentMovieName.c_str(), fi, drawOp, steps);
 				runMovieTransition(engine, drawOp, pixels, w, h, x0, y0, steps);
 			} else {
 				Graphics::Surface *screen = engine._system->lockScreen();
+				if (!screen) {
+					warning("CyberFlix: movie '%s' frame %d could not lock the screen",
+							currentMovieName.c_str(), fi);
+					break;
+				}
 				// Movie frames are opaque. Clip once and copy full rows instead of
 				// doing a per-pixel getBasePtr() loop for every presented frame.
 				copyFramePixelsToScreen(*screen, pixels, w, h, x0, y0);
@@ -991,8 +994,7 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			// from black, 0x11 = fade the frame out, leaving the palette black
 			// for whatever follows (the menu -> room -> movie chain relies on it).
 			if (haveMoviePal && (drawOp == kMovieDrawFadeOut || drawOp == kMovieDrawFadeIn)) {
-				uint32 holdMs = (usePF && frameIndex < pfHoldMs.size()) ? pfHoldMs[frameIndex]
-						: kFallbackFrameDelayMs;
+				uint32 holdMs = movieFrame ? movieFrame->holdMs : kFallbackFrameDelayMs;
 				int steps = static_cast<int>(holdMs * 60 / 1000);
 				Palette black = {};
 				if (drawOp == kMovieDrawFadeIn) {
@@ -1026,8 +1028,7 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 				if (movieHoverCursor) {
 					Common::Point m = engine._eventMan->getMousePos();
 					int hover = 0;
-					for (uint b = 0; b < pfButtons[frameIndex].size(); ++b) {
-						const MovieButton &mb = pfButtons[frameIndex][b];
+					for (const MovieButton &mb : movieFrame->buttons) {
 						if ((mb.flags & 0x2) && mb.contains(m.x - x0, m.y - y0)) {
 							hover = 1;
 							break;
@@ -1053,20 +1054,19 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 						int fx = m.x - x0;
 						int fy = m.y - y0;
 						bool commandRan = false;
-						for (uint b = 0; b < pfButtons[frameIndex].size(); ++b) {
-							const MovieButton &mb = pfButtons[frameIndex][b];
+						for (const MovieButton &mb : movieFrame->buttons) {
 							if (!mb.contains(fx, fy))
 								continue;
 							commandRan = true;
 							if (runMovieCommand(mb.action, currentMovieName, fi, frameCount,
-									mb.marker, mb.target, pfName, returnStack,
+									mb.marker, mb.target, movieFrames, returnStack,
 									fi, nextFi, nextMovieName,
 									nextMovieStartFrame, "button")) {
 								skip = true;
 							}
 							debug(1, "CyberFlix: movie '%s' button frame %d '%s' click (%d,%d) action %u marker '%s' target '%s' -> frame %d movie '%s'",
 									currentMovieName.c_str(), fi,
-									(frameIndex < pfName.size()) ? pfName[frameIndex].c_str() : "",
+									movieFrame->name.c_str(),
 									fx, fy, static_cast<uint>(mb.action), mb.marker.c_str(), mb.target.c_str(),
 									nextFi, nextMovieName.c_str());
 							break;
@@ -1100,7 +1100,7 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			continue;
 		}
 
-		MovieCommand nav = usePF ? pfNavCmd[frameIndex] : MovieCommand::kNext;
+		MovieCommand nav = movieFrame ? movieFrame->navigation : MovieCommand::kNext;
 
 		// Interactive movies (the menu and its pressed-button frames) are paced
 		// frame by frame off a local wall clock by each frame's own authored
@@ -1112,13 +1112,13 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			// A 0x11/0x12 fade already spent this frame's hold on the palette
 			// ramp (the original spreads the fade across the frame duration).
 			uint32 holdMs = fadedThisFrame ? 0
-					: ((frameIndex < pfHoldMs.size()) ? pfHoldMs[frameIndex] : kFallbackFrameDelayMs);
+					: (movieFrame ? movieFrame->holdMs : kFallbackFrameDelayMs);
 			uint32 holdStart = engine._system->getMillis();
 			// FUN_0040e0b0: a frame flagged at event chunk +6 bit 0 holds past
 			// its authored time until the cue channel goes idle. This path is
 			// taken by every frame of a movie that has any interactive frame at
 			// all, which includes the narration-paced tour movies.
-			const bool waitForCue = usePF && frameIndex < pfWaitForCue.size() && pfWaitForCue[frameIndex];
+			const bool waitForCue = movieFrame && movieFrame->waitForCue;
 			if (waitForCue)
 				debug(1, "CyberFlix: movie '%s' frame %d holds for its cue",
 						currentMovieName.c_str(), fi);
@@ -1142,9 +1142,9 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 				break;
 			int nextFi = -1;
 			if (runMovieCommand(nav, currentMovieName, fi, frameCount,
-					(frameIndex < pfNavMovie.size()) ? pfNavMovie[frameIndex] : Common::String(),
-					(frameIndex < pfNavTarget.size()) ? pfNavTarget[frameIndex] : Common::String(),
-					pfName, returnStack, fi + 1, nextFi, nextMovieName,
+					movieFrame ? movieFrame->navigationMovie : Common::String(),
+					movieFrame ? movieFrame->navigationTarget : Common::String(),
+					movieFrames, returnStack, fi + 1, nextFi, nextMovieName,
 					nextMovieStartFrame, "frame"))
 				break;
 			fi = nextFi >= 0 ? nextFi : fi + 1;
@@ -1161,8 +1161,8 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			// segment's final frame) show this frame and RETURN from playback.
 			const uint nextFrameIndex = frameIndex + 1;
 			bool atSegmentBoundary = false;
-			for (uint s = 1; s < segmentStartFrame.size(); ++s) {
-				if (segmentStartFrame[s] == nextFrameIndex) {
+			for (uint s = 1; s < movieSegments.size(); ++s) {
+				if (movieSegments[s].startFrame == nextFrameIndex) {
 					atSegmentBoundary = true;
 					break;
 				}
@@ -1191,7 +1191,7 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 					: (engine._system->getMillis() - wallStartMs);
 			if (t >= frameEndMs) {
 				// Same cue gate as the interactive path above.
-				const bool waitForCue = usePF && frameIndex < pfWaitForCue.size() && pfWaitForCue[frameIndex];
+				const bool waitForCue = movieFrame && movieFrame->waitForCue;
 				if (!waitForCue || !cueStillPlaying(engine, frameSfxHandles))
 					break;
 				// The original rebases the next deadline off "now" once the wait
@@ -1220,9 +1220,9 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			break;
 		int nextFi = -1;
 		if (runMovieCommand(nav, currentMovieName, fi, frameCount,
-				(frameIndex < pfNavMovie.size()) ? pfNavMovie[frameIndex] : Common::String(),
-				(frameIndex < pfNavTarget.size()) ? pfNavTarget[frameIndex] : Common::String(),
-				pfName, returnStack, fi + 1, nextFi, nextMovieName,
+				movieFrame ? movieFrame->navigationMovie : Common::String(),
+				movieFrame ? movieFrame->navigationTarget : Common::String(),
+				movieFrames, returnStack, fi + 1, nextFi, nextMovieName,
 				nextMovieStartFrame, "frame"))
 			break;
 		fi = nextFi >= 0 ? nextFi : fi + 1;
@@ -1233,8 +1233,8 @@ void MovieRuntime::playMovie(CyberFlixEngine &engine, const Common::String &name
 			nextMovieName.c_str());
 
 	engine._mixer->stopHandle(audioHandle);
-	for (uint i = 0; i < frameSfxHandles.size(); ++i)
-		engine._mixer->stopHandle(frameSfxHandles[i]);
+	for (Audio::SoundHandle &handle : frameSfxHandles)
+		engine._mixer->stopHandle(handle);
 	engine._eventMan->purgeKeyboardEvents();
 	if (movieHidCursor)
 		CursorMan.showMouse(true);

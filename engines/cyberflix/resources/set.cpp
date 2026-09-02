@@ -28,27 +28,20 @@
 
 namespace CyberFlix {
 
-const byte *Set::engineBase(uint32 index) const {
+ResourceView Set::engineView(uint32 index) const {
 	if (index >= _archive.getResourceCount())
-		return nullptr;
-	return resourceEngineBase(_fileData, _archive.getResource(index));
+		return ResourceView();
+	return resourceEngineView(_fileData, _archive.getResource(index));
 }
 
-const byte *Set::payload(uint32 index) const {
+ResourceView Set::payloadView(uint32 index) const {
 	if (index >= _archive.getResourceCount())
-		return nullptr;
-	const Archive::Resource &res = _archive.getResource(index);
-	if (res.empty || res.dataOffset > _fileData.size())
-		return nullptr;
-	return _fileData.begin() + res.dataOffset;
+		return ResourceView();
+	return resourcePayloadView(_fileData, _archive.getResource(index));
 }
 
 int Set::resourceIndexById(uint32 id) const {
 	return CyberFlix::resourceIndexById(_archive, id);
-}
-
-Common::String Set::pascalString(const byte *p) const {
-	return readPascalString(p, _fileData);
 }
 
 Common::SharedPtr<Script> Set::scriptByIdShared(uint32 id) const {
@@ -58,112 +51,76 @@ Common::SharedPtr<Script> Set::scriptByIdShared(uint32 id) const {
 	return _scripts[static_cast<uint32>(idx)];
 }
 
-const byte *Set::sceneRecord(uint32 scene) const {
+ResourceView Set::sceneRecord(uint32 scene) const {
 	if (scene >= _sceneCount || _sceneTable < 0)
-		return nullptr;
-	const byte *table = payload(static_cast<uint32>(_sceneTable));
-	if (!table)
-		return nullptr;
-	const byte *rec = table + scene * kSceneRecordStride;
-	if (!hasBytes(rec, _fileData.end(), kSceneRecordStride))
-		return nullptr;
-	return rec;
+		return ResourceView();
+	return payloadView(static_cast<uint32>(_sceneTable)).recordAt(0, scene, kSceneRecordStride);
 }
 
-const byte *Set::viewDirectory(uint32 scene, uint32 &count) const {
-	count = 0;
-	const byte *rec = sceneRecord(scene);
-	if (!rec)
-		return nullptr;
-	int idx = resourceIndexById(READ_LE_UINT32(rec + kSceneViewDirOffset));
+RecordRange Set::viewDirectory(uint32 scene) const {
+	const ResourceView rec = sceneRecord(scene);
+	uint32 directoryId;
+	if (!rec.readUint32LE(kSceneViewDirOffset, directoryId))
+		return RecordRange();
+	int idx = resourceIndexById(directoryId);
 	if (idx < 0)
-		return nullptr;
-	const byte *dir = payload(static_cast<uint32>(idx));
-	if (!hasBytes(dir, _fileData.end(), kViewDirRecordsOffset))
-		return nullptr;
-	// Validate the file-supplied record count against the directory resource's
-	// length (as the panorama/painting/star tables do), so a corrupt count
-	// cannot make the lookups parse neighbouring resources' bytes as records.
-	const uint32 length = _archive.getResource(static_cast<uint32>(idx)).length;
-	uint32 c = READ_LE_UINT32(dir + kViewDirCountOffset);
-	if (static_cast<uint64>(c) * kViewRecordStride + kViewDirRecordsOffset > length)
-		return nullptr;
-	count = c;
-	return dir;
+		return RecordRange();
+	const ResourceView directory = payloadView(static_cast<uint32>(idx));
+	uint32 count;
+	if (!directory.readUint32LE(kViewDirCountOffset, count))
+		return RecordRange();
+	return RecordRange(directory, kViewDirRecordsOffset, count, kViewRecordStride);
 }
 
-const byte *Set::viewRecord(uint32 scene, const Common::String &view) const {
+ResourceView Set::viewRecord(uint32 scene, const Common::String &view) const {
 	int viewIdx = findView(scene, view);
 	if (viewIdx < 0)
-		return nullptr;
-	uint32 count = 0;
-	const byte *dir = viewDirectory(scene, count);
-	if (!dir || static_cast<uint32>(viewIdx) >= count)
-		return nullptr;
-	const byte *v = dir + kViewDirRecordsOffset + static_cast<uint32>(viewIdx) * kViewRecordStride;
-	if (!hasBytes(v, _fileData.end(), kViewRecordStride))
-		return nullptr;
-	return v;
+		return ResourceView();
+	return viewDirectory(scene).record(static_cast<uint32>(viewIdx));
 }
 
-const byte *Set::paintingTable(const byte *viewRec, uint32 &count, uint32 &length) const {
-	count = 0;
-	length = 0;
-	if (!hasBytes(viewRec, _fileData.end(), kViewPaintingTableOffset + 4))
-		return nullptr;
-	uint32 tableId = READ_LE_UINT32(viewRec + kViewPaintingTableOffset);
+RecordRange Set::paintingTable(const ResourceView &viewRecord) const {
+	uint32 tableId;
+	if (!viewRecord.readUint32LE(kViewPaintingTableOffset, tableId))
+		return RecordRange();
 	if (tableId == 0)
-		return nullptr;
+		return RecordRange();
 	int idx = resourceIndexById(tableId);
 	if (idx < 0)
-		return nullptr;
-	const byte *table = engineBase(static_cast<uint32>(idx));
-	if (!hasBytes(table, _fileData.end(), 8))
-		return nullptr;
-	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(idx));
-	length = res.length + 4; // engine-base frame includes the info dword
-	uint32 c = READ_LE_UINT32(table);
-	if (static_cast<uint64>(c) * 0x24 + 8 > length)
-		return nullptr;
-	count = c;
-	return table;
+		return RecordRange();
+	const ResourceView table = engineView(static_cast<uint32>(idx));
+	uint32 count;
+	if (!table.readUint32LE(0, count))
+		return RecordRange();
+	return RecordRange(table, 8, count, 0x24);
 }
 
-const byte *Set::panoramaTable(uint32 scene, uint32 table, uint32 &count) const {
-	count = 0;
-	const byte *rec = sceneRecord(scene);
-	if (!rec || table > kPanoramaTableB)
-		return nullptr;
-	uint32 panoId = READ_LE_UINT32(rec + (table == 0 ? kScenePanoramaAOffset : kScenePanoramaBOffset));
-	int idx = resourceIndexById(panoId);
+RecordRange Set::panoramaTable(uint32 scene, uint32 table) const {
+	if (table > kPanoramaTableB)
+		return RecordRange();
+	const ResourceView rec = sceneRecord(scene);
+	uint32 panoramaId;
+	if (!rec.readUint32LE(table == 0 ? kScenePanoramaAOffset : kScenePanoramaBOffset, panoramaId))
+		return RecordRange();
+	int idx = resourceIndexById(panoramaId);
 	if (idx < 0)
-		return nullptr;
-	const byte *pano = payload(static_cast<uint32>(idx));
-	if (!hasBytes(pano, _fileData.end(), kPanoramaCountOffset + 4))
-		return nullptr;
-	uint32 c = READ_LE_UINT32(pano + kPanoramaCountOffset);
-	// Bound the record array against the resource payload.
-	uint32 len = _archive.getResource(static_cast<uint32>(idx)).length;
-	if (static_cast<uint64>(c) * kPanoramaRecordStride + 8 > len)
-		return nullptr;
-	count = c;
-	return pano;
+		return RecordRange();
+	const ResourceView panorama = payloadView(static_cast<uint32>(idx));
+	uint32 count;
+	if (!panorama.readUint32LE(kPanoramaCountOffset, count))
+		return RecordRange();
+	return RecordRange(panorama, 8, count, kPanoramaRecordStride);
 }
 
-const byte *Set::transitionTable(uint32 transitionId, uint32 &count) const {
-	count = 0;
+RecordRange Set::transitionTable(uint32 transitionId) const {
 	int idx = resourceIndexById(transitionId);
 	if (idx < 0)
-		return nullptr;
-	const byte *transition = engineBase(static_cast<uint32>(idx));
-	if (!hasBytes(transition, _fileData.end(), 0x0c))
-		return nullptr;
-	uint32 c = READ_LE_UINT32(transition + 0x04);
-	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(idx));
-	if (static_cast<uint64>(c) * kPanoramaRecordStride + 0x0c > res.length + 4)
-		return nullptr;
-	count = c;
-	return transition;
+		return RecordRange();
+	const ResourceView transition = engineView(static_cast<uint32>(idx));
+	uint32 count;
+	if (!transition.readUint32LE(0x04, count))
+		return RecordRange();
+	return RecordRange(transition, 0x0c, count, kPanoramaRecordStride);
 }
 
 bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq) const {
@@ -178,11 +135,10 @@ bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq) const {
 		warning("CyberFlix: set '%s' references missing frame res %u", _name.c_str(), frameId);
 		return false;
 	}
-	const byte *frame = engineBase(static_cast<uint32>(idx));
-	if (!frame)
+	const ResourceView frame = engineView(static_cast<uint32>(idx));
+	if (!frame.valid())
 		return false;
-	uint32 frameLen = _archive.getResource(static_cast<uint32>(idx)).length + 4; // payload + info word
-	if (seq.applyFrame(frame, frameLen) == 0) {
+	if (seq.applyFrame(frame.dataAt(0, frame.size()), static_cast<uint32>(frame.size())) == 0) {
 		warning("CyberFlix: set '%s' frame %u decode failed", _name.c_str(), frameId);
 		return false;
 	}
@@ -198,24 +154,23 @@ bool Set::applyFrameResource(uint32 frameId, FrameSequence &seq, FrameImage &out
 
 int Set::findSceneByViewDirId(uint32 viewDirId) const {
 	for (uint32 i = 0; i < _sceneCount; ++i) {
-		const byte *rec = sceneRecord(i);
-		if (rec && READ_LE_UINT32(rec + kSceneViewDirOffset) == viewDirId)
+		uint32 recordViewDirectoryId;
+		if (sceneRecord(i).readUint32LE(kSceneViewDirOffset, recordViewDirectoryId) &&
+				recordViewDirectoryId == viewDirId)
 			return static_cast<int>(i);
 	}
 	return -1;
 }
 
 int Set::nearestViewForHeading(uint32 scene, int heading) const {
-	uint32 count = 0;
-	const byte *dir = viewDirectory(scene, count);
-	if (!dir)
+	const RecordRange directory = viewDirectory(scene);
+	if (!directory.valid())
 		return -1;
 	int best = -1;
 	int bestDist = 1000;
-	for (uint32 i = 0; i < count; ++i) {
-		const byte *v = dir + kViewDirRecordsOffset + i * kViewRecordStride;
-		if (!hasBytes(v, _fileData.end(), kViewRecordStride))
-			break;
+	for (uint32 i = 0; i < directory.size(); ++i) {
+		const ResourceView view = directory.record(i);
+		const byte *v = view.dataAt(0, kViewRecordStride);
 		// Circular distance on the 256-unit compass. nativeAngleDistance()
 		// masks both operands, so an out-of-range stored heading cannot
 		// produce a negative distance that would always win the comparison.
@@ -231,27 +186,25 @@ int Set::nearestViewForHeading(uint32 scene, int heading) const {
 bool Set::starXYZ(const Common::String &name, int16 &x, int16 &y, int16 &z) const {
 	if (_starTable < 0)
 		return false;
-	const byte *table = engineBase(static_cast<uint32>(_starTable));
-	if (!hasBytes(table, _fileData.end(), kStarTableRecordsOffset))
+	const ResourceView table = engineView(static_cast<uint32>(_starTable));
+	uint32 count;
+	if (!table.readUint32LE(kStarTableCountOffset, count))
 		return false;
-	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(_starTable));
-	const uint32 length = res.length + 4;
-	const uint32 count = READ_LE_UINT32(table + kStarTableCountOffset);
-	if (static_cast<uint64>(count) * kStarRecordStride + kStarTableRecordsOffset > length)
+	const RecordRange records(table, kStarTableRecordsOffset, count, kStarRecordStride);
+	if (!records.valid())
 		return false;
 
-	const byte *record = table + kStarTableRecordsOffset;
-	for (uint32 i = 0; i < count; ++i, record += kStarRecordStride) {
-		if (!hasBytes(record, _fileData.end(), kStarRecordStride))
-			break;
-		if (pascalEqualsIgnoreCase(record + kStarPrimaryNameOffset, _fileData.end(), name)) {
+	for (uint32 i = 0; i < records.size(); ++i) {
+		const ResourceView recordView = records.record(i);
+		const byte *record = recordView.dataAt(0, kStarRecordStride);
+		if (recordView.pascalEqualsIgnoreCase(kStarPrimaryNameOffset, name)) {
 			x = READ_LE_INT16(record + kStarPrimaryXOffset);
 			y = READ_LE_INT16(record + kStarPrimaryYOffset);
 			z = READ_LE_INT16(record + kStarPrimaryZOffset);
 			return true;
 		}
 		if (READ_LE_UINT32(record + kStarSecondaryFlagOffset) != 0 &&
-				pascalEqualsIgnoreCase(record + kStarSecondaryNameOffset, _fileData.end(), name)) {
+				recordView.pascalEqualsIgnoreCase(kStarSecondaryNameOffset, name)) {
 			x = READ_LE_INT16(record + kStarSecondaryXOffset);
 			y = READ_LE_INT16(record + kStarSecondaryYOffset);
 			z = READ_LE_INT16(record + kStarSecondaryZOffset);
@@ -299,9 +252,9 @@ bool Set::open(const Common::String &name) {
 		return false;
 	}
 
-	const byte *hdr = engineBase(static_cast<uint32>(_master));
-	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
-	if (!hdr || masterLen < kMasterDefaultViewOffset + 1) {
+	const ResourceView master = engineView(static_cast<uint32>(_master));
+	const byte *hdr = master.dataAt(0, kMasterDefaultViewOffset + 1);
+	if (!hdr) {
 		warning("CyberFlix: set '%s' master header truncated", name.c_str());
 		reset();
 		return false;
@@ -314,9 +267,9 @@ bool Set::open(const Common::String &name) {
 	// Embedded names TI.EXE copies out of the master header (FUN_004307f0):
 	// the set's own name (what currentset() returns) and the default scene
 	// and view used when opensetfile gets no scene/view arguments.
-	_setName = readPascalString(hdr + kMasterNameOffset, _fileData, true);
-	_defaultScene = readPascalString(hdr + kMasterDefaultSceneOffset, _fileData, true);
-	_defaultView = readPascalString(hdr + kMasterDefaultViewOffset, _fileData, true);
+	_setName = master.readPascalString(kMasterNameOffset, true);
+	_defaultScene = master.readPascalString(kMasterDefaultSceneOffset, true);
+	_defaultView = master.readPascalString(kMasterDefaultViewOffset, true);
 	_setScriptId = READ_LE_UINT32(hdr + kSetScriptIdOffset);
 	_starTable = resourceIndexById(READ_LE_UINT32(hdr + kStarTableIdOffset));
 
@@ -349,77 +302,61 @@ bool Set::open(const Common::String &name) {
 }
 
 Common::String Set::sceneName(uint32 index) const {
-	const byte *rec = sceneRecord(index);
-	if (!rec)
+	const ResourceView record = sceneRecord(index);
+	const byte *length = record.dataAt(kSceneNameOffset);
+	if (!length || *length == 0 || *length >= 16)
 		return Common::String();
-	byte len = rec[kSceneNameOffset];
-	if (len == 0 || len >= 16 || !hasBytes(rec, _fileData.end(), kSceneNameOffset + 1 + len))
-		return Common::String();
-	return Common::String(reinterpret_cast<const char *>(rec ) + kSceneNameOffset + 1, len);
+	return record.readPascalString(kSceneNameOffset);
 }
 
 int Set::findScene(const Common::String &name) const {
 	for (uint32 i = 0; i < _sceneCount; ++i) {
-		const byte *rec = sceneRecord(i);
-		if (rec && pascalEqualsIgnoreCase(rec + kSceneNameOffset, _fileData.end(), name))
+		const ResourceView record = sceneRecord(i);
+		if (record.pascalEqualsIgnoreCase(kSceneNameOffset, name))
 			return static_cast<int>(i);
 	}
 	return -1;
 }
 
 uint32 Set::angleCount(uint32 scene, uint32 table) const {
-	uint32 count = 0;
-	panoramaTable(scene, table, count);
-	return count;
+	return panoramaTable(scene, table).size();
 }
 
 int Set::findView(uint32 scene, const Common::String &name) const {
 	if (name.empty())
 		return -1;
-	uint32 count = 0;
-	const byte *dir = viewDirectory(scene, count);
-	if (!dir)
+	const RecordRange directory = viewDirectory(scene);
+	if (!directory.valid())
 		return -1;
-	for (uint32 i = 0; i < count; ++i) {
-		const byte *v = dir + kViewDirRecordsOffset + i * kViewRecordStride;
-		if (!hasBytes(v, _fileData.end(), kViewRecordStride))
-			break;
+	for (uint32 i = 0; i < directory.size(); ++i) {
+		const ResourceView view = directory.record(i);
+		const byte *v = view.dataAt(0, kViewRecordStride);
 		byte len = v[kViewNameOffset];
-		if (len && len < 16 &&
-				pascalEqualsIgnoreCase(v + kViewNameOffset, _fileData.end(), name))
+		if (len && len < 16 && view.pascalEqualsIgnoreCase(kViewNameOffset, name))
 			return static_cast<int>(i);
 	}
 	return -1;
 }
 
 Common::String Set::viewName(uint32 scene, uint32 index) const {
-	uint32 count = 0;
-	const byte *dir = viewDirectory(scene, count);
-	if (!dir || index >= count)
+	const ResourceView view = viewDirectory(scene).record(index);
+	const byte *length = view.dataAt(kViewNameOffset);
+	if (!length || *length == 0 || *length >= 16)
 		return Common::String();
-	const byte *v = dir + kViewDirRecordsOffset + index * kViewRecordStride;
-	if (!hasBytes(v, _fileData.end(), kViewRecordStride))
-		return Common::String();
-	byte len = v[kViewNameOffset];
-	if (len == 0 || len >= 16 || !hasBytes(v, _fileData.end(), kViewNameOffset + 1 + len))
-		return Common::String();
-	return Common::String(reinterpret_cast<const char *>(v ) + kViewNameOffset + 1, len);
+	return view.readPascalString(kViewNameOffset);
 }
 
 int Set::angleForView(uint32 scene, uint32 table, int viewIdx) const {
 	if (viewIdx < 0)
 		return -1;
-	uint32 count = 0;
-	const byte *pano = panoramaTable(scene, table, count);
-	if (!pano)
+	const RecordRange panorama = panoramaTable(scene, table);
+	if (!panorama.valid())
 		return -1;
 	// TI's panorama records run from base+0xc with base = payload-4, i.e.
 	// payload+8; the view-index tag sits at record+0x38 (FUN_004425e0 reads
 	// piVar5[0xe]). Records not facing a view directly are tagged -1.
-	for (uint32 i = 0; i < count; ++i) {
-		const byte *r = pano + 8 + i * kPanoramaRecordStride;
-		if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
-			break;
+	for (uint32 i = 0; i < panorama.size(); ++i) {
+		const byte *r = panorama.record(i).dataAt(0, kPanoramaRecordStride);
 		if (static_cast<int32>(READ_LE_UINT32(r + 0x38)) == viewIdx)
 			return static_cast<int>(i);
 	}
@@ -427,26 +364,25 @@ int Set::angleForView(uint32 scene, uint32 table, int viewIdx) const {
 }
 
 int Set::viewTagAtAngle(uint32 scene, uint32 table, uint32 angle) const {
-	uint32 count = 0;
-	const byte *pano = panoramaTable(scene, table, count);
-	if (!pano || angle >= count)
-		return -1;
-	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
-	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
+	const ResourceView record = panoramaTable(scene, table).record(angle);
+	const byte *r = record.dataAt(0, kPanoramaRecordStride);
+	if (!r)
 		return -1;
 	int32 tag = static_cast<int32>(READ_LE_UINT32(r + 0x38));
 	return tag >= 0 ? static_cast<int>(tag): -1;
 }
 
-bool Set::fillCameraFromRecord(const byte *record, CameraData &camera) const {
-	const byte *hdr = _master >= 0 ? engineBase(static_cast<uint32>(_master)) : nullptr;
-	if (!hasBytes(hdr, _fileData.end(), kMasterCameraFieldsEnd))
+bool Set::fillCameraFromRecord(const ResourceView &record, CameraData &camera) const {
+	const byte *r = record.dataAt(0, kPanoramaRecordStride);
+	const byte *hdr = _master >= 0
+			? engineView(static_cast<uint32>(_master)).dataAt(0, kMasterCameraFieldsEnd) : nullptr;
+	if (!r || !hdr)
 		return false;
 
-	camera.heading = READ_LE_INT16(record + kPanoramaHeadingOffset);
-	camera.cameraX = READ_LE_INT16(record + kPanoramaCameraXOffset);
-	camera.cameraY = READ_LE_INT16(record + kPanoramaCameraYOffset);
-	camera.cameraZ = READ_LE_INT16(record + kPanoramaCameraZOffset);
+	camera.heading = READ_LE_INT16(r + kPanoramaHeadingOffset);
+	camera.cameraX = READ_LE_INT16(r + kPanoramaCameraXOffset);
+	camera.cameraY = READ_LE_INT16(r + kPanoramaCameraYOffset);
+	camera.cameraZ = READ_LE_INT16(r + kPanoramaCameraZOffset);
 	// DAT_0046119a: zeroed at set open (FUN_004307f0), then script-driven via
 	// the camerahi builtin — BOOTFILE's global openset handler calls
 	// adjustcamera(), which sets it per set (halla 139, hallc 80, halld 150,
@@ -472,25 +408,11 @@ bool Set::fillCameraFromRecord(const byte *record, CameraData &camera) const {
 }
 
 bool Set::cameraData(uint32 scene, uint32 table, uint32 angle, CameraData &camera) const {
-	uint32 count = 0;
-	const byte *pano = panoramaTable(scene, table, count);
-	if (!pano || angle >= count)
-		return false;
-	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
-	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
-		return false;
-	return fillCameraFromRecord(r, camera);
+	return fillCameraFromRecord(panoramaTable(scene, table).record(angle), camera);
 }
 
 bool Set::transitionCameraData(uint32 transitionId, uint32 frame, CameraData &camera) const {
-	uint32 count = 0;
-	const byte *transition = transitionTable(transitionId, count);
-	if (!transition || frame >= count)
-		return false;
-	const byte *r = transition + 0x0c + frame * kPanoramaRecordStride;
-	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
-		return false;
-	return fillCameraFromRecord(r, camera);
+	return fillCameraFromRecord(transitionTable(transitionId).record(frame), camera);
 }
 
 int Set::nextTaggedAngle(uint32 scene, uint32 table, int startAngle) const {
@@ -511,12 +433,9 @@ uint32 Set::forwardTransitionForView(uint32 scene, int viewIdx) const {
 	int angle = angleForView(scene, 0, viewIdx);
 	if (angle < 0)
 		return 0;
-	uint32 count = 0;
-	const byte *pano = panoramaTable(scene, 0, count);
-	if (!pano || static_cast<uint32>(angle) >= count)
-		return 0;
-	const byte *r = pano + 8 + static_cast<uint32>(angle) * kPanoramaRecordStride;
-	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
+	const ResourceView record = panoramaTable(scene, 0).record(static_cast<uint32>(angle));
+	const byte *r = record.dataAt(0, kPanoramaRecordStride);
+	if (!r)
 		return 0;
 	return READ_LE_UINT32(r + 0x34);
 }
@@ -530,51 +449,45 @@ Common::SharedPtr<Script> Set::setScriptShared() const {
 }
 
 const Script *Set::sceneScript(uint32 scene) const {
-	const byte *rec = sceneRecord(scene);
-	if (!rec)
+	uint32 scriptId;
+	if (!sceneRecord(scene).readUint32LE(kSceneScriptOffset, scriptId))
 		return nullptr;
-	return scriptById(READ_LE_UINT32(rec + kSceneScriptOffset));
+	return scriptById(scriptId);
 }
 
 Common::SharedPtr<Script> Set::sceneScriptShared(uint32 scene) const {
-	const byte *rec = sceneRecord(scene);
-	if (!rec)
+	uint32 scriptId;
+	if (!sceneRecord(scene).readUint32LE(kSceneScriptOffset, scriptId))
 		return Common::SharedPtr<Script>();
-	return scriptByIdShared(READ_LE_UINT32(rec + kSceneScriptOffset));
+	return scriptByIdShared(scriptId);
 }
 
 Common::String Set::hitTestPainting(uint32 scene, const Common::String &view, int16 x, int16 y) const {
-	const byte *v = viewRecord(scene, view);
-	uint32 count = 0, length = 0;
-	const byte *table = paintingTable(v, count, length);
-	if (!table)
+	const RecordRange paintings = paintingTable(viewRecord(scene, view));
+	if (!paintings.valid())
 		return Common::String();
-	for (int i = static_cast<int>(count) - 1; i >= 0; --i) {
-		const byte *rec = table + 8 + static_cast<uint32>(i) * 0x24;
-		if (static_cast<uint32>(rec - table) + 0x24 > length)
-			break;
+	for (int i = static_cast<int>(paintings.size()) - 1; i >= 0; --i) {
+		const ResourceView record = paintings.record(static_cast<uint>(i));
+		const byte *rec = record.dataAt(0, 0x24);
 		int16 top = static_cast<int16>(READ_LE_UINT16(rec + 0x08));
 		int16 left = static_cast<int16>(READ_LE_UINT16(rec + 0x0a));
 		int16 bottom = static_cast<int16>(READ_LE_UINT16(rec + 0x0c));
 		int16 right = static_cast<int16>(READ_LE_UINT16(rec + 0x0e));
 		if (x >= left && x < right && y >= top && y < bottom)
-			return pascalString(rec + 0x14);
+			return record.readPascalString(0x14);
 	}
 	return Common::String();
 }
 
 bool Set::pointInPainting(uint32 scene, const Common::String &view,
 		const Common::String &painting, int16 x, int16 y) const {
-	const byte *v = viewRecord(scene, view);
-	uint32 count = 0, length = 0;
-	const byte *table = paintingTable(v, count, length);
-	if (!table)
+	const RecordRange paintings = paintingTable(viewRecord(scene, view));
+	if (!paintings.valid())
 		return false;
-	for (uint32 i = 0; i < count; ++i) {
-		const byte *rec = table + 8 + i * 0x24;
-		if (8 + i * 0x24 + 0x24 > length)
-			break;
-		if (!pascalEqualsIgnoreCase(rec + 0x14, _fileData.end(), painting))
+	for (uint32 i = 0; i < paintings.size(); ++i) {
+		const ResourceView record = paintings.record(i);
+		const byte *rec = record.dataAt(0, 0x24);
+		if (!record.pascalEqualsIgnoreCase(0x14, painting))
 			continue;
 		int16 top = static_cast<int16>(READ_LE_UINT16(rec + 0x08));
 		int16 left = static_cast<int16>(READ_LE_UINT16(rec + 0x0a));
@@ -609,12 +522,12 @@ bool Set::paintingDispatchScripts(uint32 scene, const Common::String &view,
 	sceneScript = Common::SharedPtr<Script>();
 	setScript = Common::SharedPtr<Script>();
 
-	const byte *v = viewRecord(scene, view);
-	if (!v)
+	const ResourceView viewRecordData = viewRecord(scene, view);
+	if (!viewRecordData.valid())
 		return false;
-	const byte *sceneRec = sceneRecord(scene);
-	if (sceneRec)
-		sceneScript = scriptByIdShared(READ_LE_UINT32(sceneRec + kSceneScriptOffset));
+	uint32 sceneScriptId;
+	if (sceneRecord(scene).readUint32LE(kSceneScriptOffset, sceneScriptId))
+		sceneScript = scriptByIdShared(sceneScriptId);
 	setScript = scriptByIdShared(_setScriptId);
 
 	// The same painting commonly receives repeated setcursor/idle messages, and
@@ -628,14 +541,12 @@ bool Set::paintingDispatchScripts(uint32 scene, const Common::String &view,
 	}
 
 	Common::SharedPtr<Script> result;
-	uint32 count = 0, length = 0;
-	const byte *table = paintingTable(v, count, length);
-	if (table) {
-		for (uint32 i = 0; i < count; ++i) {
-			const byte *rec = table + 8 + i * 0x24;
-			if (8 + i * 0x24 + 0x24 > length)
-				break;
-			if (pascalEqualsIgnoreCase(rec + 0x14, _fileData.end(), painting)) {
+	const RecordRange paintings = paintingTable(viewRecordData);
+	if (paintings.valid()) {
+		for (uint32 i = 0; i < paintings.size(); ++i) {
+			const ResourceView record = paintings.record(i);
+			const byte *rec = record.dataAt(0, 0x24);
+			if (record.pascalEqualsIgnoreCase(0x14, painting)) {
 				result = scriptByIdShared(READ_LE_UINT32(rec + 0x10));
 				break;
 			}
@@ -652,36 +563,30 @@ bool Set::paintingDispatchScripts(uint32 scene, const Common::String &view,
 }
 
 uint32 Set::paintingCount(uint32 scene, const Common::String &view) const {
-	const byte *v = viewRecord(scene, view);
-	uint32 count = 0, length = 0;
-	return paintingTable(v, count, length) ? count : 0;
+	return paintingTable(viewRecord(scene, view)).size();
 }
 
 Common::String Set::indexToPainting(uint32 scene, const Common::String &view, uint32 index) const {
 	if (index == 0)
 		return Common::String();
-	const byte *v = viewRecord(scene, view);
-	uint32 count = 0, length = 0;
-	const byte *table = paintingTable(v, count, length);
-	if (!table || index > count)
+	const RecordRange paintings = paintingTable(viewRecord(scene, view));
+	if (!paintings.valid() || index > paintings.size())
 		return Common::String();
-	const byte *rec = table + 8 + (index - 1) * 0x24;
-	if (static_cast<uint32>(rec - table) + 0x24 > length)
-		return Common::String();
-	return pascalString(rec + 0x14);
+	return paintings.record(index - 1).readPascalString(0x14);
 }
 
 bool Set::transitionDestination(uint32 transitionId, uint32 &scene,
 		Common::String &view, int &angle) const {
-	uint32 count = 0;
-	const byte *transition = transitionTable(transitionId, count);
-	if (!transition || count == 0)
+	const RecordRange transition = transitionTable(transitionId);
+	uint32 viewDirectoryId;
+	if (!transition.valid() || transition.size() == 0 ||
+			!transition.view().readUint32LE(0x08, viewDirectoryId))
 		return false;
-	int sceneIdx = findSceneByViewDirId(READ_LE_UINT32(transition + 0x08));
+	int sceneIdx = findSceneByViewDirId(viewDirectoryId);
 	if (sceneIdx < 0)
 		return false;
-	const byte *last = transition + 0x0c + (count - 1) * kPanoramaRecordStride;
-	if (!hasBytes(last, _fileData.end(), kPanoramaRecordStride))
+	const byte *last = transition.record(transition.size() - 1).dataAt(0, kPanoramaRecordStride);
+	if (!last)
 		return false;
 	int viewIdx = nearestViewForHeading(static_cast<uint32>(sceneIdx), READ_LE_INT16(last + 0x26));
 	if (viewIdx < 0)
@@ -694,15 +599,14 @@ bool Set::transitionDestination(uint32 transitionId, uint32 &scene,
 }
 
 bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq) {
-	uint32 count = 0;
-	const byte *pano = panoramaTable(scene, table, count);
-	if (!pano) {
+	const RecordRange panorama = panoramaTable(scene, table);
+	if (!panorama.valid()) {
 		warning("CyberFlix: set '%s' scene %u panorama table %u missing", _name.c_str(), scene, table);
 		return false;
 	}
-	if (angle >= count) {
+	if (angle >= panorama.size()) {
 		warning("CyberFlix: set '%s' scene %u table %u angle %u out of range (%u)",
-				_name.c_str(), scene, table, angle, count);
+				_name.c_str(), scene, table, angle, panorama.size());
 		return false;
 	}
 
@@ -717,14 +621,14 @@ bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &s
 	// Some authored records (for example GSTAIR2 Scene64/Scene65) use a frame
 	// resource id of 0, which native FUN_00442e90 handles as "keep the retained
 	// framebuffer". Only clear for a normal non-zero starting frame.
-	const byte *first = pano + 8;
-	if (!hasBytes(first, _fileData.end(), kPanoramaRecordStride))
+	const byte *first = panorama.record(0).dataAt(0, kPanoramaRecordStride);
+	if (!first)
 		return false;
 	if (READ_LE_UINT32(first + kPanoramaFrameIdOffset) != 0)
 		seq.clear();
 	for (uint32 a = 0; a <= angle; ++a) {
-		const byte *r = pano + 8 + a * kPanoramaRecordStride;
-		if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
+		const byte *r = panorama.record(a).dataAt(0, kPanoramaRecordStride);
+		if (!r)
 			return false;
 		if (!applyFrameResource(READ_LE_UINT32(r + kPanoramaFrameIdOffset), seq))
 			return false;
@@ -746,12 +650,8 @@ bool Set::renderScene(uint32 scene, uint32 table, uint32 angle, FrameSequence &s
 }
 
 bool Set::applyPanoramaFrame(uint32 scene, uint32 table, uint32 angle, FrameSequence &seq) {
-	uint32 count = 0;
-	const byte *pano = panoramaTable(scene, table, count);
-	if (!pano || angle >= count)
-		return false;
-	const byte *r = pano + 8 + angle * kPanoramaRecordStride;
-	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
+	const byte *r = panoramaTable(scene, table).record(angle).dataAt(0, kPanoramaRecordStride);
+	if (!r)
 		return false;
 	return applyFrameResource(READ_LE_UINT32(r + kPanoramaFrameIdOffset), seq);
 }
@@ -764,18 +664,12 @@ bool Set::applyPanoramaFrame(uint32 scene, uint32 table, uint32 angle, FrameSequ
 }
 
 uint32 Set::transitionFrameCount(uint32 transitionId) const {
-	uint32 count = 0;
-	transitionTable(transitionId, count);
-	return count;
+	return transitionTable(transitionId).size();
 }
 
 bool Set::applyTransitionFrame(uint32 transitionId, uint32 frame, FrameSequence &seq) {
-	uint32 count = 0;
-	const byte *transition = transitionTable(transitionId, count);
-	if (!transition || frame >= count)
-		return false;
-	const byte *r = transition + 0x0c + frame * kPanoramaRecordStride;
-	if (!hasBytes(r, _fileData.end(), kPanoramaRecordStride))
+	const byte *r = transitionTable(transitionId).record(frame).dataAt(0, kPanoramaRecordStride);
+	if (!r)
 		return false;
 	return applyFrameResource(READ_LE_UINT32(r + kPanoramaFrameIdOffset), seq);
 }

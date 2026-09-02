@@ -30,6 +30,7 @@
 
 #include "cyberflix/archive.h"
 #include "cyberflix/image.h"
+#include "cyberflix/resource_helpers.h"
 #include "cyberflix/script.h"
 
 namespace Graphics {
@@ -140,10 +141,9 @@ private:
 		Common::Array<RenderLayer> layers;
 	};
 
-	const byte *engineBase(uint32 index) const;
-	const byte *payload(uint32 index) const;
+	ResourceView engineView(uint32 index) const;
+	ResourceView payloadView(uint32 index) const;
 	int resourceIndexById(uint32 id) const;
-	Common::String pascalString(const byte *p) const;
 	Common::SharedPtr<Script> parseScriptResource(uint32 resId) const;
 	Common::SharedPtr<CelImage> celResource(uint32 resId) const;
 	const Common::Array<RenderFrame> *cachedActionFrames(const ActionEntry &action) const;

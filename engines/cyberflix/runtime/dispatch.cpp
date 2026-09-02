@@ -81,40 +81,29 @@ Value CyberFlixEngine::dispatchWithScopeChainValue(const Common::Array<const Scr
 		const Common::String &self, const Common::String &targetProp,
 		const Common::String &message, const Common::Array<Value> &args,
 		const char *debugContext) {
-	Common::Array<Common::String> scopeSelf;
-	Common::Array<Common::String> scopeProp;
-	return dispatchWithScopeChainContextsValue(scopes, scopeSelf, scopeProp,
+	Common::Array<ScriptVM::LibraryScope> scopeEntries;
+	for (const Script *script : scopes)
+		scopeEntries.push_back(ScriptVM::LibraryScope(script, self, targetProp));
+	return dispatchWithScopeChainContextsValue(scopeEntries,
 			self, targetProp, message, args, debugContext);
 }
 
-Value CyberFlixEngine::dispatchWithScopeChainContextsValue(const Common::Array<const Script *> &scopes,
-		const Common::Array<Common::String> &scopeSelf,
-		const Common::Array<Common::String> &scopeProp,
+Value CyberFlixEngine::dispatchWithScopeChainContextsValue(const Common::Array<ScriptVM::LibraryScope> &scopes,
 		const Common::String &self, const Common::String &targetProp,
 		const Common::String &message, const Common::Array<Value> &args,
 		const char *debugContext) {
 	Common::String prevSelf = _vm.contextSelf();
 	Common::String prevProp = _vm.contextProp();
-	Common::Array<const Script *> chain;
-	Common::Array<Common::String> chainSelf;
-	Common::Array<Common::String> chainProp;
+	Common::Array<ScriptVM::LibraryScope> chain;
 	chain.reserve((_globalLib ? 1 : 0) + scopes.size());
-	chainSelf.reserve((_globalLib ? 1 : 0) + scopes.size());
-	chainProp.reserve((_globalLib ? 1 : 0) + scopes.size());
-	if (_globalLib) {
-		chain.push_back(_globalLib.get()); // "System: " tail, searched last
-		chainSelf.push_back(self);
-		chainProp.push_back(targetProp);
-	}
+	if (_globalLib)
+		chain.push_back(ScriptVM::LibraryScope(_globalLib.get(), self, targetProp));
 	for (int i = static_cast<int>(scopes.size()) - 1; i >= 0; --i) {
-		const uint32 scopeIndex = static_cast<uint32>(i);
-		if (scopes[scopeIndex]) {
-			chain.push_back(scopes[static_cast<uint32>(i)]);
-			chainSelf.push_back(scopeIndex < scopeSelf.size() ? scopeSelf[scopeIndex] : self);
-			chainProp.push_back(scopeIndex < scopeProp.size() ? scopeProp[scopeIndex] : targetProp);
-		}
+		const ScriptVM::LibraryScope &scope = scopes[static_cast<uint>(i)];
+		if (scope.script)
+			chain.push_back(scope);
 	}
-	ScriptVM::LibraryState prevChain = _vm.swapLibrariesWithContexts(chain, chainSelf, chainProp);
+	ScriptVM::LibraryState prevChain = _vm.swapLibraries(chain);
 	_vm.setDispatchContext(self, targetProp);
 
 	bool handled = false;

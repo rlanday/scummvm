@@ -83,7 +83,7 @@ static bool parseGeneratedExtraActorName(const Common::String &name, Common::Str
 int ActorRuntime::findWalkRecord(const Common::String &name) const {
 	Common::String key = name;
 	key.toLowercase();
-	for (uint32 i = 0; i < _walks.size(); ++i)
+	for (uint i = 0; i < _walks.size(); ++i)
 		if (_walks[i].actorName == key)
 			return static_cast<int>(i);
 	return -1;
@@ -118,18 +118,18 @@ void ActorRuntime::dispatchTurnComplete(CyberFlixEngine &engine, const Common::S
 Common::SharedPtr<Cast> ActorRuntime::findCastShared(const Common::String &name) const {
 	Common::String key = name;
 	key.toLowercase();
-	for (uint32 i = 0; i < _casts.size(); ++i)
-		if (_casts[i]->name() == key)
-			return _casts[i];
+	for (const Common::SharedPtr<Cast> &cast : _casts)
+		if (cast->name() == key)
+			return cast;
 	return Common::SharedPtr<Cast>();
 }
 
 ActorRuntime::ActorRef ActorRuntime::findActorRef(const Common::String &name) const {
 	ActorRef ref;
-	for (uint32 i = 0; i < _casts.size(); ++i) {
-		Common::SharedPtr<Cast::Actor> actor = _casts[i]->findActor(name);
+	for (const Common::SharedPtr<Cast> &cast : _casts) {
+		Common::SharedPtr<Cast::Actor> actor = cast->findActor(name);
 		if (actor) {
-			ref.cast = _casts[i];
+			ref.cast = cast;
 			ref.actor = actor;
 			return ref;
 		}
@@ -198,45 +198,35 @@ void ActorRuntime::refreshActorStarPositions(CyberFlixEngine &engine) {
 	if (!engine._setRuntime.set() || !engine._setRuntime.set()->isOpen())
 		return;
 
-	for (uint32 c = 0; c < _casts.size(); ++c) {
-		for (uint32 i = 0; i < _casts[c]->actorCount(); ++i)
-			resolveActorStar(engine, _casts[c]->actor(i));
+	for (const Common::SharedPtr<Cast> &cast : _casts) {
+		for (uint32 i = 0; i < cast->actorCount(); ++i)
+			resolveActorStar(engine, cast->actor(i));
 	}
 }
 
-void ActorRuntime::collectWorldActors(CyberFlixEngine &engine, Common::Array<const Cast::Actor *> &draw,
-		Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
+void ActorRuntime::collectWorldActors(CyberFlixEngine &engine, Common::Array<DrawEntry> &draw,
 		const Shop::WorldCamera &camera) const {
 	if (!engine._setRuntime.set() || !engine._setRuntime.set()->isOpen())
 		return;
 	const Common::String &setName = engine._setRuntime.set()->setName();
-	for (uint32 c = 0; c < _casts.size(); ++c) {
-		for (uint32 i = 0; i < _casts[c]->actorCount(); ++i) {
-			const Cast::Actor &actor = _casts[c]->actor(i);
+	for (const Common::SharedPtr<Cast> &cast : _casts) {
+		for (uint32 i = 0; i < cast->actorCount(); ++i) {
+			const Cast::Actor &actor = cast->actor(i);
 			if (!actor.visible || !actor.setName.equalsIgnoreCase(setName))
 				continue;
-			Cast::ActorProjectionResult projected = _casts[c]->projectWorldActor(actor, camera, setName);
+			Cast::ActorProjectionResult projected = cast->projectWorldActor(actor, camera, setName);
 			if (!projected.valid)
 				continue;
-			draw.push_back(&actor);
-			drawCast.push_back(_casts[c].get());
-			depths.push_back(projected.depth);
+			draw.push_back(DrawEntry(&actor, cast.get(), projected.depth));
 		}
 	}
 
-	for (uint32 i = 1; i < draw.size(); ++i) {
-		const Cast::Actor *actor = draw[i];
-		const Cast *cast = drawCast[i];
-		int16 depth = depths[i];
-		uint32 j = i;
-		for (; j > 0 && depths[j - 1] < depth; --j) {
+	for (uint i = 1; i < draw.size(); ++i) {
+		const DrawEntry entry = draw[i];
+		uint j = i;
+		for (; j > 0 && draw[j - 1].depth < entry.depth; --j)
 			draw[j] = draw[j - 1];
-			drawCast[j] = drawCast[j - 1];
-			depths[j] = depths[j - 1];
-		}
-		draw[j] = actor;
-		drawCast[j] = cast;
-		depths[j] = depth;
+		draw[j] = entry;
 	}
 }
 
@@ -259,7 +249,7 @@ void ActorRuntime::openCastFile(CyberFlixEngine &engine, const Common::String &n
 void ActorRuntime::closeCastFile(CyberFlixEngine &engine, const Common::String &name) {
 	Common::String key = name;
 	key.toLowercase();
-	for (uint32 i = 0; i < _casts.size(); ++i) {
+	for (uint i = 0; i < _casts.size(); ++i) {
 		if (_casts[i]->name() == key) {
 			for (uint32 a = 0; a < _casts[i]->actorCount(); ++a) {
 				const Common::String actorName = _casts[i]->actor(a).name;
@@ -365,8 +355,8 @@ Value ActorRuntime::sendToActorFx(CyberFlixEngine &engine, const Common::String 
 
 int ActorRuntime::countActors() const {
 	uint32 count = 0;
-	for (uint32 i = 0; i < _casts.size(); ++i)
-		count += _casts[i]->actorCount();
+	for (const Common::SharedPtr<Cast> &cast : _casts)
+		count += cast->actorCount();
 	return static_cast<int>(count);
 }
 
@@ -374,10 +364,10 @@ Common::String ActorRuntime::indexToActor(int index) const {
 	if (index < 1)
 		return Common::String();
 	uint32 remaining = static_cast<uint32>(index);
-	for (uint32 i = 0; i < _casts.size(); ++i) {
-		if (remaining <= _casts[i]->actorCount())
-			return _casts[i]->actor(remaining - 1).name;
-		remaining -= _casts[i]->actorCount();
+	for (const Common::SharedPtr<Cast> &cast : _casts) {
+		if (remaining <= cast->actorCount())
+			return cast->actor(remaining - 1).name;
+		remaining -= cast->actorCount();
 	}
 	return Common::String();
 }
@@ -811,8 +801,8 @@ void ActorRuntime::walkToXYZ(CyberFlixEngine &engine, const Common::String &name
 }
 
 void ActorRuntime::advanceActorPoses() {
-	for (uint32 i = 0; i < _casts.size(); ++i)
-		_casts[i]->advanceActorPoses();
+	for (const Common::SharedPtr<Cast> &cast : _casts)
+		cast->advanceActorPoses();
 }
 
 void ActorRuntime::advanceWalks(CyberFlixEngine &engine) {
@@ -835,7 +825,7 @@ void ActorRuntime::advanceWalks(CyberFlixEngine &engine) {
 	};
 	Common::Array<Completion> completions;
 
-	for (uint32 i = 0; i < _walks.size();) {
+	for (uint i = 0; i < _walks.size();) {
 		WalkRecord &w = _walks[i];
 		if (w.pause > 0) {
 			++i;
@@ -896,15 +886,15 @@ void ActorRuntime::advanceWalks(CyberFlixEngine &engine) {
 		++i;
 	}
 
-	for (uint32 i = 0; i < completions.size(); ++i) {
-		if (!completions[i].walkDone) {
-			dispatchTurnComplete(engine, completions[i].name);
+	for (const Completion &completion : completions) {
+		if (!completion.walkDone) {
+			dispatchTurnComplete(engine, completion.name);
 		} else {
 			// Arrival: assume the destination star (snaps any rounding error);
 			// xyz walks end off-star at the raw coordinates like native.
-			if (!completions[i].dest.empty())
-				setActorStar(engine, completions[i].name, completions[i].dest);
-			dispatchWalkComplete(engine, completions[i].name);
+			if (!completion.dest.empty())
+				setActorStar(engine, completion.name, completion.dest);
+			dispatchWalkComplete(engine, completion.name);
 		}
 	}
 }
@@ -920,13 +910,13 @@ void ActorRuntime::pauseWalk(const Common::String &name, int flag) {
 	const bool all = name.empty() || name.equalsIgnoreCase("all");
 	Common::String key = name;
 	key.toLowercase();
-	for (uint32 i = 0; i < _walks.size(); ++i) {
-		if (!all && _walks[i].actorName != key)
+	for (WalkRecord &walk : _walks) {
+		if (!all && walk.actorName != key)
 			continue;
 		if (flag)
-			_walks[i].pause++;
+			walk.pause++;
 		else
-			_walks[i].pause = MAX(0, _walks[i].pause - 1);
+			walk.pause = MAX(0, walk.pause - 1);
 	}
 }
 

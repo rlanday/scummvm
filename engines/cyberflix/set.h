@@ -28,6 +28,7 @@
 
 #include "cyberflix/archive.h"
 #include "cyberflix/image.h"
+#include "cyberflix/resource_helpers.h"
 #include "cyberflix/script.h"
 
 namespace CyberFlix {
@@ -339,37 +340,26 @@ public:
 
 private:
 	void reset();
-	/** Engine-base pointer (record+8) of resource @p index, or nullptr. */
-	const byte *engineBase(uint32 index) const;
-	/** Payload pointer (record+12) of resource @p index, or nullptr. */
-	const byte *payload(uint32 index) const;
+	ResourceView engineView(uint32 index) const;
+	ResourceView payloadView(uint32 index) const;
 	/** Archive index of the resource whose id is @p id, or -1. */
 	int resourceIndexById(uint32 id) const;
-	/** Scene record pointer for @p scene, or nullptr if out of range. */
-	const byte *sceneRecord(uint32 scene) const;
-	/** View-directory payload for @p scene with its record count validated
-	 *  against the resource length, or nullptr. */
-	const byte *viewDirectory(uint32 scene, uint32 &count) const;
-	/** View record pointer for @p view in @p scene, or nullptr. */
-	const byte *viewRecord(uint32 scene, const Common::String &view) const;
-	/** Painting table engine-base pointer for @p viewRec, or nullptr. */
-	const byte *paintingTable(const byte *viewRec, uint32 &count, uint32 &length) const;
-	/** Panorama table payload for scene @p scene / table @p table, or nullptr. */
-	const byte *panoramaTable(uint32 scene, uint32 table, uint32 &count) const;
-	/** Forward-transition table engine-base for resource id @p transitionId. */
-	const byte *transitionTable(uint32 transitionId, uint32 &count) const;
+	ResourceView sceneRecord(uint32 scene) const;
+	RecordRange viewDirectory(uint32 scene) const;
+	ResourceView viewRecord(uint32 scene, const Common::String &view) const;
+	RecordRange paintingTable(const ResourceView &viewRecord) const;
+	RecordRange panoramaTable(uint32 scene, uint32 table) const;
+	RecordRange transitionTable(uint32 transitionId) const;
 	/** Fill @p camera from the panorama/transition record @p record plus the
 	 *  master header's projection fields (shared by cameraData and
 	 *  transitionCameraData). */
-	bool fillCameraFromRecord(const byte *record, CameraData &camera) const;
+	bool fillCameraFromRecord(const ResourceView &record, CameraData &camera) const;
 	/** Apply a frame resource to @p seq. */
 	bool applyFrameResource(uint32 frameId, FrameSequence &seq) const;
 	/** Apply a frame resource to @p seq and copy the retained buffer to @p out. */
 	bool applyFrameResource(uint32 frameId, FrameSequence &seq, FrameImage &out) const;
 	/** Index of the scene whose view-directory resource id is @p viewDirId. */
 	int findSceneByViewDirId(uint32 viewDirId) const;
-	/** Read the Pascal string at @p p (bounded by the file buffer). */
-	Common::String pascalString(const byte *p) const;
 	/** Parsed script resource @p id, or null if missing/not a script. */
 	Common::SharedPtr<Script> scriptByIdShared(uint32 id) const;
 	const Script *scriptById(uint32 id) const { return scriptByIdShared(id).get(); }

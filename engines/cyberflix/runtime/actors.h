@@ -40,13 +40,20 @@ public:
 		Common::SharedPtr<Cast> cast;
 		Common::SharedPtr<Cast::Actor> actor;
 	};
+	struct DrawEntry {
+		DrawEntry(const Cast::Actor *actor_, const Cast *cast_, int16 depth_) :
+				actor(actor_), cast(cast_), depth(depth_) {}
+
+		const Cast::Actor *actor;
+		const Cast *cast;
+		int16 depth;
+	};
 
 	Common::SharedPtr<Cast> findCastShared(const Common::String &name) const;
 	ActorRef findActorRef(const Common::String &name) const;
 	bool resolveActorStar(CyberFlixEngine &engine, Cast::Actor &actor);
 	void refreshActorStarPositions(CyberFlixEngine &engine);
-	void collectWorldActors(CyberFlixEngine &engine, Common::Array<const Cast::Actor *> &draw,
-			Common::Array<const Cast *> &drawCast, Common::Array<int16> &depths,
+	void collectWorldActors(CyberFlixEngine &engine, Common::Array<DrawEntry> &draw,
 			const Shop::WorldCamera &camera) const;
 	void openCastFile(CyberFlixEngine &engine, const Common::String &name);
 	void closeCastFile(CyberFlixEngine &engine, const Common::String &name);

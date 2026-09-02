@@ -26,6 +26,7 @@
 #include "common/util.h"
 
 #include "graphics/font.h"
+#include "graphics/managed_surface.h"
 #include "graphics/paletteman.h"
 #include "graphics/surface.h"
 
@@ -134,6 +135,8 @@ void CyberFlixEngine::setClut(const Common::String &name) {
 // rect fill in the original. The palette is not touched.
 void CyberFlixEngine::blackScreen() {
 	Graphics::Surface *screen = _system->lockScreen();
+	if (!screen)
+		return;
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
 	_system->unlockScreen();
 	_system->updateScreen();
@@ -201,6 +204,8 @@ void CyberFlixEngine::drawString(const Common::String &text, int32 packedPoint, 
 		_propRuntime.setDirty(true);
 	} else {
 		Graphics::Surface *screen = _system->lockScreen();
+		if (!screen)
+			return;
 		font->drawString(screen, text, x, baselineY - font->getFontAscent(),
 				kScreenWidth - x, static_cast<uint32>(CLIP(color, 0, 255)));
 		_system->unlockScreen();
@@ -319,13 +324,11 @@ static bool isWipeEffect(uint16 effect) {
 			effect == Script::kEffectWipeRight || effect == Script::kEffectWipeLeft;
 }
 
-// Copy the visible screen into @p out, which the caller must free().
-bool CyberFlixEngine::captureScreen(Graphics::Surface &out) {
+// Copy the visible screen into @p out.
+bool CyberFlixEngine::captureScreen(Graphics::ManagedSurface &out) {
 	Graphics::Surface *screen = _system->lockScreen();
-	if (!screen) {
-		_system->unlockScreen();
+	if (!screen)
 		return false;
-	}
 	out.copyFrom(*screen);
 	_system->unlockScreen();
 	return true;
@@ -334,8 +337,9 @@ bool CyberFlixEngine::captureScreen(Graphics::Surface &out) {
 // Blit one band of @p image to the screen surface without presenting it.
 void CyberFlixEngine::blitScreenBand(const Graphics::Surface &image, const Common::Rect &band) {
 	Graphics::Surface *screen = _system->lockScreen();
-	if (screen)
-		screen->copyRectToSurface(image, band.left, band.top, band);
+	if (!screen)
+		return;
+	screen->copyRectToSurface(image, band.left, band.top, band);
 	_system->unlockScreen();
 }
 
@@ -410,7 +414,7 @@ void CyberFlixEngine::setVisualEffect(uint16 effect, int duration) {
 	// outgoing one. It has to be captured before refreshPropsIfDirty() below,
 	// which repaints that queued rect with the new flat and presents it — after
 	// that point there is no outgoing image left for a wipe to reveal over.
-	Graphics::Surface outgoing;
+	Graphics::ManagedSurface outgoing;
 	const bool wiping = isWipeEffect(effect) && captureScreen(outgoing);
 
 	propRuntime().refreshPropsIfDirty(*this, false, !wiping);
@@ -464,14 +468,13 @@ void CyberFlixEngine::setVisualEffect(uint16 effect, int duration) {
 		// would flash whole for a frame before the wipe ran.
 		stageRuntime().renderStageNode(*this, _stageRuntime.node(), false, !wiping);
 		if (wiping) {
-			Graphics::Surface incoming;
+			Graphics::ManagedSurface incoming;
 			if (captureScreen(incoming)) {
 				// Put the outgoing image back in the screen surface. The backend
 				// is still showing it, so this is invisible; it just gives the
 				// wipe the same starting state the native one relies on.
 				blitScreenBand(outgoing, Common::Rect(kScreenWidth, kScreenHeight));
 				runWipe(incoming, effect, duration);
-				incoming.free();
 			} else {
 				_system->updateScreen(); // capture failed: present what we have
 			}
@@ -480,9 +483,6 @@ void CyberFlixEngine::setVisualEffect(uint16 effect, int duration) {
 	} else {
 		_system->updateScreen();
 	}
-
-	if (wiping)
-		outgoing.free();
 
 	const char *effectName = Script::methodName(effect);
 	debug(1, "CyberFlix: visualeffect(%s, %d)%s", effectName ? effectName : "?", duration,

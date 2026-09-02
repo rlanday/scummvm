@@ -509,6 +509,8 @@ bool PuppetRuntime::paintGrabBackdrop(CyberFlixEngine &engine, Graphics::Surface
 bool PuppetRuntime::renderFrame(CyberFlixEngine &engine, const Puppet::ActionEntry &action,
 		uint32 frameIndex, bool present, const Common::Array<byte> *cachedBackdrop) {
 	Graphics::Surface *screen = engine._system->lockScreen();
+	if (!screen)
+		return false;
 	const bool backdropPainted = paintGrabBackdrop(engine, *screen, cachedBackdrop);
 	if (!backdropPainted)
 		screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
@@ -586,6 +588,8 @@ void PuppetRuntime::renderBevels(CyberFlixEngine &engine, bool present) {
 		return;
 
 	Graphics::Surface *screen = engine._system->lockScreen();
+	if (!screen)
+		return;
 	// FUN_00449370 always draws the PUP master bevel backdrop before checking
 	// the queued bevel count, so Smethels' text-row panel stays visible even
 	// during speech beats that offer no clickable choices.
@@ -641,6 +645,8 @@ void PuppetRuntime::drawBevelHighlight(CyberFlixEngine &engine, const Common::Re
 		return;
 
 	Graphics::Surface *screen = engine._system->lockScreen();
+	if (!screen)
+		return;
 	strokeBevelHighlight(*screen, rect);
 	engine._system->unlockScreen();
 	engine._system->updateScreen();

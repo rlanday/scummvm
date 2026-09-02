@@ -89,7 +89,7 @@ CbxAudioInfo getCbxAudioInfo(const byte *payload, uint32 payloadLen) {
 	CbxAudioInfo info;
 	// Header fields are relative to the decoder base B == payload - 4, so e.g.
 	// the rate at B+0x1c is payload+0x18. Read them directly off payload.
-	if (payloadLen < 0x2c)
+	if (!payload || payloadLen < 0x2c)
 		return info;
 	const uint32 rate = READ_LE_UINT32(payload + 0x18);
 	const uint32 blockBytes = READ_LE_UINT32(payload + 0x1c);
@@ -118,7 +118,7 @@ CbxAudioInfo getCbxAudioInfo(const byte *payload, uint32 payloadLen) {
 
 uint32 decodeCbxAudioBlock(const byte *payload, uint32 payloadLen, uint32 blockIndex,
 		byte *out, uint32 outSize) {
-	if (payloadLen < 0x2c)
+	if (!payload || !out || payloadLen < 0x2c)
 		return 0;
 
 	const uint32 rate = READ_LE_UINT32(payload + 0x18);

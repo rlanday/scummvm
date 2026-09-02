@@ -29,18 +29,14 @@
 
 namespace CyberFlix {
 
-const byte *Cast::engineBase(uint32 index) const {
+ResourceView Cast::engineView(uint32 index) const {
 	if (index >= _archive.getResourceCount())
-		return nullptr;
-	return resourceEngineBase(_fileData, _archive.getResource(index));
+		return ResourceView();
+	return resourceEngineView(_fileData, _archive.getResource(index));
 }
 
 int Cast::resourceIndexById(uint32 id) const {
 	return CyberFlix::resourceIndexById(_archive, id);
-}
-
-Common::String Cast::pascalString(const byte *p) const {
-	return readPascalString(p, _fileData);
 }
 
 bool Cast::open(const Common::String &name) {
@@ -61,9 +57,9 @@ bool Cast::open(const Common::String &name) {
 		return false;
 	}
 
-	const byte *hdr = engineBase(static_cast<uint32>(_master));
-	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
-	if (!hdr || masterLen < kMasterActorTableOffset) {
+	const ResourceView master = engineView(static_cast<uint32>(_master));
+	const byte *hdr = master.dataAt(0, kMasterActorTableOffset);
+	if (!hdr) {
 		warning("CyberFlix: cast '%s' master header truncated", name.c_str());
 		_master = -1;
 		_archive.close();
@@ -91,18 +87,16 @@ bool Cast::open(const Common::String &name) {
 	// (engine-base frame is res.length + 4 bytes), as puppet.cpp does, so a
 	// corrupt count cannot parse neighbouring resources' bytes as actors.
 	uint32 actorCount = READ_LE_UINT32(hdr + kMasterActorCountOffset);
-	actorCount = MIN<uint32>(actorCount,
-			static_cast<uint32>((masterLen - kMasterActorTableOffset) / kMasterActorStride));
-	const byte *entry = hdr + kMasterActorTableOffset;
-	for (uint32 i = 0; i < actorCount; ++i, entry += kMasterActorStride) {
-		if (!hasBytes(entry, _fileData.end(), kMasterActorStride))
-			break;
+	actorCount = boundedRecordCount(actorCount, master.size(), kMasterActorTableOffset, kMasterActorStride);
+	const RecordRange actorRecords(master, kMasterActorTableOffset, actorCount, kMasterActorStride);
+	for (uint32 i = 0; i < actorRecords.size(); ++i) {
+		const byte *entry = actorRecords.record(i).dataAt(0, kMasterActorStride);
 		uint32 masterId = READ_LE_UINT32(entry);
 		int mIdx = resourceIndexById(masterId);
-		const byte *am = mIdx >= 0 ? engineBase(static_cast<uint32>(mIdx)) : nullptr;
-		const uint64 amLen = mIdx >= 0 ?
-				static_cast<uint64>(_archive.getResource(static_cast<uint32>(mIdx)).length) + 4 : 0;
-		if (!am || amLen < kActorShapeTableOffset) {
+		const ResourceView actorMaster = mIdx >= 0
+				? engineView(static_cast<uint32>(mIdx)) : ResourceView();
+		const byte *am = actorMaster.dataAt(0, kActorShapeTableOffset);
+		if (!am) {
 			warning("CyberFlix: cast '%s' actor master %u missing", name.c_str(), masterId);
 			continue;
 		}
@@ -110,23 +104,23 @@ bool Cast::open(const Common::String &name) {
 		Common::SharedPtr<Actor> actor(new Actor());
 		actor->masterResId = masterId;
 		actor->scriptResId = READ_LE_UINT32(am + kActorScriptOffset);
-		actor->name = pascalString(am + kActorNameOffset);
+		actor->name = actorMaster.readPascalString(kActorNameOffset);
 		actor->name.toLowercase();
-		actor->setName = pascalString(am + kActorSetOffset);
+		actor->setName = actorMaster.readPascalString(kActorSetOffset);
 		actor->setName.toLowercase();
-		actor->sceneName = pascalString(am + kActorSceneOffset);
+		actor->sceneName = actorMaster.readPascalString(kActorSceneOffset);
 		actor->sceneName.toLowercase();
 		actor->owner = "none";
 
-		uint32 shapeCount = MIN<uint32>(READ_LE_UINT32(am + kActorShapeCountOffset),
-				static_cast<uint32>((amLen - kActorShapeTableOffset) / kActorShapeStride));
-		const byte *shapeEntry = am + kActorShapeTableOffset;
-		for (uint32 shape = 0; shape < shapeCount; ++shape, shapeEntry += kActorShapeStride) {
-			if (!hasBytes(shapeEntry, _fileData.end(), kActorShapeStride))
-				break;
+		uint32 shapeCount = boundedRecordCount(READ_LE_UINT32(am + kActorShapeCountOffset),
+				actorMaster.size(), kActorShapeTableOffset, kActorShapeStride);
+		const RecordRange shapeRecords(actorMaster, kActorShapeTableOffset, shapeCount, kActorShapeStride);
+		for (uint32 shape = 0; shape < shapeRecords.size(); ++shape) {
+			const ResourceView shapeRecord = shapeRecords.record(shape);
+			const byte *shapeEntry = shapeRecord.dataAt(0, kActorShapeStride);
 			Actor::Shape actorShape;
 			actorShape.resId = READ_LE_UINT32(shapeEntry);
-			actorShape.name = pascalString(shapeEntry + kActorShapeNameOffset);
+			actorShape.name = shapeRecord.readPascalString(kActorShapeNameOffset);
 			actorShape.name.toLowercase();
 			if (!actorShape.name.empty()) {
 				if (actor->shapeName.empty())
@@ -166,9 +160,9 @@ Common::SharedPtr<Cast::Actor> Cast::findActor(const Common::String &name) {
 }
 
 Common::SharedPtr<Cast::Actor> Cast::findActorByMasterResId(uint32 masterResId) {
-	for (uint32 i = 0; i < _actors.size(); ++i) {
-		if (_actors[i]->masterResId == masterResId)
-			return _actors[i];
+	for (const Common::SharedPtr<Actor> &actor : _actors) {
+		if (actor->masterResId == masterResId)
+			return actor;
 	}
 	return Common::SharedPtr<Actor>();
 }
@@ -190,26 +184,28 @@ bool Cast::addActorInstance(const Actor &source, const Common::String &newName) 
 
 uint16 Cast::shapePoseCountFor(const Actor &actor) const {
 	const Actor::Shape *shape = nullptr;
-	for (uint32 i = 0; i < actor.shapes.size(); ++i) {
-		if (actor.shapes[i].name == actor.shapeName) {
-			shape = &actor.shapes[i];
+	for (const Actor::Shape &candidate : actor.shapes) {
+		if (candidate.name == actor.shapeName) {
+			shape = &candidate;
 			break;
 		}
 	}
 	if (!shape)
 		return 0;
 	int shIdx = resourceIndexById(shape->resId);
-	const byte *sh = shIdx >= 0 ? engineBase(static_cast<uint32>(shIdx)) : nullptr;
-	const uint64 shapeLen = shIdx >= 0 ?
-			static_cast<uint64>(_archive.getResource(static_cast<uint32>(shIdx)).length) + 4 : 0;
-	if (!sh || shapeLen < static_cast<uint64>(kShapePoseCountOffset) + 2)
+	const ResourceView shapeView = shIdx >= 0
+			? engineView(static_cast<uint32>(shIdx)) : ResourceView();
+	uint16 poseCount;
+	if (!shapeView.readUint16LE(kShapePoseCountOffset, poseCount))
 		return 0;
-	return READ_LE_UINT16(sh + kShapePoseCountOffset);
+	if (poseCount > (kShapePoseCountOffset - kShapePoseTableOffset) / 2)
+		return 0;
+	return poseCount;
 }
 
 void Cast::advanceActorPoses() {
-	for (uint32 i = 0; i < _actors.size(); ++i) {
-		Actor &a = *_actors[i];
+	for (const Common::SharedPtr<Actor> &actor : _actors) {
+		Actor &a = *actor;
 		const uint16 count = shapePoseCountFor(a);
 		if (count <= 1)
 			continue;
@@ -222,9 +218,9 @@ void Cast::advanceActorPoses() {
 Cast::ActorCellResult Cast::resolveActorCell(const Actor &actor, int angle) const {
 	ActorCellResult result;
 	const Actor::Shape *shape = nullptr;
-	for (uint32 i = 0; i < actor.shapes.size(); ++i) {
-		if (actor.shapes[i].name == actor.shapeName) {
-			shape = &actor.shapes[i];
+	for (const Actor::Shape &candidate : actor.shapes) {
+		if (candidate.name == actor.shapeName) {
+			shape = &candidate;
 			break;
 		}
 	}
@@ -234,10 +230,10 @@ Cast::ActorCellResult Cast::resolveActorCell(const Actor &actor, int angle) cons
 		return result;
 	}
 	int shIdx = resourceIndexById(shape->resId);
-	const byte *sh = shIdx >= 0 ? engineBase(static_cast<uint32>(shIdx)) : nullptr;
-	const uint64 shapeLen = shIdx >= 0 ?
-			static_cast<uint64>(_archive.getResource(static_cast<uint32>(shIdx)).length) + 4 : 0;
-	if (!sh || shapeLen < kShapeCellTableOffset) {
+	const ResourceView shapeView = shIdx >= 0
+			? engineView(static_cast<uint32>(shIdx)) : ResourceView();
+	const byte *sh = shapeView.dataAt(0, kShapeCellTableOffset);
+	if (!sh) {
 		debug(1, "CyberFlix: renderActor('%s'): shape res %u missing",
 				actor.name.c_str(), shape->resId);
 		return result;
@@ -245,47 +241,51 @@ Cast::ActorCellResult Cast::resolveActorCell(const Actor &actor, int angle) cons
 
 	uint16 poseCount = READ_LE_UINT16(sh + kShapePoseCountOffset);
 	uint16 cellCount = READ_LE_UINT16(sh + kShapeCellCountOffset);
-	if (!poseCount || !cellCount)
+	if (!poseCount || !cellCount ||
+			poseCount > (kShapePoseCountOffset - kShapePoseTableOffset) / 2)
 		return result;
-	if (static_cast<uint64>(kShapePoseTableOffset) + static_cast<uint64>(poseCount) * 2 > shapeLen ||
-			static_cast<uint64>(kShapeCellTableOffset) + static_cast<uint64>(cellCount) * kShapeCellStride > shapeLen)
+	if (!shapeView.contains(kShapePoseTableOffset, static_cast<uint64>(poseCount) * 2))
+		return result;
+	const RecordRange cells(shapeView, kShapeCellTableOffset, cellCount, kShapeCellStride);
+	if (!cells.valid())
 		return result;
 	uint16 poseIdx = actor.poseIndex < poseCount ? actor.poseIndex : 0;
 	uint16 poseId = READ_LE_UINT16(sh + kShapePoseTableOffset + poseIdx * 2);
+	if (poseId == 0)
+		return result;
 
-	const byte *best = nullptr;
+	ResourceView best;
 	int bestDist = 0x7fffffff;
-	const byte *cellTable = sh + kShapeCellTableOffset;
 	for (uint16 i = 0; i < cellCount; ++i) {
-		const byte *c = cellTable + static_cast<uint32>(i) * kShapeCellStride;
-		if (!hasBytes(c, _fileData.end(), kShapeCellStride))
-			break;
+		const ResourceView cell = cells.record(i);
+		const byte *c = cell.dataAt(0, kShapeCellStride);
 		if (READ_LE_UINT16(c + kCellIdOffset) != static_cast<uint16>(poseId - 1))
 			continue;
 		int dist = nativeAngleDistance(READ_LE_INT16(c + kCellAngleOffset), angle);
 		if (dist < bestDist) {
 			bestDist = dist;
-			best = c;
+			best = cell;
 		}
 	}
-	if (!best) {
+	const byte *bestData = best.dataAt(0, kShapeCellStride);
+	if (!bestData) {
 		debug(1, "CyberFlix: renderActor('%s'): no cell for pose %u in shape '%s'",
 				actor.name.c_str(), poseId, actor.shapeName.c_str());
 		return result;
 	}
 
-	result.frameRes = READ_LE_UINT32(best + kCellFrameResOffset);
+	result.frameRes = READ_LE_UINT32(bestData + kCellFrameResOffset);
 	int fIdx = resourceIndexById(result.frameRes);
 	if (fIdx < 0)
 		return result;
 
-	result.cellRect.top = READ_LE_INT16(best + kCellRectOffset);
-	result.cellRect.left = READ_LE_INT16(best + kCellRectOffset + 2);
-	result.cellRect.bottom = READ_LE_INT16(best + kCellRectOffset + 4);
-	result.cellRect.right = READ_LE_INT16(best + kCellRectOffset + 6);
-	result.regV = READ_LE_INT16(best + kCellRegVOffset);
-	result.regH = READ_LE_INT16(best + kCellRegHOffset);
-	result.cellScale = READ_LE_INT16(best + kCellScaleOffset);
+	result.cellRect.top = READ_LE_INT16(bestData + kCellRectOffset);
+	result.cellRect.left = READ_LE_INT16(bestData + kCellRectOffset + 2);
+	result.cellRect.bottom = READ_LE_INT16(bestData + kCellRectOffset + 4);
+	result.cellRect.right = READ_LE_INT16(bestData + kCellRectOffset + 6);
+	result.regV = READ_LE_INT16(bestData + kCellRegVOffset);
+	result.regH = READ_LE_INT16(bestData + kCellRegHOffset);
+	result.cellScale = READ_LE_INT16(bestData + kCellScaleOffset);
 	result.valid = true;
 	return result;
 }

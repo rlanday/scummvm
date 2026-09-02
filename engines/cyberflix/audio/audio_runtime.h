@@ -68,10 +68,14 @@ public:
 		uint32 resId = 0;
 	};
 
+	struct SfxCueMatch {
+		Common::SharedPtr<ThemeTrack> track;
+		uint cueIndex = 0;
+	};
+
 	ThemeTrack *findTrack(const Common::String &name);
 	Common::SharedPtr<ThemeTrack> findTrackRef(const Common::String &name);
-	const ThemeTrack::Cue *findSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr) const;
-	ThemeTrack::Cue *findMutableSfxCue(const Common::String &name, ThemeTrack **trackOut = nullptr);
+	SfxCueMatch findSfxCue(const Common::String &name);
 
 	byte effectiveAudioVolume(int baseVolume) const;
 	void applyLiveAudioVolumes(CyberFlixEngine &engine);

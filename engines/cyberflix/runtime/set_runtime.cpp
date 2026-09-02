@@ -421,6 +421,8 @@ void SetRuntime::displaySetFramePixels(CyberFlixEngine &engine, const byte *pixe
 	// draws the current pose.
 	const FrameImage *stageBg = engine.stageRuntime().stageShellFrame();
 	Graphics::Surface *screen = engine._system->lockScreen();
+	if (!screen)
+		return;
 	// Base layer: the stage's UI shell (MAIN.STG node 0 — art-deco frame +
 	// inventory bar). The original's compositor keeps it on screen beneath
 	// the room: the redraw pass FUN_00442d90 repaints full-screen stage items
@@ -452,28 +454,26 @@ void SetRuntime::displaySetFramePixels(CyberFlixEngine &engine, const byte *pixe
 	}
 	if (haveCamera) {
 		Shop::WorldCamera camera = makeWorldCamera(cameraData);
-		Common::Array<const Shop::Prop *> worldDraw;
-		Common::Array<const Shop *> worldShop;
-		Common::Array<int16> worldDepths;
-		Common::Array<const Cast::Actor *> actorDraw;
-		Common::Array<const Cast *> actorCast;
-		Common::Array<int16> actorDepths;
-		engine.propRuntime().collectWorldProps(engine, worldDraw, worldShop, worldDepths, camera);
-		engine.actorRuntime().collectWorldActors(engine, actorDraw, actorCast, actorDepths, camera);
+		Common::Array<PropRuntime::DrawEntry> worldDraw;
+		Common::Array<ActorRuntime::DrawEntry> actorDraw;
+		engine.propRuntime().collectWorldProps(engine, worldDraw, camera);
+		engine.actorRuntime().collectWorldActors(engine, actorDraw, camera);
 		Common::Rect viewport(camera.viewportLeft, camera.viewportTop,
 				camera.viewportRight, camera.viewportBottom);
 		uint32 propIndex = 0, actorIndex = 0;
 		while (propIndex < worldDraw.size() || actorIndex < actorDraw.size()) {
 			const bool drawActor = actorIndex < actorDraw.size() &&
-					(propIndex >= worldDraw.size() || actorDepths[actorIndex] >= worldDepths[propIndex]);
+					(propIndex >= worldDraw.size() || actorDraw[actorIndex].depth >= worldDraw[propIndex].depth);
 			if (drawActor) {
-				Cast::ActorRenderResult rendered = actorCast[actorIndex]->renderWorldActor(*actorDraw[actorIndex],
+				const ActorRuntime::DrawEntry &entry = actorDraw[actorIndex];
+				Cast::ActorRenderResult rendered = entry.cast->renderWorldActor(*entry.actor,
 						camera, set()->setName());
 				if (rendered.valid)
 					drawScaledCel(*screen, rendered.cel, rendered.rect, viewport, depthFrame, rendered.depthBucket);
 				++actorIndex;
 			} else {
-				Shop::PropRenderResult rendered = worldShop[propIndex]->renderWorldProp(*worldDraw[propIndex],
+				const PropRuntime::DrawEntry &entry = worldDraw[propIndex];
+				Shop::PropRenderResult rendered = entry.shop->renderWorldProp(*entry.prop,
 						camera, set()->setName());
 				if (rendered.valid)
 					drawScaledCel(*screen, *rendered.cel, rendered.rect, viewport, depthFrame, rendered.depthBucket);
@@ -488,11 +488,10 @@ void SetRuntime::displaySetFramePixels(CyberFlixEngine &engine, const byte *pixe
 	// builder FUN_004434f0, depth from prop record +0x26). World-mode props
 	// (angle/scale path) land with set-prop rendering.
 	{
-		Common::Array<const Shop::Prop *> draw;
-		Common::Array<const Shop *> drawShop;
-		engine.propRuntime().collectScreenProps(draw, drawShop);
-		for (uint32 i = 0; i < draw.size(); ++i) {
-			Shop::PropRenderResult rendered = drawShop[i]->renderProp(*draw[i]);
+		Common::Array<PropRuntime::DrawEntry> draw;
+		engine.propRuntime().collectScreenProps(draw);
+		for (const PropRuntime::DrawEntry &entry : draw) {
+			Shop::PropRenderResult rendered = entry.shop->renderProp(*entry.prop);
 			if (!rendered.valid)
 				continue;
 			drawCel(*screen, *rendered.cel, rendered.rect, Common::Rect(kScreenWidth, kScreenHeight));

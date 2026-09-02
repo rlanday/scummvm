@@ -781,7 +781,7 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 		return Value();
 	if (_trace) {
 		Common::String a;
-		for (uint32 i = 0; i < args.size(); ++i) {
+		for (uint i = 0; i < args.size(); ++i) {
 			if (i)
 				a += ", ";
 			a += args[i].toString();
@@ -825,7 +825,7 @@ Value ScriptVM::callMethod(uint16 opcode, const Common::String &name, const Comm
 	if (!_reportedOpcodes.contains(opcode)) {
 		_reportedOpcodes.setVal(opcode, true);
 		Common::String a;
-		for (uint32 i = 0; i < args.size(); ++i) {
+		for (uint i = 0; i < args.size(); ++i) {
 			if (i)
 				a += ", ";
 			a += args[i].toString();

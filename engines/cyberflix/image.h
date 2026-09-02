@@ -66,7 +66,10 @@ struct CelImage {
 	Common::Array<byte> opaque;  ///< width*height; non-zero where a pixel was written.
 
 	bool isOpaque(int x, int y) const {
-		return opaque[static_cast<uint>(y) * width + x] != 0;
+		if (x < 0 || y < 0 || x >= width || y >= height)
+			return false;
+		const uint offset = static_cast<uint>(y) * width + x;
+		return offset < opaque.size() && opaque[offset] != 0;
 	}
 };
 

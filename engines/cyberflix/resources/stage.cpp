@@ -28,7 +28,10 @@
 
 namespace CyberFlix {
 
-static bool pointInButtonRect(const byte *rec, int16 x, int16 y) {
+static bool pointInButtonRect(const ResourceView &record, int16 x, int16 y) {
+	const byte *rec = record.dataAt(0, Stage::kButtonRecordStride);
+	if (!rec)
+		return false;
 	int16 top = static_cast<int16>(READ_LE_UINT16(rec + Stage::kButtonRectOffset));
 	int16 left = static_cast<int16>(READ_LE_UINT16(rec + Stage::kButtonRectOffset + 2));
 	int16 bottom = static_cast<int16>(READ_LE_UINT16(rec + Stage::kButtonRectOffset + 4));
@@ -36,19 +39,16 @@ static bool pointInButtonRect(const byte *rec, int16 x, int16 y) {
 	return x >= left && x < right && y >= top && y < bottom;
 }
 
-const byte *Stage::engineBase(uint32 index) const {
+ResourceView Stage::engineView(uint32 index) const {
 	if (index >= _archive.getResourceCount())
-		return nullptr;
-	return resourceEngineBase(_fileData, _archive.getResource(index));
+		return ResourceView();
+	return resourceEngineView(_fileData, _archive.getResource(index));
 }
 
-const byte *Stage::payload(uint32 index) const {
+ResourceView Stage::payloadView(uint32 index) const {
 	if (index >= _archive.getResourceCount())
-		return nullptr;
-	const Archive::Resource &res = _archive.getResource(index);
-	if (res.empty || res.dataOffset > _fileData.size())
-		return nullptr;
-	return _fileData.begin() + res.dataOffset;
+		return ResourceView();
+	return resourcePayloadView(_fileData, _archive.getResource(index));
 }
 
 int Stage::resourceIndexById(uint32 id) const {
@@ -75,10 +75,6 @@ bool Stage::parseScriptResource(uint32 id) {
 	return false;
 }
 
-Common::String Stage::pascalString(const byte *p) const {
-	return readPascalString(p, _fileData);
-}
-
 const Script *Stage::scriptById(uint32 id) const {
 	int idx = resourceIndexById(id);
 	if (idx < 0 || static_cast<uint32>(idx) >= _scripts.size())
@@ -86,66 +82,40 @@ const Script *Stage::scriptById(uint32 id) const {
 	return _scripts[static_cast<uint32>(idx)].get();
 }
 
-const byte *Stage::nodeRecord(uint32 node) const {
+ResourceView Stage::nodeRecord(uint32 node) const {
 	if (node >= _nodeCount || _master < 0)
-		return nullptr;
-	const byte *hdr = engineBase(static_cast<uint32>(_master));
-	if (!hdr)
-		return nullptr;
-	const byte *rec = hdr + kNodeTableOffset + node * kNodeRecordStride;
-	if (!hasBytes(rec, _fileData.end(), kNodeRecordStride))
-		return nullptr;
-	return rec;
+		return ResourceView();
+	return engineView(static_cast<uint32>(_master)).recordAt(
+			kNodeTableOffset, node, kNodeRecordStride);
 }
 
-const byte *Stage::buttonTable(uint32 node, uint32 &count, uint32 &length) const {
-	count = length = 0;
-	const byte *rec = nodeRecord(node);
-	if (!rec)
-		return nullptr;
-	uint32 tableId = READ_LE_UINT32(rec + kNodeButtonTableOffset);
+RecordRange Stage::buttonTable(uint32 node) const {
+	uint32 tableId;
+	if (!nodeRecord(node).readUint32LE(kNodeButtonTableOffset, tableId))
+		return RecordRange();
 	int idx = resourceIndexById(tableId);
 	if (idx < 0)
-		return nullptr;
-	const Archive::Resource &res = _archive.getResource(static_cast<uint32>(idx));
-	if (res.length < kButtonCountOffset + 4)
-		return nullptr;
-	const byte *table = payload(static_cast<uint32>(idx));
-	if (!table)
-		return nullptr;
-	uint32 c = READ_LE_UINT32(table + kButtonCountOffset);
-	if (kButtonRecordsOffset + static_cast<uint64>(c) * kButtonRecordStride > res.length)
-		return nullptr;
-	count = c;
-	length = res.length;
-	return table;
+		return RecordRange();
+	const ResourceView table = payloadView(static_cast<uint32>(idx));
+	uint32 count;
+	if (!table.readUint32LE(kButtonCountOffset, count))
+		return RecordRange();
+	return RecordRange(table, kButtonRecordsOffset, count, kButtonRecordStride);
 }
 
-const byte *Stage::buttonRecord(uint32 node, const Common::String &button) const {
-	uint32 count = 0, length = 0;
-	const byte *table = buttonTable(node, count, length);
-	if (!table)
-		return nullptr;
-	for (uint32 i = 0; i < count; ++i) {
-		const byte *rec = table + kButtonRecordsOffset + i * kButtonRecordStride;
-		if (kButtonRecordsOffset + i * kButtonRecordStride + kButtonRecordStride > length)
-			break;
+ResourceView Stage::buttonRecord(uint32 node, const Common::String &button) const {
+	const RecordRange buttons = buttonTable(node);
+	for (uint32 i = 0; i < buttons.size(); ++i) {
+		const ResourceView record = buttons.record(i);
 		// In-place compare: this runs per button record on mouse-move hit tests.
-		if (pascalEqualsIgnoreCase(rec + kButtonNameOffset, _fileData.end(), button))
-			return rec;
+		if (record.pascalEqualsIgnoreCase(kButtonNameOffset, button))
+			return record;
 	}
-	return nullptr;
+	return ResourceView();
 }
 
 Common::String Stage::nodeName(uint32 node) const {
-	const byte *rec = nodeRecord(node);
-	if (!rec)
-		return Common::String();
-	const byte *p = rec + kNodeNameOffset;
-	uint len = *p;
-	if (len > kNodeRecordStride - kNodeNameOffset - 1)
-		len = kNodeRecordStride - kNodeNameOffset - 1;
-	return Common::String(reinterpret_cast<const char *>(p ) + 1, len);
+	return nodeRecord(node).readPascalString(kNodeNameOffset, true);
 }
 
 int Stage::findNode(const Common::String &name) const {
@@ -156,23 +126,17 @@ int Stage::findNode(const Common::String &name) const {
 }
 
 Common::String Stage::hitTestButton(uint32 node, int16 x, int16 y) const {
-	uint32 count = 0, length = 0;
-	const byte *table = buttonTable(node, count, length);
-	if (!table)
-		return Common::String();
-	for (int i = static_cast<int>(count) - 1; i >= 0; --i) {
-		const byte *rec = table + kButtonRecordsOffset + static_cast<uint32>(i) * kButtonRecordStride;
-		if (kButtonRecordsOffset + static_cast<uint32>(i) * kButtonRecordStride + kButtonRecordStride > length)
-			break;
-		if (pointInButtonRect(rec, x, y))
-			return pascalString(rec + kButtonNameOffset);
+	const RecordRange buttons = buttonTable(node);
+	for (int i = static_cast<int>(buttons.size()) - 1; i >= 0; --i) {
+		const ResourceView record = buttons.record(static_cast<uint>(i));
+		if (pointInButtonRect(record, x, y))
+			return record.readPascalString(kButtonNameOffset);
 	}
 	return Common::String();
 }
 
 bool Stage::pointInButton(uint32 node, const Common::String &button, int16 x, int16 y) const {
-	const byte *rec = buttonRecord(node, button);
-	return rec && pointInButtonRect(rec, x, y);
+	return pointInButtonRect(buttonRecord(node, button), x, y);
 }
 
 const Script *Stage::stageScript() const {
@@ -180,21 +144,21 @@ const Script *Stage::stageScript() const {
 }
 
 const Script *Stage::nodeScript(uint32 node) const {
-	const byte *rec = nodeRecord(node);
-	if (!rec)
+	uint32 scriptId;
+	if (!nodeRecord(node).readUint32LE(kNodeScriptResOffset, scriptId))
 		return nullptr;
-	return scriptById(READ_LE_UINT32(rec + kNodeScriptResOffset));
+	return scriptById(scriptId);
 }
 
 const Script *Stage::buttonScript(uint32 node, const Common::String &button) const {
-	const byte *rec = buttonRecord(node, button);
-	if (!rec)
+	uint32 scriptId;
+	if (!buttonRecord(node, button).readUint32LE(kButtonScriptOffset, scriptId))
 		return nullptr;
-	return scriptById(READ_LE_UINT32(rec + kButtonScriptOffset));
+	return scriptById(scriptId);
 }
 
 bool Stage::hasButton(uint32 node, const Common::String &button) const {
-	return buttonRecord(node, button) != nullptr;
+	return buttonRecord(node, button).valid();
 }
 
 void Stage::reset() {
@@ -223,9 +187,9 @@ bool Stage::open(const Common::String &name) {
 		return false;
 	}
 
-	const byte *hdr = engineBase(static_cast<uint32>(_master));
-	const uint64 masterLen = static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4;
-	if (!hdr || masterLen < kNodeTableOffset) {
+	const ResourceView master = engineView(static_cast<uint32>(_master));
+	const byte *hdr = master.dataAt(0, kNodeTableOffset);
+	if (!hdr) {
 		warning("CyberFlix: stage '%s' master header truncated", name.c_str());
 		reset();
 		return false;
@@ -235,10 +199,7 @@ bool Stage::open(const Common::String &name) {
 	_stageScriptId = READ_LE_UINT32(hdr + kStageScriptIdOffset);
 	_nodeCount = READ_LE_UINT32(hdr + kNodeCountOffset);
 
-	// Bound the node table against the file so a corrupt count can't run off.
-	const uint64 tableEnd = static_cast<uint64>(kNodeTableOffset) +
-			static_cast<uint64>(_nodeCount) * kNodeRecordStride;
-	if (tableEnd > static_cast<uint64>(_archive.getResource(static_cast<uint32>(_master)).length) + 4) {
+	if (!RecordRange(master, kNodeTableOffset, _nodeCount, kNodeRecordStride).valid()) {
 		warning("CyberFlix: stage '%s' node table overruns file (count %u)", name.c_str(), _nodeCount);
 		_nodeCount = 0;
 	}
@@ -257,20 +218,16 @@ bool Stage::open(const Common::String &name) {
 	// opcodes rather than the usual script tag 0x0FA1.
 	parseScriptResource(_stageScriptId);
 	for (uint32 node = 0; node < _nodeCount; ++node) {
-		const byte *rec = nodeRecord(node);
-		if (!rec)
+		uint32 nodeScriptId;
+		if (!nodeRecord(node).readUint32LE(kNodeScriptResOffset, nodeScriptId))
 			continue;
-		parseScriptResource(READ_LE_UINT32(rec + kNodeScriptResOffset));
+		parseScriptResource(nodeScriptId);
 
-		uint32 buttonCount = 0, buttonLength = 0;
-		const byte *buttons = buttonTable(node, buttonCount, buttonLength);
-		if (!buttons)
-			continue;
-		for (uint32 button = 0; button < buttonCount; ++button) {
-			const byte *buttonRec = buttons + kButtonRecordsOffset + button * kButtonRecordStride;
-			if (kButtonRecordsOffset + button * kButtonRecordStride + kButtonRecordStride > buttonLength)
-				break;
-			parseScriptResource(READ_LE_UINT32(buttonRec + kButtonScriptOffset));
+		const RecordRange buttons = buttonTable(node);
+		for (uint32 button = 0; button < buttons.size(); ++button) {
+			uint32 buttonScriptId;
+			if (buttons.record(button).readUint32LE(kButtonScriptOffset, buttonScriptId))
+				parseScriptResource(buttonScriptId);
 		}
 	}
 
@@ -289,31 +246,29 @@ bool Stage::renderNode(uint32 node, FrameImage &out) {
 	// node's background frame forward into a persistent surface (FUN_0040b180).
 	uint32 start = node;
 	while (start > 0) {
-		const byte *rec = nodeRecord(start);
-		if (!rec)
+		uint32 flags;
+		if (!nodeRecord(start).readUint32LE(kNodeFlagsOffset, flags))
 			return false;
-		if (READ_LE_UINT32(rec + kNodeFlagsOffset) & kNodeFlagKeyframe)
+		if (flags & kNodeFlagKeyframe)
 			break;
 		--start;
 	}
 
 	FrameSequence seq;
 	for (uint32 n = start; n <= node; ++n) {
-		const byte *rec = nodeRecord(n);
-		if (!rec)
+		uint32 imgId;
+		if (!nodeRecord(n).readUint32LE(kNodeImageResOffset, imgId))
 			return false;
-		uint32 imgId = READ_LE_UINT32(rec + kNodeImageResOffset);
 		int idx = resourceIndexById(imgId);
 		if (idx < 0) {
 			warning("CyberFlix: stage '%s' node %u references missing image res %u",
 					_name.c_str(), n, imgId);
 			return false;
 		}
-		const byte *frame = engineBase(static_cast<uint32>(idx));
-		if (!frame)
+		const ResourceView frame = engineView(static_cast<uint32>(idx));
+		if (!frame.valid())
 			return false;
-		uint32 frameLen = _archive.getResource(static_cast<uint32>(idx)).length + 4; // payload + info word
-		if (seq.applyFrame(frame, frameLen) == 0) {
+		if (seq.applyFrame(frame.dataAt(0, frame.size()), static_cast<uint32>(frame.size())) == 0) {
 			warning("CyberFlix: stage '%s' node %u frame decode failed", _name.c_str(), n);
 			return false;
 		}

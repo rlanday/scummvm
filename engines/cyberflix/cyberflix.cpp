@@ -155,19 +155,19 @@ Common::String CyberFlixEngine::hitTest(int32 packedPoint) {
 	const int16 x = static_cast<int16>(packedPoint >> 16);
 	const int16 y = static_cast<int16>(packedPoint & 0xffff);
 
-	Common::Array<const Shop::Prop *> draw;
-	Common::Array<const Shop *> drawShop;
-	propRuntime().collectScreenProps(draw, drawShop);
+	Common::Array<PropRuntime::DrawEntry> draw;
+	propRuntime().collectScreenProps(draw);
 	for (int i = static_cast<int>(draw.size()) - 1; i >= 0; --i) {
-		Shop::PropRenderResult rendered = drawShop[i]->renderProp(*draw[i]);
-		if (!rendered.valid)
+		const PropRuntime::DrawEntry &entry = draw[static_cast<uint>(i)];
+		Shop::PropRenderResult rendered = entry.shop->renderProp(*entry.prop);
+		if (!rendered.valid || !rendered.cel)
 			continue;
 		if (x < rendered.rect.left || x >= rendered.rect.right || y < rendered.rect.top || y >= rendered.rect.bottom)
 			continue;
 		if (!rendered.cel->isOpaque(x - rendered.rect.left, y - rendered.rect.top))
 			continue;
 		_hitKind = "prop";
-		return draw[i]->name;
+		return entry.prop->name;
 	}
 
 	if (_setRuntime.visible() && _setRuntime.set() && _setRuntime.set()->isOpen() && _setRuntime.scene() >= 0 &&
@@ -176,66 +176,52 @@ Common::String CyberFlixEngine::hitTest(int32 packedPoint) {
 		if (_setRuntime.set()->cameraData(static_cast<uint32>(_setRuntime.scene()), static_cast<uint32>(_setRuntime.table()),
 				static_cast<uint32>(_setRuntime.angle()), cameraData)) {
 			Shop::WorldCamera camera = makeWorldCamera(cameraData);
-			Common::Array<const Shop::Prop *> worldDraw;
-			Common::Array<const Shop *> worldShop;
-			Common::Array<int16> worldDepths;
-			Common::Array<const Cast::Actor *> actorDraw;
-			Common::Array<const Cast *> actorCast;
-			Common::Array<int16> actorDepths;
-			propRuntime().collectWorldProps(*this, worldDraw, worldShop, worldDepths, camera);
-			actorRuntime().collectWorldActors(*this, actorDraw, actorCast, actorDepths, camera);
-			Common::Array<byte> itemType;
-			Common::Array<uint32> itemIndex;
-			uint32 propIndex = 0, actorIndex = 0;
+			Common::Array<PropRuntime::DrawEntry> worldDraw;
+			Common::Array<ActorRuntime::DrawEntry> actorDraw;
+			propRuntime().collectWorldProps(*this, worldDraw, camera);
+			actorRuntime().collectWorldActors(*this, actorDraw, camera);
+			struct WorldHitEntry {
+				WorldHitEntry(bool actor_, uint index_) : actor(actor_), index(index_) {}
+				bool actor;
+				uint index;
+			};
+			Common::Array<WorldHitEntry> hitEntries;
+			uint propIndex = 0, actorIndex = 0;
 			while (propIndex < worldDraw.size() || actorIndex < actorDraw.size()) {
 				const bool useActor = actorIndex < actorDraw.size() &&
-						(propIndex >= worldDraw.size() || actorDepths[actorIndex] >= worldDepths[propIndex]);
-				itemType.push_back(useActor ? 1 : 0);
-				itemIndex.push_back(useActor ? actorIndex++ : propIndex++);
+						(propIndex >= worldDraw.size() || actorDraw[actorIndex].depth >= worldDraw[propIndex].depth);
+				hitEntries.push_back(WorldHitEntry(useActor, useActor ? actorIndex++ : propIndex++));
 			}
-			for (int i = static_cast<int>(itemType.size()) - 1; i >= 0; --i) {
-				const CelImage *cel = nullptr;
-				CelImage actorCel;
-				// Keeps the prop branch's cel alive for the hit test below; a
-				// raw .get() from the block-local render result would only be
-				// backed by the shop's cel cache, a non-local invariant.
-				Common::SharedPtr<CelImage> propCel;
-				Common::Rect r;
-				int16 depthBucket = 0;
-				Common::String name;
-				if (itemType[static_cast<uint>(i)]) {
-					uint32 idx = itemIndex[static_cast<uint>(i)];
-					Cast::ActorRenderResult rendered = actorCast[idx]->renderWorldActor(*actorDraw[idx],
+			auto hitsWorldCel = [&](const CelImage &cel, const Common::Rect &rect, int16 depthBucket) {
+				if (cel.width == 0 || cel.height == 0 || rect.width() <= 0 || rect.height() <= 0 ||
+						x < rect.left || x >= rect.right ||
+						y < rect.top || y >= rect.bottom)
+					return false;
+				const int srcX = static_cast<int>(static_cast<int64>(x - rect.left) * cel.width / rect.width());
+				const int srcY = static_cast<int>(static_cast<int64>(y - rect.top) * cel.height / rect.height());
+				return cel.isOpaque(srcX, srcY) &&
+						_setRuntime.frameSequence().depthVisibleAt(x, y, depthBucket);
+			};
+			for (int i = static_cast<int>(hitEntries.size()) - 1; i >= 0; --i) {
+				const WorldHitEntry &hitEntry = hitEntries[static_cast<uint>(i)];
+				if (hitEntry.actor) {
+					const ActorRuntime::DrawEntry &entry = actorDraw[hitEntry.index];
+					Cast::ActorRenderResult rendered = entry.cast->renderWorldActor(*entry.actor,
 							camera, _setRuntime.set()->setName());
-					if (!rendered.valid)
+					if (!rendered.valid || !hitsWorldCel(rendered.cel, rendered.rect, rendered.depthBucket))
 						continue;
-					actorCel = rendered.cel;
-					cel = &actorCel;
-					r = rendered.rect;
-					depthBucket = rendered.depthBucket;
-					name = actorDraw[idx]->name;
+					_hitKind = "actor";
+					return entry.actor->name;
 				} else {
-					uint32 idx = itemIndex[static_cast<uint>(i)];
-					Shop::PropRenderResult rendered = worldShop[idx]->renderWorldProp(*worldDraw[idx],
+					const PropRuntime::DrawEntry &entry = worldDraw[hitEntry.index];
+					Shop::PropRenderResult rendered = entry.shop->renderWorldProp(*entry.prop,
 							camera, _setRuntime.set()->setName());
-					if (!rendered.valid)
+					if (!rendered.valid || !rendered.cel ||
+							!hitsWorldCel(*rendered.cel, rendered.rect, rendered.depthBucket))
 						continue;
-					propCel = rendered.cel;
-					cel = propCel.get();
-					r = rendered.rect;
-					depthBucket = rendered.depthBucket;
-					name = worldDraw[idx]->name;
+					_hitKind = "prop";
+					return entry.prop->name;
 				}
-				if (x < r.left || x >= r.right || y < r.top || y >= r.bottom)
-					continue;
-				int srcX = static_cast<int>(static_cast<int64>(x - r.left) * cel->width / r.width());
-				int srcY = static_cast<int>(static_cast<int64>(y - r.top) * cel->height / r.height());
-				if (!cel->isOpaque(srcX, srcY))
-					continue;
-				if (!_setRuntime.frameSequence().depthVisibleAt(x, y, depthBucket))
-					continue;
-				_hitKind = itemType[static_cast<uint>(i)] ? "actor" : "prop";
-				return name;
 			}
 		}
 	}
@@ -713,6 +699,8 @@ Common::Error CyberFlixEngine::run() {
 	_system->getPaletteManager()->setPalette(palette.data(), 0, kPaletteColorCount);
 
 	Graphics::Surface *screen = _system->lockScreen();
+	if (!screen)
+		return Common::kUnknownError;
 	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
 	_system->unlockScreen();
 	_system->updateScreen();

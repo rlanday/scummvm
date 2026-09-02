@@ -77,16 +77,13 @@ static Common::String findWord(const Common::String &text, const Common::String 
 	Common::String terminated = text;
 	terminated += delimiter;
 	uint32 wordStart = 0;
-	int32 remaining = wordIndex;
-	for (uint32 i = 0; i + delimiter.size() <= terminated.size(); ++i) {
-		bool atDelimiter =
-				!memcmp(terminated.c_str() + i, delimiter.c_str(), delimiter.size());
-		if (atDelimiter) {
-			if (--remaining <= 0)
-				return Common::String(terminated.c_str() + wordStart, i - wordStart);
-			i += delimiter.size() - 1;
-			wordStart = i + 1;
-		}
+	for (int32 remaining = wordIndex; remaining > 0; --remaining) {
+		const uint32 delimiterAt = terminated.find(delimiter, wordStart);
+		if (delimiterAt == Common::String::npos)
+			return Common::String();
+		if (remaining == 1)
+			return terminated.substr(wordStart, delimiterAt - wordStart);
+		wordStart = delimiterAt + delimiter.size();
 	}
 
 	return Common::String();
@@ -110,22 +107,21 @@ static Common::String putWord(const Common::String &text, const Common::String &
 	Common::String terminated = text;
 	terminated += delimiter;
 	uint32 wordStart = 0;
-	int32 remaining = wordIndex;
-	for (uint32 i = 0; i + delimiter.size() <= terminated.size(); ++i) {
-		if (!memcmp(terminated.c_str() + i, delimiter.c_str(), delimiter.size())) {
-			if (--remaining <= 0) {
-				// Splice the tail from the ORIGINAL text: `terminated` has an
-				// extra delimiter appended, which must not leak into the result
-				// when the replaced word is the last one.
-				Common::String result(terminated.c_str(), wordStart);
-				result += replacement;
-				if (i < text.size())
-					result += Common::String(text.c_str() + i, text.size() - i);
-				return result;
-			}
-			i += delimiter.size() - 1;
-			wordStart = i + 1;
+	for (int32 remaining = wordIndex; remaining > 0; --remaining) {
+		const uint32 delimiterAt = terminated.find(delimiter, wordStart);
+		if (delimiterAt == Common::String::npos)
+			return Common::String();
+		if (remaining == 1) {
+			// Splice the tail from the ORIGINAL text: `terminated` has an
+			// extra delimiter appended, which must not leak into the result
+			// when the replaced word is the last one.
+			Common::String result(terminated.c_str(), wordStart);
+			result += replacement;
+			if (delimiterAt < text.size())
+				result += text.substr(delimiterAt);
+			return result;
 		}
+		wordStart = delimiterAt + delimiter.size();
 	}
 
 	return Common::String();
@@ -140,12 +136,9 @@ static int32 substringPosition(const Common::String &text, const Common::String 
 	foldedText.toLowercase();
 	foldedNeedle.toLowercase();
 
-	for (uint32 i = 0; i + foldedNeedle.size() <= foldedText.size(); ++i) {
-		if (!memcmp(foldedText.c_str() + i, foldedNeedle.c_str(), foldedNeedle.size()))
-			return static_cast<int32>(i + 1);
-	}
-
-	return -1;
+	const uint32 position = foldedText.find(foldedNeedle);
+	return position == Common::String::npos || position >= 0x7fffffffU
+			? -1 : static_cast<int32>(position + 1);
 }
 
 Value ScriptVM::getVar(const Common::String &name) const {
@@ -848,7 +841,7 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 	Common::String gameArgText;
 
 	if (logGameDispatch) {
-		for (uint32 i = 0; i < args.size(); ++i) {
+		for (uint i = 0; i < args.size(); ++i) {
 			if (i)
 				gameArgText += ", ";
 			gameArgText += args[i].toString();
@@ -863,7 +856,8 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 	}
 
 	for (int li = static_cast<int>(_libraries.size()) - 1; li >= 0; --li) {
-		const Script *lib = _libraries[li];
+		const LibraryScope &scope = _libraries[static_cast<uint>(li)];
+		const Script *lib = scope.script;
 		const Script::Definition *def = lib->findDefinition(name);
 		if (!def)
 			continue;
@@ -873,20 +867,17 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 
 		Common::String prevSelf = _ctxSelf;
 		Common::String prevProp = _ctxProp;
-		if (static_cast<uint32>(li) < _librarySelf.size() &&
-				(!_librarySelf[static_cast<uint32>(li)].empty() ||
-				 !_libraryProp[static_cast<uint32>(li)].empty())) {
+		if (!scope.self.empty() || !scope.prop.empty()) {
 			// TI.EXE stores the 0xfba/0xfbb context on each scope-chain entry,
 			// not only on the original dispatch target. We first hit this with
 			// BLKJACK.STG: the Stay button enters the button script, but the
 			// gameover() function is defined on the flat script and expects cmd
 			// (0xfba) to be "blkjack" when scheduling makeloop("flat", cmd, ...).
-			setDispatchContext(_librarySelf[static_cast<uint32>(li)],
-					_libraryProp[static_cast<uint32>(li)]);
+			setDispatchContext(scope.self, scope.prop);
 		}
 
 		_locals.push_back(Common::HashMap<Common::String, Value>());
-		for (uint32 i = 0; i < def->params.size(); ++i)
+		for (uint i = 0; i < def->params.size(); ++i)
 			_locals.back()[def->params[i]] = (i < args.size()) ? args[i] : Value();
 
 		_callDepth++;
@@ -900,8 +891,8 @@ Value ScriptVM::callFunction(const Common::String &name, const Common::Array<Val
 			// (open*file handlers swap libraries). If the cached index no
 			// longer references the library we just ran, abandon the walk
 			// rather than indexing into a different chain.
-			if (static_cast<uint32>(li) >= _libraries.size() ||
-					_libraries[static_cast<uint32>(li)] != lib)
+			if (static_cast<uint>(li) >= _libraries.size() ||
+					_libraries[static_cast<uint>(li)].script != lib)
 				break;
 			continue; // try the next scope on the chain
 		}
