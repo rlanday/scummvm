@@ -57,8 +57,9 @@ ifeq ($(ENABLE_TWINE), STATIC_PLUGIN)
 	TEST_LIBS += engines/twine/libtwine.a
 endif
 
-ifeq ($(ENABLE_CYBERFLIX), STATIC_PLUGIN)
-	TESTS += $(srcdir)/test/engines/cyberflix/*.h
+ifeq ($(ENABLE_DREAMFACTORY), STATIC_PLUGIN)
+	TESTS += $(srcdir)/test/engines/dreamfactory/*.h
+	TEST_LIBS += engines/dreamfactory/resources/archive.o
 endif
 
 #

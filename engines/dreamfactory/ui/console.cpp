@@ -1,0 +1,774 @@
+/* ScummVM - Graphic Adventure Engine
+ *
+ * ScummVM is the legal property of its developers, whose names
+ * are too numerous to list here. Please refer to the COPYRIGHT
+ * file distributed with this source distribution.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
+#include "common/file.h"
+#include "common/path.h"
+
+#include "graphics/palette.h"
+#include "graphics/paletteman.h"
+#include "graphics/surface.h"
+
+#include "common/system.h"
+#include "common/memstream.h"
+#include "common/ptr.h"
+
+#include "dreamfactory/console.h"
+#include "dreamfactory/dreamfactory.h"
+#include "dreamfactory/archive.h"
+#include "dreamfactory/image.h"
+#include "dreamfactory/script.h"
+#include "dreamfactory/stage.h"
+#include "dreamfactory/set.h"
+#include "dreamfactory/vm.h"
+
+namespace DreamFactory {
+
+Console::Console(DreamFactoryEngine &engine) : GUI::Debugger(), _engine(engine) {
+	registerCmd("dumpArchive", WRAP_METHOD(Console, cmdDumpArchive));
+	registerCmd("disasm", WRAP_METHOD(Console, cmdDisasm));
+	registerCmd("vmtrace", WRAP_METHOD(Console, cmdVmTrace));
+	registerCmd("vmrun", WRAP_METHOD(Console, cmdVmRun));
+	registerCmd("showshape", WRAP_METHOD(Console, cmdShowShape));
+	registerCmd("showframe", WRAP_METHOD(Console, cmdShowFrame));
+	registerCmd("showmovie", WRAP_METHOD(Console, cmdShowMovie));
+	registerCmd("dumpmovie", WRAP_METHOD(Console, cmdDumpMovie));
+	registerCmd("shownode", WRAP_METHOD(Console, cmdShowNode));
+	registerCmd("showset", WRAP_METHOD(Console, cmdShowSet));
+	registerCmd("changeset", WRAP_METHOD(Console, cmdChangeSet));
+	registerCmd("ending", WRAP_METHOD(Console, cmdEnding));
+	registerCmd("setowner", WRAP_METHOD(Console, cmdSetOwner));
+}
+
+// Opens an LPPALPPA container by path, reporting failures on the console.
+// When @p fileData is non-null the whole file is read into it and backs the
+// archive, so the caller can also scan the raw bytes (e.g. for an embedded
+// palette); the buffer must outlive @p archive.
+static bool openArchive(Console &console, const char *filename, Archive &archive,
+		Common::Array<byte> *fileData) {
+	Common::File file;
+	if (!file.open(filename)) {
+		console.debugPrintf("Could not open '%s'\n", filename);
+		return false;
+	}
+	const int64 fileSize = file.size();
+	if (fileSize <= 0 || fileSize > 0xffffffffLL) {
+		console.debugPrintf("Invalid file size for '%s'\n", filename);
+		return false;
+	}
+	const uint32 size = static_cast<uint32>(fileSize);
+
+	bool ok;
+	if (fileData) {
+		fileData->resize(size);
+		if (file.read(fileData->begin(), size) != size) {
+			console.debugPrintf("Could not read '%s'\n", filename);
+			return false;
+		}
+		ok = archive.open(new Common::MemoryReadStream(fileData->begin(), size, DisposeAfterUse::NO), filename);
+	} else {
+		ok = archive.open(file.readStream(size), filename);
+	}
+	if (!ok) {
+		console.debugPrintf("'%s' is not a valid LPPALPPA container\n", filename);
+		return false;
+	}
+	return true;
+}
+
+// Resolves the palette for a show* command: from @p palFilename when one was
+// supplied on the command line, otherwise by scanning the subject file's own
+// data (@p fileData) for an embedded CLUT.
+static bool resolvePalette(Console &console, const char *palFilename, const char *filename,
+		const Common::Array<byte> &fileData, Palette &rgb) {
+	bool havePalette = false;
+	if (palFilename) {
+		Common::File palFile;
+		if (palFile.open(palFilename)) {
+			const int64 palFileSize = palFile.size();
+			if (palFileSize > 0 && palFileSize <= 0xffffffffLL) {
+				const uint32 palSize = static_cast<uint32>(palFileSize);
+				Common::Array<byte> palData(palSize);
+				if (palFile.read(palData.begin(), palSize) == palSize)
+					havePalette = loadPalette(palData.begin(), palSize, rgb);
+			}
+		}
+		if (!havePalette)
+			console.debugPrintf("No palette found in '%s'; falling back to '%s'\n", palFilename, filename);
+	}
+	if (!havePalette)
+		havePalette = loadPalette(fileData.begin(), fileData.size(), rgb);
+	return havePalette;
+}
+
+// Shared tail of the show* commands: fills @p rgb with a grayscale identity
+// ramp when no palette was found, blits @p pixels centred on a black screen,
+// applies the palette and presents the result. @p opaque, when non-null, is a
+// per-pixel mask (non-zero = drawn) so transparent cel pixels show through as
+// black.
+static void blitCenteredWithPalette(Console &console, const byte *pixels,
+		const byte *opaque, int w, int h, Palette &rgb, bool havePalette) {
+	if (!havePalette)
+		for (int i = 0; i < kPaletteColorCount; ++i) {
+			const uint32 color = Palette::colorOffset(i);
+			rgb[color + 0] = rgb[color + 1] = rgb[color + 2] = static_cast<byte>(i);
+		}
+
+	Graphics::Surface *screen = g_system->lockScreen();
+	if (!screen) {
+		console.debugPrintf("Could not lock the screen.\n");
+		return;
+	}
+	screen->fillRect(Common::Rect(0, 0, kScreenWidth, kScreenHeight), 0);
+	int x0 = (kScreenWidth - w) / 2;
+	int y0 = (kScreenHeight - h) / 2;
+	for (int y = 0; y < h; ++y) {
+		for (int x = 0; x < w; ++x) {
+			if (opaque && !opaque[static_cast<uint>(y) * w + x])
+				continue;
+			int sx = x0 + x, sy = y0 + y;
+			if (sx >= 0 && sy >= 0 && sx < kScreenWidth && sy < kScreenHeight)
+				*(reinterpret_cast<byte *>(screen->getBasePtr(sx, sy))) = pixels[static_cast<uint>(y) * w + x];
+		}
+	}
+	g_system->unlockScreen();
+	g_system->getPaletteManager()->setPalette(rgb.data(), 0, kPaletteColorCount);
+	g_system->updateScreen();
+	console.debugPrintf("Blitted. Close the console to view.\n");
+}
+
+bool Console::cmdDumpArchive(int argc, const char **argv) {
+	if (argc < 2) {
+		debugPrintf("Parses and lists the resources of an LPPALPPA container file.\n");
+		debugPrintf("Usage: %s <filename> [count]   (e.g. BOOTFILE, CTL.STG, BEDSIT1.SET)\n", argv[0]);
+		return true;
+	}
+
+	Archive archive;
+	if (!openArchive(*this, argv[1], archive, nullptr))
+		return true;
+
+	debugPrintf("%s: %u resources, declared size %u bytes\n",
+			archive.getName().c_str(), archive.getResourceCount(),
+			archive.getDeclaredSize());
+
+	uint32 count = archive.getResourceCount();
+	uint32 limit = (argc >= 3) ? static_cast<uint32>(atoi(argv[2])): 16;
+	debugPrintf("  idx        id      length     info       data@\n");
+	for (uint32 i = 0; i < count && i < limit; ++i) {
+		const Archive::Resource &res = archive.getResource(i);
+		if (res.empty)
+			debugPrintf("  [%4u]   <empty>\n", i);
+		else
+			debugPrintf("  [%4u] %6u  %#10x  %#010x  %#08x\n",
+					i, res.id, res.length, res.info, res.dataOffset);
+	}
+	if (count > limit)
+		debugPrintf("  ... %u more (pass a count to show more)\n", count - limit);
+	return true;
+}
+
+bool Console::cmdDisasm(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Disassembles a script resource (info tag 0x0FA1).\n");
+		debugPrintf("Usage: %s <filename> <resIndex> [count]\n", argv[0]);
+		return true;
+	}
+
+	Archive archive;
+	if (!openArchive(*this, argv[1], archive, nullptr))
+		return true;
+
+	uint32 idx = static_cast<uint32>(atoi(argv[2]));
+	if (idx >= archive.getResourceCount()) {
+		debugPrintf("Resource index %u out of range (%u resources)\n",
+				idx, archive.getResourceCount());
+		return true;
+	}
+
+	const Archive::Resource &res = archive.getResource(idx);
+	if (res.info != 0x0FA1)
+		debugPrintf("Note: resource %u has info %#x, not a script (0x0FA1)\n", idx, res.info);
+
+	Common::ScopedPtr<Common::SeekableReadStream> stream(archive.createReadStreamForResource(res));
+	if (!stream) {
+		debugPrintf("Resource %u is empty\n", idx);
+		return true;
+	}
+
+	Script script;
+	bool ok = script.parse(stream.get());
+	if (!ok) {
+		debugPrintf("Failed to parse resource %u as a script\n", idx);
+		return true;
+	}
+
+	debugPrintf("%u instructions, pool@%#x, %s\n", script.getInstructionCount(),
+			script.getPoolOffset(), script.isTerminated() ? "terminated" : "UNTERMINATED");
+
+	uint32 limit = (argc >= 4) ? static_cast<uint32>(atoi(argv[3])): 40;
+	for (uint32 i = 0; i < script.getInstructionCount() && i < limit; ++i) {
+		const Script::Instruction &inst = script.getInstruction(i);
+		// Symbol/string atoms encode a self-relative pool offset in operandA.
+		Common::String str;
+		if (inst.opcode == Script::kOpPushSym || inst.opcode == Script::kOpPush3 ||
+				inst.opcode == Script::kOpPush4)
+			str = script.getSelfRelString(i);
+		debugPrintf("  %4u: %-8s op=%#06x a=%#06x b=%#010x%s%s\n", i,
+				Script::opcodeName(inst.opcode), inst.opcode, inst.operandA, inst.operandB,
+				str.empty() ? "" : "  ; ", str.c_str());
+	}
+	return true;
+}
+
+bool Console::cmdVmTrace(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Executes a script resource on the VM harness with tracing.\n");
+		debugPrintf("Usage: %s <filename> <resIndex> [maxSteps]\n", argv[0]);
+		return true;
+	}
+
+	Archive archive;
+	if (!openArchive(*this, argv[1], archive, nullptr))
+		return true;
+
+	uint32 idx = static_cast<uint32>(atoi(argv[2]));
+	if (idx >= archive.getResourceCount()) {
+		debugPrintf("Resource index %u out of range (%u resources)\n",
+				idx, archive.getResourceCount());
+		return true;
+	}
+
+	Common::ScopedPtr<Common::SeekableReadStream> stream(archive.createReadStreamForResource(idx));
+	if (!stream) {
+		debugPrintf("Resource %u is empty\n", idx);
+		return true;
+	}
+
+	Script script;
+	bool ok = script.parse(stream.get());
+	if (!ok) {
+		debugPrintf("Failed to parse resource %u as a script\n", idx);
+		return true;
+	}
+
+	uint32 maxSteps = (argc >= 4) ? static_cast<uint32>(atoi(argv[3])): 200;
+	debugPrintf("Tracing %u instructions (max %u steps):\n",
+			script.getInstructionCount(), maxSteps);
+
+	ScriptVM vm;
+	vm.setTrace(true);
+	vm.run(script, maxSteps);
+	debugPrintf("VM trace complete.\n");
+	return true;
+}
+
+bool Console::cmdVmRun(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Runs a script resource through the statement interpreter.\n");
+		debugPrintf("Usage: %s <filename> <resIndex> [maxSteps]\n", argv[0]);
+		return true;
+	}
+
+	Archive archive;
+	if (!openArchive(*this, argv[1], archive, nullptr))
+		return true;
+
+	uint32 idx = static_cast<uint32>(atoi(argv[2]));
+	if (idx >= archive.getResourceCount()) {
+		debugPrintf("Resource index %u out of range (%u resources)\n",
+				idx, archive.getResourceCount());
+		return true;
+	}
+
+	Common::ScopedPtr<Common::SeekableReadStream> stream(archive.createReadStreamForResource(idx));
+	if (!stream) {
+		debugPrintf("Resource %u is empty\n", idx);
+		return true;
+	}
+
+	Script script;
+	bool ok = script.parse(stream.get());
+	if (!ok) {
+		debugPrintf("Failed to parse resource %u as a script\n", idx);
+		return true;
+	}
+
+	uint32 maxSteps = (argc >= 4) ? static_cast<uint32>(atoi(argv[3])): 100000;
+	ScriptVM vm;
+	uint32 executed = vm.runProgram(script, maxSteps);
+	debugPrintf("Executed %u statements over %u instructions.\n",
+			executed, script.getInstructionCount());
+	return true;
+}
+
+bool Console::cmdShowShape(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Decodes a cel resource and blits it to the screen.\n");
+		debugPrintf("Usage: %s <filename> <resIndex> [paletteFile]\n", argv[0]);
+		debugPrintf("  e.g. %s INVEN.SHP 7   or   %s INVEN.SHP 7 BRIDGE.SET\n", argv[0], argv[0]);
+		return true;
+	}
+
+	// Read the whole container so it can both back the archive and be scanned
+	// for the embedded palette.
+	Common::Array<byte> fileData;
+	Archive archive;
+	if (!openArchive(*this, argv[1], archive, &fileData))
+		return true;
+
+	uint32 idx = static_cast<uint32>(atoi(argv[2]));
+	if (idx >= archive.getResourceCount()) {
+		debugPrintf("Resource index %u out of range (%u resources)\n",
+				idx, archive.getResourceCount());
+		return true;
+	}
+
+	// For shapes the dimensions are packed into the resource info field.
+	const Archive::Resource &res = archive.getResource(idx);
+	uint16 width = static_cast<uint16>(res.info >> 16);
+	uint16 height = static_cast<uint16>(res.info & 0xffff);
+
+	Common::ScopedPtr<Common::SeekableReadStream> stream(archive.createReadStreamForResource(res));
+	if (!stream) {
+		debugPrintf("Resource %u is empty\n", idx);
+		return true;
+	}
+
+	CelImage cel;
+	bool ok = decodeCel(*stream, width, height, cel);
+	if (!ok) {
+		debugPrintf("Resource %u (%ux%u) did not decode as a cel\n", idx, width, height);
+		return true;
+	}
+
+	// Resolve a palette: from a separate container if supplied (inventory cels
+	// are drawn against the active room palette), otherwise from this file.
+	Palette rgb = {};
+	bool havePalette = resolvePalette(*this, argc >= 4 ? argv[3] : nullptr, argv[1], fileData, rgb);
+
+	debugPrintf("Resource %u: %ux%u, origin (%d,%d), palette %s\n", idx,
+			cel.width, cel.height, cel.originX, cel.originY,
+			havePalette ? "loaded" : "MISSING (grayscale)");
+	blitCenteredWithPalette(*this, cel.pixels.begin(), cel.opaque.begin(),
+			cel.width, cel.height, rgb, havePalette);
+	return true;
+}
+
+bool Console::cmdShowFrame(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Decodes a full-screen frame at a byte offset and blits it.\n");
+		debugPrintf("Usage: %s <filename> <offset> [paletteFile]\n", argv[0]);
+		debugPrintf("  offset accepts decimal or 0x-hex, and points at the frame's\n");
+		debugPrintf("  16-bit height word (e.g. %s MOVIES/LOGO.MOV 0x42408)\n", argv[0]);
+		return true;
+	}
+
+	Common::File file;
+	if (!file.open(argv[1])) {
+		debugPrintf("Could not open '%s'\n", argv[1]);
+		return true;
+	}
+
+	// Read the whole file so it can both feed the decoder and be scanned for an
+	// embedded palette.
+	const int64 fileSize = file.size();
+	if (fileSize <= 0 || fileSize > 0xffffffffLL) {
+		debugPrintf("Invalid file size for '%s'\n", argv[1]);
+		return true;
+	}
+	const uint32 size = static_cast<uint32>(fileSize);
+	Common::Array<byte> fileData(size);
+	if (file.read(fileData.begin(), size) != size) {
+		debugPrintf("Could not read '%s'\n", argv[1]);
+		return true;
+	}
+
+	// Parse the offset as base-0 so both decimal and 0x-hex forms work.
+	uint32 offset = static_cast<uint32>(strtol(argv[2], nullptr, 0));
+	if (offset >= size) {
+		debugPrintf("Offset %u is past end of file (%u bytes)\n", offset, size);
+		return true;
+	}
+
+	FrameImage frame;
+	uint32 consumed = decodeFrame(fileData.begin() + offset, size - offset, frame);
+	if (consumed == 0) {
+		debugPrintf("No valid frame at offset 0x%x\n", offset);
+		return true;
+	}
+
+	// Resolve a palette: from a separate container if supplied, otherwise scan
+	// the frame's own file for an embedded CLUT.
+	Palette rgb = {};
+	bool havePalette = resolvePalette(*this, argc >= 4 ? argv[3] : nullptr, argv[1], fileData, rgb);
+
+	debugPrintf("Frame at 0x%x: %ux%u, consumed %u bytes, palette %s\n", offset,
+			frame.width, frame.height, consumed,
+			havePalette ? "loaded" : "MISSING (grayscale)");
+	blitCenteredWithPalette(*this, frame.pixels.begin(), nullptr,
+			frame.width, frame.height, rgb, havePalette);
+	return true;
+}
+
+bool Console::cmdShowMovie(int argc, const char **argv) {
+	if (argc < 2) {
+		debugPrintf("Plays a MOV's frame sequence into a persistent framebuffer.\n");
+		debugPrintf("Usage: %s <movfile> [frameIndex]\n", argv[0]);
+		debugPrintf("  Decodes frames 0..frameIndex (default: the last frame) and\n");
+		debugPrintf("  blits the composited result.  e.g. %s MOVIES/LOGO.MOV 150\n", argv[0]);
+		return true;
+	}
+
+	Common::Array<byte> fileData;
+	Archive archive;
+	if (!openArchive(*this, argv[1], archive, &fileData))
+		return true;
+
+	// Video frames are the resources whose info tag is kFrameInfoTag; that tag
+	// also doubles as the frame's {uint16 H, uint16 P} header, so the decoder
+	// source is the 4 info bytes followed by the resource payload, i.e. the
+	// bytes starting four bytes before the payload (dataOffset - 4).
+	Common::Array<uint32> frameIndices;
+	for (uint32 i = 0; i < archive.getResourceCount(); ++i) {
+		const Archive::Resource &res = archive.getResource(i);
+		if (!res.empty && res.info == kFrameInfoTag && res.dataOffset >= 4)
+			frameIndices.push_back(i);
+	}
+	if (frameIndices.empty()) {
+		debugPrintf("No video frames (info 0x%08x) found in '%s'\n", kFrameInfoTag, argv[1]);
+		return true;
+	}
+
+	uint32 target = frameIndices.size() - 1;
+	if (argc >= 3) {
+		uint32 want = static_cast<uint32>(atoi(argv[2]));
+		if (want < frameIndices.size())
+			target = want;
+		else
+			debugPrintf("Frame %u out of range; clamping to last (%u)\n", want, target);
+	}
+
+	// Apply each frame in order on top of the retained framebuffer.
+	FrameSequence seq;
+	for (uint32 f = 0; f <= target; ++f) {
+		const Archive::Resource &res = archive.getResource(frameIndices[f]);
+		if (seq.applyFrame(fileData.begin() + res.dataOffset - 4, res.length + 4) == 0) {
+			debugPrintf("Frame %u failed to decode\n", f);
+			return true;
+		}
+	}
+
+	Palette rgb = {};
+	bool havePalette = loadPalette(fileData.begin(), fileData.size(), rgb);
+
+	debugPrintf("Movie '%s': %u frames, showing frame %u (%ux%u), palette %s\n",
+			argv[1], frameIndices.size(), target, seq.width(), seq.height(),
+			havePalette ? "loaded" : "MISSING (grayscale)");
+	blitCenteredWithPalette(*this, seq.pixels(), nullptr,
+			seq.width(), seq.height(), rgb, havePalette);
+	return true;
+}
+
+bool Console::cmdDumpMovie(int argc, const char **argv) {
+	if (argc < 2 || argc > 3) {
+		debugPrintf("Decodes every composited MOV frame to a binary PPM file.\n");
+		debugPrintf("Usage: %s <movfile> [outputDirectory]\n", argv[0]);
+		debugPrintf("  e.g. %s MOVIES/LOGO.MOV dumps\n", argv[0]);
+		return true;
+	}
+
+	Common::Array<byte> fileData;
+	Archive archive;
+	if (!openArchive(*this, argv[1], archive, &fileData))
+		return true;
+
+	Palette palette = {};
+	if (!loadPalette(fileData.begin(), fileData.size(), palette)) {
+		debugPrintf("No palette found in '%s'; writing grayscale frames\n", argv[1]);
+		for (int i = 0; i < kPaletteColorCount; ++i) {
+			const uint32 color = Palette::colorOffset(i);
+			palette[color + 0] = palette[color + 1] = palette[color + 2] = static_cast<byte>(i);
+		}
+	}
+
+	const Common::Path outputDir(argc == 3 ? argv[2] : ".", Common::Path::kNativeSeparator);
+	const Common::String movieName = Common::Path(argv[1]).baseName();
+	FrameSequence sequence;
+	uint frameNumber = 0;
+	for (const Archive::Resource &resource : archive.resources()) {
+		if (resource.empty || (resource.info >> 16) != kFrameInfoHigh || resource.dataOffset < 4)
+			continue;
+
+		if (sequence.applyFrame(fileData.begin() + resource.dataOffset - 4,
+				resource.length + 4) == 0) {
+			debugPrintf("Frame %u (resource %u) failed to decode\n", frameNumber, resource.id);
+			break;
+		}
+
+		const int width = sequence.width();
+		const int height = sequence.height();
+		const byte *pixels = sequence.pixels();
+		if (!pixels || width <= 0 || height <= 0) {
+			debugPrintf("Frame %u (resource %u) has invalid dimensions\n", frameNumber, resource.id);
+			break;
+		}
+
+		const Common::String outputName = Common::String::format("%s.%03u.ppm",
+				movieName.c_str(), frameNumber);
+		const Common::Path outputPath = outputDir.appendComponent(outputName);
+		Common::DumpFile output;
+		if (!output.open(outputPath, true)) {
+			debugPrintf("Could not write '%s'\n",
+					outputPath.toString(Common::Path::kNativeSeparator).c_str());
+			return true;
+		}
+
+		output.writeString(Common::String::format("P6\n%d %d\n255\n", width, height));
+		Common::Array<byte> rgbRow(static_cast<uint>(width) * 3);
+		bool writeFailed = false;
+		for (int y = 0; y < height; ++y) {
+			for (int x = 0; x < width; ++x) {
+				const uint32 color = Palette::colorOffset(pixels[y * width + x]);
+				const uint32 out = static_cast<uint32>(x) * 3;
+				rgbRow[out + 0] = palette[color + 0];
+				rgbRow[out + 1] = palette[color + 1];
+				rgbRow[out + 2] = palette[color + 2];
+			}
+			if (output.write(rgbRow.begin(), rgbRow.size()) != rgbRow.size()) {
+				writeFailed = true;
+				break;
+			}
+		}
+		output.close();
+		if (writeFailed) {
+			debugPrintf("Could not finish writing '%s'\n",
+					outputPath.toString(Common::Path::kNativeSeparator).c_str());
+			return true;
+		}
+
+		debugPrintf("Frame %u (resource %u) %dx%d -> %s\n", frameNumber, resource.id,
+				width, height, outputPath.toString(Common::Path::kNativeSeparator).c_str());
+		++frameNumber;
+	}
+
+	debugPrintf("Wrote %u frame(s) from '%s'\n", frameNumber, argv[1]);
+	return true;
+}
+
+bool Console::cmdShowNode(int argc, const char **argv) {
+	if (argc < 2) {
+		debugPrintf("Opens a STG deck and renders one of its nodes (the navigable\n");
+		debugPrintf("background view drawn by openstagefile/sendtostage).\n");
+		debugPrintf("Usage: %s <stgfile> [node]   (e.g. %s MAIN.STG 0)\n", argv[0], argv[0]);
+		return true;
+	}
+
+	Stage stage;
+	if (!stage.open(argv[1])) {
+		debugPrintf("Could not open stage '%s' (see warnings)\n", argv[1]);
+		return true;
+	}
+
+	uint32 node = (argc >= 3) ? static_cast<uint32>(strtol(argv[2], nullptr, 0)) : 0;
+	if (node >= stage.nodeCount()) {
+		debugPrintf("Node %u out of range; '%s' has %u node(s)\n",
+				node, argv[1], stage.nodeCount());
+		return true;
+	}
+
+	FrameImage frame;
+	if (!stage.renderNode(node, frame)) {
+		debugPrintf("Node %u failed to render (see warnings)\n", node);
+		return true;
+	}
+
+	Palette rgb = {};
+	bool havePalette = stage.loadStagePalette(rgb);
+
+	debugPrintf("Stage '%s': %ux%u, %u node(s); showing node %u (%ux%u), palette %s\n",
+			argv[1], stage.width(), stage.height(), stage.nodeCount(), node,
+			frame.width, frame.height, havePalette ? "loaded" : "MISSING (grayscale)");
+	blitCenteredWithPalette(*this, frame.pixels.begin(), nullptr,
+			frame.width, frame.height, rgb, havePalette);
+	return true;
+}
+
+bool Console::cmdShowSet(int argc, const char **argv) {
+	if (argc < 2) {
+		debugPrintf("Opens a SET room and renders one scene's panorama background\n");
+		debugPrintf("(the room view drawn by sendtoscene/changeset).\n");
+		debugPrintf("Usage: %s <setfile> [scene] [angle] [table]\n", argv[0]);
+		debugPrintf("  scene: name (e.g. Scene1) or index (default 0)\n");
+		debugPrintf("  angle: panorama camera index (default 0)\n");
+		debugPrintf("  table: panorama table 0=A or 1=B (default 0)\n");
+		debugPrintf("  e.g. %s DATA/BEDSIT1.SET Scene1 0\n", argv[0]);
+		return true;
+	}
+
+	Set set;
+	if (!set.open(argv[1])) {
+		debugPrintf("Could not open set '%s' (see warnings)\n", argv[1]);
+		return true;
+	}
+
+	// List the scenes so the user can pick one when none was given.
+	debugPrintf("Set '%s': %ux%u, %u scene(s):", argv[1], set.width(), set.height(), set.sceneCount());
+	for (uint32 i = 0; i < set.sceneCount(); ++i)
+		debugPrintf(" %u=%s", i, set.sceneName(i).c_str());
+	debugPrintf("\n");
+
+	uint32 scene = 0;
+	if (argc >= 3) {
+		int byName = set.findScene(argv[2]);
+		scene = (byName >= 0) ? static_cast<uint32>(byName) : static_cast<uint32>(strtol(argv[2], nullptr, 0));
+	}
+	if (scene >= set.sceneCount()) {
+		debugPrintf("Scene '%s' not found\n", argc >= 3 ? argv[2] : "0");
+		return true;
+	}
+	uint32 angle = (argc >= 4) ? static_cast<uint32>(strtol(argv[3], nullptr, 0)) : 0;
+	uint32 table = (argc >= 5) ? static_cast<uint32>(strtol(argv[4], nullptr, 0)) : 0;
+
+	debugPrintf("Scene %u '%s': panorama A=%u angles, B=%u angles\n", scene,
+			set.sceneName(scene).c_str(), set.angleCount(scene, 0), set.angleCount(scene, 1));
+
+	FrameImage frame;
+	if (!set.renderScene(scene, table, angle, frame)) {
+		debugPrintf("Scene %u table %u angle %u failed to render (see warnings)\n", scene, table, angle);
+		return true;
+	}
+
+	Palette rgb = {};
+	bool havePalette = set.loadSetPalette(rgb);
+
+	debugPrintf("Showing scene %u table %u angle %u (%ux%u), palette %s\n", scene, table, angle,
+			frame.width, frame.height, havePalette ? "loaded" : "MISSING (grayscale)");
+	blitCenteredWithPalette(*this, frame.pixels.begin(), nullptr,
+			frame.width, frame.height, rgb, havePalette);
+	return true;
+}
+
+bool Console::cmdChangeSet(int argc, const char **argv) {
+	if (argc < 2) {
+		debugPrintf("Drives the engine host path opensetfile(set, scene)\n");
+		debugPrintf("(the script-level changeset wrapper): opens a SET as the active\n");
+		debugPrintf("room and renders a scene with palette and navigation cursor.\n");
+		debugPrintf("Usage: %s <setfile> [scene]\n", argv[0]);
+		debugPrintf("  scene: name (e.g. Scene1), default = first scene\n");
+		debugPrintf("  e.g. %s DATA/BEDSIT1.SET Scene1\n", argv[0]);
+		return true;
+	}
+
+	// Default to the first scene when none is named, matching showset's listing.
+	Common::String scene = (argc >= 3) ? Common::String(argv[2]) : Common::String();
+	if (scene.empty()) {
+		Set probe;
+		if (probe.open(argv[1]) && probe.sceneCount() > 0)
+			scene = probe.sceneName(0);
+	}
+	_engine.openSetFile(argv[1], scene);
+	// The compositor never programs the palette (scripts own it via
+	// clut()/fades), and no script fade follows a console changeset, so
+	// program the set's embedded palette with an instant one-step fade.
+	_engine.fadePalette("set", 1, false);
+	debugPrintf("changeset('%s', '%s') issued. Close the console to view.\n",
+			argv[1], scene.c_str());
+	return true;
+}
+
+// The four props NAREND.STG reads, with the owner each check compares against.
+static const char *const kEndingProps[] = { "rubaiyat", "realneck", "painting", "notebook" };
+
+bool Console::cmdEnding(int argc, const char **argv) {
+	// Mirrors NAREND.STG resource 1: worldwar1()/worldwar2()/rushrev() set the
+	// three globals from prop ownership, then futures() maps them to an epilogue.
+	// The player is "frank".
+	const Common::String rubaiyat = _engine.getPropOwner("rubaiyat");
+	const Common::String realneck = _engine.getPropOwner("realneck");
+	const Common::String painting = _engine.getPropOwner("painting");
+	const Common::String notebook = _engine.getPropOwner("notebook");
+
+	const bool one = rubaiyat.equalsIgnoreCase("vlad") || realneck.equalsIgnoreCase("vlad");
+	const bool two = !painting.equalsIgnoreCase("frank");
+	const bool rev = !notebook.equalsIgnoreCase("frank");
+
+	debugPrintf("Ending-critical prop owners (player = 'frank'):\n");
+	for (uint i = 0; i < ARRAYSIZE(kEndingProps); ++i)
+		debugPrintf("  %-9s %s\n", kEndingProps[i],
+				_engine.getPropOwner(kEndingProps[i]).c_str());
+
+	debugPrintf("\nDerived NAREND globals:\n");
+	debugPrintf("  onehappens (WWI)   %s   (rubaiyat or realneck held by vlad)\n", one ? "yes" : "no");
+	debugPrintf("  twohappens (WWII)  %s   (painting not held by you)\n", two ? "yes" : "no");
+	debugPrintf("  revhappens (Rev)   %s   (notebook not held by you)\n", rev ? "yes" : "no");
+
+	const char *future = "8,55,55b,56,57,58,59,60,nochange.01 -> BOOM.MOV (no change)";
+	if (!one && !two && !rev)      future = "7,50,51,51b,52,53,54,proz      -> PROZAC.MOV (best)";
+	else if (!one && !two && rev)  future = "7,39,39b,40,41,41b,42,soviet.01 -> RUSHEND.MOV";
+	else if (!one && two && !rev)  future = "6,31,32,33,33b,34,nazi.01      -> GERMEND.MOV";
+	else if (one && two && !rev)   future = "6,31,32,33,33b,34,nazi.01      -> GERMEND.MOV";
+	else if (!one && two && rev)   future = "5,35,36,37,38,nuke.01          -> NUKE.MOV";
+	else if (one && !two && !rev)  future = "6,28,29,29b,30,30b,germsov.01";
+	else if (one && !two && rev)   future = "8,44,45,46,46b,46c,47,48,soviet.01 -> RUSHEND.MOV";
+	debugPrintf("\nfutures() -> %s\n", future);
+
+	// worldwar1()/worldwar2() also pick which narration slides play.
+	if (one) {
+		if (rubaiyat.equalsIgnoreCase("vlad") && realneck.equalsIgnoreCase("vlad"))
+			debugPrintf("worldwar1() slides -> 3,03,04,05  (both to vlad)\n");
+		else if (rubaiyat.equalsIgnoreCase("vlad"))
+			debugPrintf("worldwar1() slides -> 3,01,04,05  (rubaiyat to vlad)\n");
+		else
+			debugPrintf("worldwar1() slides -> 3,02,04,05  (realneck to vlad)\n");
+	} else {
+		debugPrintf("worldwar1() slides -> 4,07,11,11b,12  (WWI averted)\n");
+	}
+	if (two)
+		debugPrintf("worldwar2() slides -> %s\n", painting.equalsIgnoreCase("hack")
+				? "2,15,16  (Hack took the painting)" : "3,13,14,14b  (painting lost, not to Hack)");
+	else
+		debugPrintf("worldwar2() slides -> 6,17,17b,18,18b,19,20  (WWII averted)\n");
+	debugPrintf("rushrev() slides   -> %s\n", rev ? "1,21" : "5,22,23,24,25,26  (revolution averted)");
+
+	// openstage() picks the narration theme from the same four props.
+	const bool goodTheme = painting.equalsIgnoreCase("frank") && !rubaiyat.equalsIgnoreCase("vlad") &&
+			notebook.equalsIgnoreCase("frank") && !realneck.equalsIgnoreCase("vlad");
+	debugPrintf("narration theme    -> %s\n", goodTheme ? "pnarend.trk (good)" : "bnarend.trk (bad)");
+	return true;
+}
+
+bool Console::cmdSetOwner(int argc, const char **argv) {
+	if (argc < 3) {
+		debugPrintf("Sets a prop's owner, to reach an ending state without replaying.\n");
+		debugPrintf("Usage: %s <prop> <owner>\n", argv[0]);
+		debugPrintf("  ending props: rubaiyat, realneck, painting, notebook\n");
+		debugPrintf("  owners: frank (you), vlad, zeit, hack, none\n");
+		debugPrintf("  e.g. %s painting hack\n", argv[0]);
+		return true;
+	}
+	const Common::String before = _engine.getPropOwner(argv[1]);
+	_engine.setPropOwner(argv[1], argv[2]);
+	debugPrintf("propowner('%s'): '%s' -> '%s'\n", argv[1], before.c_str(),
+			_engine.getPropOwner(argv[1]).c_str());
+	return true;
+}
+
+} // End of namespace DreamFactory

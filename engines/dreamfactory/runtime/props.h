@@ -1,0 +1,141 @@
+/* ScummVM - Graphic Adventure Engine
+ *
+ * ScummVM is the legal property of its developers, whose names
+ * are too numerous to list here. Please refer to the COPYRIGHT
+ * file distributed with this source distribution.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
+#ifndef DREAMFACTORY_RUNTIME_PROPS_H
+#define DREAMFACTORY_RUNTIME_PROPS_H
+
+#include "common/array.h"
+#include "common/ptr.h"
+#include "common/rect.h"
+#include "common/str.h"
+
+#include "dreamfactory/shop.h"
+#include "dreamfactory/vm.h"
+
+namespace DreamFactory {
+
+class DreamFactoryEngine;
+
+class PropRuntime {
+public:
+	struct DrawEntry {
+		DrawEntry(const Shop::Prop *prop_, const Shop *shop_, int16 depth_) :
+				prop(prop_), shop(shop_), depth(depth_) {}
+
+		const Shop::Prop *prop;
+		const Shop *shop;
+		int16 depth;
+	};
+	struct PropRef {
+		Common::SharedPtr<Shop> shop;
+		Shop::Prop *prop = nullptr;
+	};
+
+	Shop *findShop(const Common::String &name);
+	Common::SharedPtr<Shop> findShopShared(const Common::String &name);
+	Shop::Prop *findProp(const Common::String &name);
+	PropRef findPropRef(const Common::String &name);
+	bool resolvePropStar(DreamFactoryEngine &engine, Shop::Prop &prop);
+
+	void collectScreenProps(Common::Array<DrawEntry> &draw) const;
+	/** Step every prop and actor one animation frame and queue the dirty rects
+	 *  the change implies.
+	 *
+	 *  Native advances poses from the compositor pass (FUN_004420b0 /
+	 *  FUN_00442d90), which runs exactly once per scheduled-loop pass, so this
+	 *  must be driven from forceUpdate() and never from a repaint. FUSE.SHP's
+	 *  switch/switchon shapes are one-shot 9-pose animations paired with
+	 *  makeloop('prop', ..., 'fuseoff', 9): advancing them from the render path
+	 *  (which a single script dispatch can reach several times) wraps the pose
+	 *  index past the last frame and the fuse visibly flips back. */
+	void advanceAnimationFrame(DreamFactoryEngine &engine);
+	void collectWorldProps(DreamFactoryEngine &engine, Common::Array<DrawEntry> &draw,
+			const Shop::WorldCamera &camera) const;
+	bool screenPropRect(const Shop &shop, const Shop::Prop &prop, Common::Rect &rect) const;
+	void queueDirtyRect(const Common::Rect &rect);
+	void markPropDirty(const Shop &shop, const Shop::Prop &prop, const Common::Rect *oldRect);
+	void markShopDirty(const Shop &shop);
+
+	void openShopFile(DreamFactoryEngine &engine, const Common::String &name);
+	void closeShopFile(DreamFactoryEngine &engine, const Common::String &name);
+	void propInstance(const Common::String &source, const Common::String &newName);
+	void sendToShop(DreamFactoryEngine &engine, const Common::String &shopName,
+			const Common::String &message, const Common::Array<Value> &args);
+	Value sendToShopFx(DreamFactoryEngine &engine, const Common::String &shopName,
+			const Common::String &message, const Common::Array<Value> &args);
+	void sendToProp(DreamFactoryEngine &engine, const Common::String &propName,
+			const Common::String &message, const Common::Array<Value> &args);
+	Value sendToPropFx(DreamFactoryEngine &engine, const Common::String &propName,
+			const Common::String &message, const Common::Array<Value> &args);
+
+	bool propVisible(const Common::String &name);
+	void propVisible(const Common::String &name, bool visible);
+	Common::String propView(const Common::String &name);
+	void propView(const Common::String &name, const Common::String &shape);
+	int propXY(const Common::String &name, int selector);
+	void setPropXY(const Common::String &name, int x, int y);
+	void propSet(DreamFactoryEngine &engine, const Common::String &name, const Common::String &setName);
+	void propXYZ(const Common::String &name, int x, int y, int z);
+	int propXYZ(DreamFactoryEngine &engine, const Common::String &name, int selector);
+	Common::String getPropStar(const Common::String &name);
+	Common::String setPropStar(DreamFactoryEngine &engine, const Common::String &name, const Common::String &newStar);
+	void propScale(const Common::String &name, int scale);
+	void propZClip(const Common::String &name, int dist);
+	int getPropDist(DreamFactoryEngine &engine, const Common::String &name);
+	void propDist(const Common::String &name, int dist);
+	int getPropDeg(const Common::String &name);
+	int setPropDeg(const Common::String &name, int newDeg);
+	Common::String getPropOwner(const Common::String &name);
+	Common::String setPropOwner(const Common::String &name, const Common::String &newOwner);
+	int getPropValue(const Common::String &name);
+	int setPropValue(const Common::String &name, int newValue);
+	int countProps() const;
+	Common::String indexToProp(int index) const;
+	bool pointInProp(const Common::String &name, int32 packedPoint);
+	void refreshPropsIfDirty(DreamFactoryEngine &engine, bool explicitForceUpdate = false,
+			bool present = true);
+
+	Common::Array<Common::SharedPtr<Shop> > &shops() { return _shops; }
+	const Common::Array<Common::SharedPtr<Shop> > &shops() const { return _shops; }
+	void clear() { _shops.clear(); _propsDirty = false; _dirtyRects.clear(); }
+	bool dirty() const { return _propsDirty; }
+	void setDirty(bool dirty) { _propsDirty = dirty; }
+	Common::Array<Common::Rect> &dirtyRects() { return _dirtyRects; }
+	const Common::Array<Common::Rect> &dirtyRects() const { return _dirtyRects; }
+	void clearDirtyRects() { _dirtyRects.clear(); }
+
+private:
+	void advancePropPoses();
+
+	/**
+	 * Open shops (DATA/ .SHP files), in openshopfile order. The original keeps
+	 * ONE global prop array across all shops (DAT_0046113c/DAT_00461140), so
+	 * countprops/indextoprop and the by-name prop lookups span every open shop
+	 * here, in open order.
+	 */
+	Common::Array<Common::SharedPtr<Shop> > _shops;
+	bool _propsDirty = false;
+	Common::Array<Common::Rect> _dirtyRects;
+};
+
+} // End of namespace DreamFactory
+
+#endif
