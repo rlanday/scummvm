@@ -33,9 +33,9 @@
 \noindent This document scopes the work required to run \emph{Titanic: Adventure
 Out of Time} (CyberFlix, 1996/1997) under ScummVM. The findings below are based
 on direct inspection of the two retail Windows CD images. The title is built on
-CyberFlix's proprietary, Mac-authored \emph{``Bicycle''}-class runtime (internal
-signature \code{LPPALPPA}), the same engine family that powers \emph{Dust: A
-Tale of the Wired West} and \emph{RedJack: Revenge of the Brethren}. This is a
+CyberFlix's proprietary, Mac-authored \emph{DreamFactory 4} runtime (internal
+signature \code{LPPALPPA}), a later generation of the engine used by \emph{Dust:
+A Tale of the Wired West}. This is a
 \textbf{from-scratch engine}, not a variant of an existing ScummVM engine. It is
 unrelated to the existing \code{engines/titanic} (\emph{Starship Titanic}), so a
 new engine plugin is required---the proposed name is \code{cyberflix}.\end{abstract}
@@ -230,7 +230,7 @@ Ph. & Goal / exit criterion & Work \\
 
 \section{ScummVM integration checklist}
 \begin{itemize}[nosep]
-  \item New plugin \code{engines/cyberflix/} (name TBD; avoids clash with
+  \item New plugin \code{engines/dreamfactory/} (name TBD; avoids clash with
         \code{engines/titanic} = Starship Titanic).
   \item \code{detection\_tables.h} with MD5/size/language entries for both discs.
   \item \code{configure.engine}, \code{engines.mk} (\code{ENABLE\_CYBERFLIX}),
