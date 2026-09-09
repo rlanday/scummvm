@@ -48,11 +48,12 @@ namespace DreamFactory {
  *   +0x14  uint32 LE  resource count
  *   +0x20  "LPPALPPA"               signature ("APPL" word-reversed, twice)
  *
- * The payload is big-endian and was authored on Macintosh: decoding any header
- * by reversing each 4-byte group yields a clean HFS path (e.g.
- * "Internal:new converts for Ian:bootfile.Temp"). Multi-byte values in the
- * payload are therefore big-endian, and embedded text is stored in
- * 4-byte-reversed groups.
+ * The verified retail Titanic CD images are hybrid HFS/ISO 9660 discs. Their
+ * Macintosh data forks and Windows copies contain identical game containers:
+ * all 243 containers on CD 1 and 323 on CD 2 matched byte-for-byte, including
+ * files relocated into the Macintosh installation directory. Their HFS
+ * resource forks are empty. The Macintosh application itself is different;
+ * shared assets do not imply support for its executable resources.
  *
  * After a fixed 0x200-byte handle-heap preamble at offset 0x200, the resource
  * directory is a flat offset table at a fixed offset (0x400): an array of
@@ -64,9 +65,12 @@ namespace DreamFactory {
  *                              shapes the low 32 bits pack 16-bit width/height)
  *   +0x0C  payload (length bytes; records are padded to a 0x40 boundary)
  *
- * The container framing (header + directory) is little-endian; resource payload
- * data is big-endian (Mac-authored) and text is stored in 4-byte-reversed
- * groups, hence swapLongs().
+ * Container framing and record headers are little-endian. Payload fields must
+ * be decoded according to their resource format, not assumed big-endian just
+ * because Macintosh uses the same files. Shop fields and script instructions,
+ * for example, are read little-endian. Some authoring metadata contains text
+ * in reversed four-byte groups (hence swapLongs()); that is not a rule for
+ * all payload bytes or strings, and Archive does not swap entire payloads.
  */
 class Archive {
 public:
